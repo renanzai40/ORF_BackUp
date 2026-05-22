@@ -1785,10 +1785,10 @@ if __name__ == "__main__":
 
 ### 6.1 功能验收
 
-- [~] `orf apply-md spec_zh.md --target-format docx` 成功生成 `spec_zh.docx` (需要 Pandoc + 真实测试文件)
-- [~] `orf apply-md spec_zh.md --target-format odt` 成功生成 `spec_zh.odt` (需要 Pandoc + 真实测试文件)
-- [~] `orf apply-md spec_zh.md --target-format epub --title "用户手册"` 成功生成 `spec_zh.epub` (需要 Pandoc + 真实测试文件)
-- [~] `orf convert-batch output_dir --target-format docx` 批量转换成功 (需要 Pandoc + 真实测试文件)
+- [~] `orf apply-md spec_zh.md --target-format docx` (BLOCKED: Pandoc not in PATH - needs system installation)
+- [~] `orf apply-md spec_zh.md --target-format odt` (BLOCKED: Pandoc not in PATH)
+- [~] `orf apply-md spec_zh.md --target-format epub --title "用户手册"` (BLOCKED: Pandoc not in PATH)
+- [~] `orf convert-batch output_dir --target-format docx` (BLOCKED: Pandoc not in PATH)
 
 ### 6.2 元数据验收
 
@@ -1804,8 +1804,8 @@ if __name__ == "__main__":
 
 ### 6.4 性能验收
 
-- [~] Manifest + Frontmatter 解析 ≤ 10ms (需要真实文件测试)
-- [~] MD→DOCX 转换 ≥ 15MB/s (需要 Pandoc 安装 + 真实文件)
+- [~] Manifest + Frontmatter 解析 ≤ 10ms (fixture创建已验证，benchmark需 Pandoc)
+- [~] MD→DOCX 转换 ≥ 15MB/s (BLOCKED: Pandoc not in PATH)
 
 ---
 
