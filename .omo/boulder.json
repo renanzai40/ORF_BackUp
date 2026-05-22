@@ -1,0 +1,35 @@
+{
+  "schema_version": 2,
+  "active_work_id": "orf-phase0-implementation-419bbe20",
+  "works": {
+    "orf-phase0-implementation-419bbe20": {
+      "work_id": "orf-phase0-implementation-419bbe20",
+      "active_plan": "/mnt/d/贯维/Omni_Re_Formatter/.omo/plans/ORF-Phase0-Implementation.md",
+      "plan_name": "ORF-Phase0-Implementation",
+      "status": "active",
+      "started_at": "2026-05-22T08:20:59.986Z",
+      "updated_at": "2026-05-22T08:20:59.986Z",
+      "session_ids": [
+        "ses_1b2531760ffewHXD7szqybBTCP"
+      ],
+      "session_origins": {
+        "ses_1b2531760ffewHXD7szqybBTCP": "direct"
+      },
+      "agent": "atlas",
+      "task_sessions": {}
+    }
+  },
+  "active_plan": "/mnt/d/贯维/Omni_Re_Formatter/.omo/plans/ORF-Phase0-Implementation.md",
+  "started_at": "2026-05-22T08:20:59.986Z",
+  "status": "active",
+  "updated_at": "2026-05-22T08:20:59.986Z",
+  "session_ids": [
+    "ses_1b2531760ffewHXD7szqybBTCP"
+  ],
+  "session_origins": {
+    "ses_1b2531760ffewHXD7szqybBTCP": "direct"
+  },
+  "plan_name": "ORF-Phase0-Implementation",
+  "task_sessions": {},
+  "agent": "atlas"
+}
