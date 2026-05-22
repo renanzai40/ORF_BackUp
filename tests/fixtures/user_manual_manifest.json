@@ -1,0 +1,52 @@
+{
+  "manifest_version": "1.0",
+  "generated_at": "2026-05-22T10:30:00Z",
+  "tool": "OPP",
+  "tool_version": "0.2.0",
+  "source": {
+    "file_path": "/mnt/d/test/user_manual.docx",
+    "original_filename": "user_manual.docx",
+    "format": "DOCX",
+    "file_size_bytes": 45824,
+    "file_hash_md5": "a1b2c3d4e5f6g7h8i9j0"
+  },
+  "extraction": {
+    "source_lang": "en",
+    "target_lang": "zh",
+    "outputs": {
+      "markdown": {
+        "path": "user_manual.md",
+        "paragraph_count": 150,
+        "table_count": 3
+      },
+      "xliff": {
+        "path": "user_manual.xlf",
+        "trans_unit_count": 42
+      }
+    },
+    "images": [
+      {
+        "mime_type": "image/png",
+        "width": 800,
+        "height": 600,
+        "data_size_bytes": 24580
+      },
+      {
+        "mime_type": "image/jpeg",
+        "width": 1024,
+        "height": 768,
+        "data_size_bytes": 51200
+      }
+    ],
+    "warnings": []
+  },
+  "skeleton": {
+    "path": "user_manual.skeleton.zip",
+    "format": "ZIP",
+    "key_files": ["word/document.xml", "word/styles.xml", "word/settings.xml"]
+  },
+  "resources": {
+    "storage_dir": "resources",
+    "image_count": 5
+  }
+}
