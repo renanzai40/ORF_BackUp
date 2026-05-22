@@ -1785,27 +1785,27 @@ if __name__ == "__main__":
 
 ### 6.1 功能验收
 
-- [ ] `orf apply-md spec_zh.md --target-format docx` 成功生成 `spec_zh.docx`
-- [ ] `orf apply-md spec_zh.md --target-format odt` 成功生成 `spec_zh.odt`
-- [ ] `orf apply-md spec_zh.md --target-format epub --title "用户手册"` 成功生成 `spec_zh.epub`
-- [ ] `orf convert-batch output_dir --target-format docx` 批量转换成功
+- [~] `orf apply-md spec_zh.md --target-format docx` 成功生成 `spec_zh.docx` (需要 Pandoc + 真实测试文件)
+- [~] `orf apply-md spec_zh.md --target-format odt` 成功生成 `spec_zh.odt` (需要 Pandoc + 真实测试文件)
+- [~] `orf apply-md spec_zh.md --target-format epub --title "用户手册"` 成功生成 `spec_zh.epub` (需要 Pandoc + 真实测试文件)
+- [~] `orf convert-batch output_dir --target-format docx` 批量转换成功 (需要 Pandoc + 真实测试文件)
 
 ### 6.2 元数据验收
 
-- [ ] manifest.json 解析成功率 100%
-- [ ] YAML frontmatter 解析成功率 100%
-- [ ] manifest + frontmatter 都缺失时，转换仍可进行（使用默认值）
+- [x] manifest.json 解析成功率 100% (单元测试已验证)
+- [x] YAML frontmatter 解析成功率 100% (单元测试已验证)
+- [x] manifest + frontmatter 都缺失时，转换仍可进行（使用默认值）(代码已实现)
 
 ### 6.3 异常处理验收
 
-- [ ] 无效 MD 文件 → 报错，进程不崩溃
-- [ ] Pandoc 未安装 → 友好提示
-- [ ] 输出路径不可写 → 报错
+- [x] 无效 MD 文件 → 报错，进程不崩溃 (单元测试已验证)
+- [x] Pandoc 未安装 → 友好提示 (代码已实现 FileNotFoundError 处理)
+- [x] 输出路径不可写 → 报错 (代码已实现)
 
 ### 6.4 性能验收
 
-- [ ] Manifest + Frontmatter 解析 ≤ 10ms
-- [ ] MD→DOCX 转换 ≥ 15MB/s
+- [~] Manifest + Frontmatter 解析 ≤ 10ms (需要真实文件测试)
+- [~] MD→DOCX 转换 ≥ 15MB/s (需要 Pandoc 安装 + 真实文件)
 
 ---
 
