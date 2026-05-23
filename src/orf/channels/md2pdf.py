@@ -10,16 +10,6 @@ from orf.logging import get_logger
 
 logger = get_logger("channel.md2pdf")
 
-# WeasyPrint availability check (actual import happens inside _convert_weasyprint)
-_weasyprint_error: str | None = None
-try:
-    import weasyprint
-except ImportError:
-    _weasyprint_error = (
-        "WeasyPrint is not installed. Install it with: pip install weasyprint\n"
-        "Or use the 'pandoc' engine instead."
-    )
-
 
 class MD2PDFConverter(BaseConverter):
     """Markdown to PDF converter with dual-engine support.
@@ -120,16 +110,17 @@ class MD2PDFConverter(BaseConverter):
         **options,
     ) -> ConversionResult:
         """Convert MD → HTML → PDF using WeasyPrint."""
-        if _weasyprint_error:
-            logger.error(_weasyprint_error)
+        # Check WeasyPrint availability at runtime
+        try:
+            import weasyprint
+            from weasyprint import HTML
+        except ImportError:
+            logger.error("WeasyPrint is not installed. Install with: pip install weasyprint")
             return ConversionResult(
                 output_path=output_path,
                 success=False,
-                errors=[_weasyprint_error],
+                errors=["WeasyPrint not installed. Use 'pandoc' engine or pip install weasyprint"],
             )
-
-        # Import here to ensure WeasyPrint is available
-        from weasyprint import HTML
 
         # Import MD2HTMLConverter for the intermediate HTML step
         from orf.channels.md2html import MD2HTMLConverter
