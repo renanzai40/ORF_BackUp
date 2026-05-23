@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Optional, List, Any
+from typing import Optional, List, Dict, Any
 import tempfile
 import subprocess
 
@@ -202,7 +202,7 @@ class LayoutAnalyzer:
                 
         return images
 
-    def _call_vision_api(self, images: List[Path]) -> List[dict[str, Any]:
+    def _call_vision_api(self, images: List[Path]) -> List[Dict[str, Any]]:
         """Call vision API to detect overflow in rendered images.
         
         Args:
@@ -257,7 +257,7 @@ class LayoutAnalyzer:
             
         return results
 
-    def _mock_vision_results(self, images: List[Path]) -> List[dict[str, Any]]:
+    def _mock_vision_results(self, images: List[Path]) -> List[Dict[str, Any]]:
         """Return mock vision results when API is not available.
         
         Args:
