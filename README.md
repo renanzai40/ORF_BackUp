@@ -24,11 +24,17 @@ ORF 是 Omni 文档本地化生态的最后一环，负责将标准化中间件�
 ### AI 辅助 (Phase 4 ✅)
 - 布局溢出检测与修正
 
-### 计划中 (Phase 5 📋)
-- XLSX, CSV, JSON (数据格式)
-- XML (结构化标记)
-- IPYNB (Jupyter 笔记本)
-- EML, MSG (邮件格式)
+### 数据格式 (Phase 5 ✅)
+- XLSX, CSV, JSON
+
+### 结构化标记 (Phase 5 ✅)
+- XML
+
+### Jupyter 笔记本 (Phase 5 ✅)
+- IPYNB
+
+### 邮件格式 (Phase 5 ✅)
+- EML, MSG
 
 ## 安装
 
@@ -86,8 +92,12 @@ orf convert-batch ./translated --target-format docx --pattern "*.md"
 - AI: 布局溢出检测与修正
 - 完整的错误处理和日志系统
 
-### Phase 5: 📋 规划中
-计划支持: XLSX, CSV, JSON, XML, IPYNB, EML, MSG
+### Phase 5: ✅ 已完成
+- XLSX (openpyxl), CSV (stdlib), JSON (stdlib)
+- XML (stdlib), IPYNB (nbformat)
+- EML (stdlib), MSG (aspose-email-foss)
+- CLI 已注册所有新格式
+- 可选依赖已添加到 pyproject.toml
 
 ## 开发
 
