@@ -11,13 +11,41 @@ ORF 是 Omni 文档本地化生态的最后一环，负责将标准化中间件�
 
 ## 支持格式
 
-- **MD 回写**: DOCX, ODT, EPUB, HTML, RTF, PDF, PPTX
-- **XLIFF 回写**: DOCX, PPTX, EPUB, HTML, ODF
+### MD 回写 (Phase 0-2 ✅)
+- DOCX, ODT, EPUB, HTML, RTF, PDF, PPTX
+- ICML (InDesign), SRT (字幕)
+
+### XLIFF 回写 (Phase 1 ✅)
+- DOCX, PPTX, EPUB, HTML, ODF
+
+### 云存储集成 (Phase 4 ✅)
+- AWS S3, Azure Blob Storage
+
+### AI 辅助 (Phase 4 ✅)
+- 布局溢出检测与修正
+
+### 计划中 (Phase 5 📋)
+- XLSX, CSV, JSON (数据格式)
+- XML (结构化标记)
+- IPYNB (Jupyter 笔记本)
+- EML, MSG (邮件格式)
 
 ## 安装
 
 ```bash
+# 核心功能
 pip install omni-re-formatter
+
+# 开发依赖
+pip install -e ".[dev]"
+
+# 可选依赖
+pip install -e ".[weasyprint]"   # PDF 生成
+pip install -e ".[cloud]"       # S3/Azure 支持
+pip install -e ".[ai]"          # AI 布局修正
+pip install -e ".[office]"      # XLSX 支持
+pip install -e ".[notebook]"     # IPYNB 支持
+pip install -e ".[email-output]" # MSG 支持
 ```
 
 ## 快速开始
@@ -34,6 +62,9 @@ orf apply-xliff original.docx --xliff translated.xlf --output result.docx
 
 # 批量转换
 orf convert-batch ./translated --target-format docx --pattern "*.md"
+
+# 云存储下载资源
+# 配置 S3 或 Azure Blob 后，ORF 可直接从云端读取
 ```
 
 ## CLI 命令
@@ -44,6 +75,19 @@ orf convert-batch ./translated --target-format docx --pattern "*.md"
 | `apply-xliff` | 应用 XLIFF 翻译到原始文档 |
 | `convert-batch` | 批量转换 MD 文件 |
 | `info` | 显示文档信息 |
+
+## 项目状态
+
+### Phase 0-4: ✅ 已完成
+- 272+ 个测试用例通过
+- MD 回写: 9 种格式 (DOCX, ODT, EPUB, HTML, RTF, PDF, PPTX, ICML, SRT)
+- XLIFF 回写: 5 种格式 (DOCX, PPTX, EPUB, HTML, ODF)
+- 云存储: S3 + Azure Blob 集成
+- AI: 布局溢出检测与修正
+- 完整的错误处理和日志系统
+
+### Phase 5: 📋 规划中
+计划支持: XLSX, CSV, JSON, XML, IPYNB, EML, MSG
 
 ## 开发
 
@@ -56,16 +100,32 @@ pytest tests/
 
 # 代码检查
 ruff check src/orf
-mypy src/orf
+mypy src/orf --ignore-missing-imports
+
+# 构建包
+python -m build
 ```
 
-## 项目状态
+## 架构
 
-**功能状态**: ✅ 生产可用
-- 272 个测试用例通过
-- 支持 7 种输出格式（MD 回写）+ 5 种（XLIFF 回写）
-- 完整的错误处理和日志系统
+```
+src/orf/
+├── channels/          # 格式转换通道 (MD→X, XLIFF→X)
+├── converters/        # 转换器基类与流式处理
+├── parsers/          # manifest.json, frontmatter 解析
+├── detection/         # 格式自动探测
+├── resources/        # 图片资源管理
+├── skeleton/          # skeleton.zip 加载与回填
+├── cloud/            # S3, Azure Blob 客户端
+├── ai/               # 布局分析与溢出修正
+└── logging/          # 日志系统
+```
 
-**代码质量**: ⚠️ 持续改进中
-- ruff 检查通过
-- mypy 有部分类型注解缺失（库依赖存根未安装）
+## 相关项目
+
+- [OPP (Omni-Pre-Processor)](https://github.com/1StepMore/Omni_Pre_Processor) - 文档提取为 MD/XLIFF
+- [OL (Omni-Localizer)](https://github.com/1StepMore) - 翻译 MD/XLIFF
+
+## 许可证
+
+MIT
