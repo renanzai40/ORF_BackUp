@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
@@ -61,11 +61,11 @@ class MD2CSVConverter(BaseConverter):
 
         return rows
 
-    def convert(  # type: ignore[override]
+    def convert(
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -116,34 +117,34 @@ def apply_md(
     if target_format == "docx":
         converter: BaseConverter = MD2DOCXConverter(manifest=manifest, frontmatter=frontmatter)
     elif target_format == "odt":
-        converter: BaseConverter = MD2ODTConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+        converter = MD2ODTConverter(manifest=manifest, frontmatter=frontmatter)
     elif target_format == "epub":
-        converter: BaseConverter = MD2EPUBConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+        converter = MD2EPUBConverter(manifest=manifest, frontmatter=frontmatter)
     elif target_format == "html":
         from orf.channels.md2html import MD2HTMLConverter
-        converter: BaseConverter = MD2HTMLConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+        converter = MD2HTMLConverter(manifest=manifest, frontmatter=frontmatter)
     elif target_format == "rtf":
         from orf.channels.md2rtf import MD2RTFConverter
-        converter: BaseConverter = MD2RTFConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+        converter = MD2RTFConverter(manifest=manifest, frontmatter=frontmatter)
     elif target_format == "pdf":
         from orf.channels.md2pdf import MD2PDFConverter
-        converter: BaseConverter = MD2PDFConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+        converter = MD2PDFConverter(manifest=manifest, frontmatter=frontmatter)
     elif target_format == "csv":
         from orf.channels.md2csv import MD2CSVConverter
-        converter: BaseConverter = MD2CSVConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+        converter = MD2CSVConverter(manifest=manifest, frontmatter=frontmatter)
     elif target_format == "json":
         from orf.channels.md2json import MD2JSONConverter
-        converter: BaseConverter = MD2JSONConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+        converter = MD2JSONConverter(manifest=manifest, frontmatter=frontmatter)
     elif target_format == "xml":
         from orf.channels.md2xml import MD2XMLConverter
-        converter: BaseConverter = MD2XMLConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+        converter = MD2XMLConverter(manifest=manifest, frontmatter=frontmatter)
     elif target_format == "eml":
         from orf.channels.md2eml import MD2EMLConverter
-        converter: BaseConverter = MD2EMLConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+        converter = MD2EMLConverter(manifest=manifest, frontmatter=frontmatter)
     elif target_format == "xlsx":
         try:
             from orf.channels.md2xlsx import MD2XLSXConverter
-            converter: BaseConverter = MD2XLSXConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+            converter = MD2XLSXConverter(manifest=manifest, frontmatter=frontmatter)
         except ImportError as e:
             raise click.ClickException(
                 f"XLSX conversion requires openpyxl.\n"
@@ -177,7 +178,7 @@ def apply_md(
             f"       Use --target-format <format> to specify"
         )
 
-    options = {}
+    options: dict[str, Any] = {}
     if template:
         options["template"] = Path(template)
     if title:

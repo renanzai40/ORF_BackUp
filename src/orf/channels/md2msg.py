@@ -120,22 +120,22 @@ class MD2MSGConverter(BaseConverter):
         md_body = self._strip_frontmatter(content)
 
         try:
-            from aspose.email import (  # type: ignore[import]
+            from aspose.email import (
                 MailMessage,
                 MailAddress,
                 MailAddressCollection,
             )
-            from aspose.email.mapi import MapiMessage  # type: ignore[import]
-            from aspose.email.mapi.properties import (  # type: ignore[import]
+            from aspose.email.mapi import MapiMessage
+            from aspose.email.mapi.properties import (
                 MapiProperty,
             )
-            from aspose.email.mapi.properties.known_property_ids import (  # type: ignore[import]
+            from aspose.email.mapi.properties.known_property_ids import (
                 KnownPropertyIds,
             )
-            from aspose.email.standard.mail.streams import (  # type: ignore[import]
+            from aspose.email.standard.mail.streams import (
                 MemoryStream,
             )
-            from aspose.email.save_options import SaveOptions  # type: ignore[import]
+            from aspose.email.save_options import SaveOptions
 
             # Create MailMessage for body content
             msg = MailMessage()
@@ -222,8 +222,8 @@ class MD2MSGConverter(BaseConverter):
             mapi_msg: MapiMessage instance
             properties: Dict of MAPI property names to values
         """
-        from aspose.email.mapi.properties import MapiProperty  # type: ignore[import]
-        from aspose.email.mapi.properties.known_property_ids import (  # type: ignore[import]
+        from aspose.email.mapi.properties import MapiProperty
+        from aspose.email.mapi.properties.known_property_ids import (
             KnownPropertyIds,
         )
 

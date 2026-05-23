@@ -32,7 +32,7 @@ class MD2PDFConverter(BaseConverter):
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 from orf.converters.base import ConversionResult
 from orf.converters.stream_converter import StreamingConverter, StreamChunk
@@ -87,7 +87,7 @@ class ChunkedMDConverter(StreamingConverter):
 
         return chunks
 
-    def _process_chunk(self, chunk: StreamChunk, **options) -> str:  # type: ignore[override]
+    def _process_chunk(self, chunk: StreamChunk, **options: Any) -> str:
         """Pass through chunk content (actual conversion happens at channel level).
 
         Args:

@@ -62,7 +62,7 @@ class MD2XLSXConverter(BaseConverter):
 
         return rows
 
-    def convert(  # type: ignore[override]
+    def convert(
         self,
         input_path: Path | str,
         output_path: Path | str,
