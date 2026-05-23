@@ -20,7 +20,7 @@ MAX_BYTES = 10 * 1024 * 1024  # 10MB
 BACKUP_COUNT = 5
 
 # 全局 logger 缓存
-_loggers = {}
+_loggers: dict[str, logging.Logger] = {}
 
 
 def setup_logger(name: str = "orf", level: str = "INFO") -> logging.Logger:
