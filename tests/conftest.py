@@ -84,3 +84,58 @@ def sample_manifest_data() -> dict:
             "image_count": 5,
         },
     }
+
+
+# Phase 2 fixtures
+
+@pytest.fixture
+def sample_image_paths(tmp_path: Path) -> list[Path]:
+    """Create sample image files for resource manager tests."""
+    from PIL import Image  # Use Pillow for image creation
+
+    images = []
+    for i in range(3):
+        img_path = tmp_path / f"test_image_{i}.png"
+        # Create a simple 10x10 PNG
+        img = Image.new("RGB", (10, 10), color="red")
+        img.save(img_path)
+        images.append(img_path)
+    return images
+
+
+@pytest.fixture
+def sample_detectable_content(tmp_path: Path) -> dict[str, Path]:
+    """Create sample files for format detection tests."""
+    import json
+
+    files = {}
+
+    # MD file with frontmatter
+    md_path = tmp_path / "test.md"
+    md_path.write_text("---\nsource_lang: en\ntarget_lang: zh\n---\n\n# Test")
+    files["md"] = md_path
+
+    # Manifest JSON
+    manifest_path = tmp_path / "test_manifest.json"
+    manifest_data = {
+        "manifest_version": "1.0",
+        "source": {"format": "DOCX", "file_path": "test.docx"},
+        "extraction": {}
+    }
+    manifest_path.write_text(json.dumps(manifest_data))
+    files["manifest"] = manifest_path
+
+    # PDF file
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 test content")
+    files["pdf"] = pdf_path
+
+    return files
+
+
+@pytest.fixture
+def css_template_file(tmp_path: Path) -> Path:
+    """Create a sample CSS file for HTML conversion."""
+    css_path = tmp_path / "style.css"
+    css_path.write_text("body { font-family: Arial; }")
+    return css_path

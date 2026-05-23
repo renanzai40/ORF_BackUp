@@ -32,7 +32,9 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "ruff>=0.1.0",
     "mypy>=1.5.0",
+    "weasyprint>=60.0",
 ]
+weasyprint = ["weasyprint>=60.0"]
 
 [project.scripts]
 orf = "orf.cli:main"
