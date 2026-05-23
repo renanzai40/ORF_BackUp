@@ -126,12 +126,6 @@ class MD2MSGConverter(BaseConverter):
                 MailAddressCollection,
             )
             from aspose.email.mapi import MapiMessage
-            from aspose.email.mapi.properties import (
-                MapiProperty,
-            )
-            from aspose.email.mapi.properties.known_property_ids import (
-                KnownPropertyIds,
-            )
             from aspose.email.save_options import SaveOptions
 
             # Create MailMessage for body content
