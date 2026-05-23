@@ -17,6 +17,7 @@ from orf.parsers.frontmatter import (
     FrontmatterParseError,
     has_frontmatter,
 )
+from orf.error_handlers.conversion_error import FormatDetectionError
 from orf.logging import setup_logger, get_logger
 
 logger = get_logger("cli")
@@ -35,10 +36,11 @@ def main(verbose: bool):
 @click.option(
     "--target-format",
     "-t",
-    type=click.Choice(["docx", "odt", "epub", "html", "rtf", "pdf"]),
+    type=click.Choice(["docx", "odt", "epub", "html", "rtf", "pdf", "auto"]),
     default="docx",
     help="目标格式",
 )
+@click.option("--auto-detect", is_flag=True, help="自动检测输入文件格式")
 @click.option("--output", "-o", type=click.Path(), help="输出文件路径")
 @click.option("--template", type=click.Path(), help="Pandoc reference 模板路径")
 @click.option("--title", type=str, help="EPUB 标题")
@@ -48,6 +50,7 @@ def main(verbose: bool):
 def apply_md(
     input_md: str,
     target_format: str,
+    auto_detect: bool,
     output: str | None,
     template: str | None,
     title: str | None,
@@ -60,6 +63,27 @@ def apply_md(
     INPUT_MD: 输入的 MD 文件路径（通常由 OL 翻译后的文件）
     """
     input_path = Path(input_md)
+
+    if target_format == "auto" or auto_detect:
+        from orf.detection import FormatDetector
+
+        detector = FormatDetector()
+        try:
+            detected = detector.detect(input_path)
+            format_map = {
+                "DOCX": "docx",
+                "ODT": "odt",
+                "EPUB": "epub",
+                "HTML": "html",
+                "RTF": "rtf",
+                "PDF": "pdf",
+            }
+            target_format = format_map.get(detected, detected.lower())
+            logger.info(f"Auto-detected format: {detected} -> {target_format}")
+        except FormatDetectionError as e:
+            logger.error(f"Format detection failed: {e}")
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
 
     if output is None:
         output_path = input_path.with_suffix(f".{target_format}")
@@ -92,6 +116,15 @@ def apply_md(
         converter = MD2ODTConverter(manifest=manifest, frontmatter=frontmatter)
     elif target_format == "epub":
         converter = MD2EPUBConverter(manifest=manifest, frontmatter=frontmatter)
+    elif target_format == "html":
+        from orf.channels.md2html import MD2HTMLConverter
+        converter = MD2HTMLConverter(manifest=manifest, frontmatter=frontmatter)
+    elif target_format == "rtf":
+        from orf.channels.md2rtf import MD2RTFConverter
+        converter = MD2RTFConverter(manifest=manifest, frontmatter=frontmatter)
+    elif target_format == "pdf":
+        from orf.channels.md2pdf import MD2PDFConverter
+        converter = MD2PDFConverter(manifest=manifest, frontmatter=frontmatter)
     else:
         logger.error(f"Unsupported format: {target_format}")
         click.echo(f"Error: Unsupported format '{target_format}'", err=True)
