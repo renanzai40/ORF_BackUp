@@ -143,7 +143,7 @@ class MD2EMLConverter(BaseConverter):
         )
 
     @staticmethod
-    def _eml_policy() -> "EmailPolicy":  # type: ignore[name-defined]
+    def _eml_policy() -> Any:
         """Get email policy for RFC 5322 compliance."""
         from email.policy import EmailPolicy
 
