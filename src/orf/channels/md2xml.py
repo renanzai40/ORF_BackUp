@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from orf.converters.base import BaseConverter, ConversionResult
@@ -155,11 +155,11 @@ class MD2XMLConverter(BaseConverter):
 
         return elements
 
-    def convert(  # type: ignore[override]
+    def convert(
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)

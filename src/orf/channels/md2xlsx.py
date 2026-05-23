@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from openpyxl import Workbook
 
@@ -23,7 +23,7 @@ class MD2XLSXConverter(BaseConverter):
         self,
         manifest: Optional[Manifest] = None,
         frontmatter: Optional[FrontmatterMetadata] = None,
-    ):
+    ) -> None:
         super().__init__(manifest, frontmatter)
 
     @property
@@ -62,11 +62,11 @@ class MD2XLSXConverter(BaseConverter):
 
         return rows
 
-    def convert(
+    def convert(  # type: ignore[override]
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import yaml
 
@@ -39,7 +39,7 @@ class MD2MSGConverter(BaseConverter):
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() == ".md"
 
-    def _parse_email_headers(self, content: str) -> Optional[dict]:
+    def _parse_email_headers(self, content: str) -> Optional[Dict[str, Any]]:
         """Parse email_headers from frontmatter YAML.
 
         Args:
@@ -57,7 +57,7 @@ class MD2MSGConverter(BaseConverter):
         except yaml.YAMLError:
             return None
 
-    def _parse_mapi_properties(self, content: str) -> Optional[dict]:
+    def _parse_mapi_properties(self, content: str) -> Optional[Dict[str, Any]]:
         """Parse mapi_properties from frontmatter YAML.
 
         Args:
@@ -79,11 +79,11 @@ class MD2MSGConverter(BaseConverter):
         """Remove frontmatter from content."""
         return FRONTMATTER_PATTERN.sub("", content)
 
-    def convert(  # type: ignore[override]
+    def convert(
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)
@@ -120,12 +120,22 @@ class MD2MSGConverter(BaseConverter):
         md_body = self._strip_frontmatter(content)
 
         try:
-            from aspose.email import MailMessage, MailAddress, MailAddressCollection
-            from aspose.email.mapi import MapiMessage
-            from aspose.email.mapi.properties import MapiProperty
-            from aspose.email.mapi.properties.known_property_ids import KnownPropertyIds
-            from aspose.email.standard.mail.streams import MemoryStream
-            from aspose.email.save_options import SaveOptions
+            from aspose.email import (  # type: ignore[import]
+                MailMessage,
+                MailAddress,
+                MailAddressCollection,
+            )
+            from aspose.email.mapi import MapiMessage  # type: ignore[import]
+            from aspose.email.mapi.properties import (  # type: ignore[import]
+                MapiProperty,
+            )
+            from aspose.email.mapi.properties.known_property_ids import (  # type: ignore[import]
+                KnownPropertyIds,
+            )
+            from aspose.email.standard.mail.streams import (  # type: ignore[import]
+                MemoryStream,
+            )
+            from aspose.email.save_options import SaveOptions  # type: ignore[import]
 
             # Create MailMessage for body content
             msg = MailMessage()
@@ -205,14 +215,17 @@ class MD2MSGConverter(BaseConverter):
                 errors=[str(e)],
             )
 
-    def _set_mapi_properties(self, mapi_msg: MapiMessage, properties: dict) -> None:
+    def _set_mapi_properties(self, mapi_msg: Any, properties: Dict[str, Any]) -> None:
         """Set MAPI properties on the message.
 
         Args:
             mapi_msg: MapiMessage instance
             properties: Dict of MAPI property names to values
         """
-        from aspose.email.mapi.properties import MapiProperty
+        from aspose.email.mapi.properties import MapiProperty  # type: ignore[import]
+        from aspose.email.mapi.properties.known_property_ids import (  # type: ignore[import]
+            KnownPropertyIds,
+        )
 
         # Map common MAPI property names to known property IDs
         property_id_map = {

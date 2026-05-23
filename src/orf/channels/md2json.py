@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
@@ -35,11 +35,11 @@ class MD2JSONConverter(BaseConverter):
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() == ".md"
 
-    def convert(  # type: ignore[override]
+    def convert(
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)

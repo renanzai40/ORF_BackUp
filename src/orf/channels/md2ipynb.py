@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import nbformat
 from nbformat.v4 import new_notebook, new_code_cell, new_markdown_cell
@@ -35,7 +35,7 @@ class MD2IPYNBConverter(BaseConverter):
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() == ".md"
 
-    def _parse_markdown(self, content: str) -> list[dict]:
+    def _parse_markdown(self, content: str) -> list[Dict[str, Any]]:
         """Parse markdown content into notebook cells.
 
         Args:
@@ -72,11 +72,11 @@ class MD2IPYNBConverter(BaseConverter):
 
         return cells
 
-    def convert(  # type: ignore[override]
+    def convert(
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)

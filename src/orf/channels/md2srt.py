@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
@@ -41,7 +41,7 @@ class MD2SRTConverter(BaseConverter):
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)

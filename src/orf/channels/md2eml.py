@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from email.message import EmailMessage
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import yaml
 
@@ -39,7 +39,7 @@ class MD2EMLConverter(BaseConverter):
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() == ".md"
 
-    def _parse_email_headers(self, content: str) -> Optional[dict]:
+    def _parse_email_headers(self, content: str) -> Optional[Dict[str, Any]]:
         """Parse email_headers from frontmatter YAML.
 
         Args:
@@ -61,11 +61,11 @@ class MD2EMLConverter(BaseConverter):
         """Remove frontmatter from content."""
         return FRONTMATTER_PATTERN.sub("", content)
 
-    def convert(  # type: ignore[override]
+    def convert(
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)
@@ -143,7 +143,7 @@ class MD2EMLConverter(BaseConverter):
         )
 
     @staticmethod
-    def _eml_policy():
+    def _eml_policy() -> "EmailPolicy":  # type: ignore[name-defined]
         """Get email policy for RFC 5322 compliance."""
         from email.policy import EmailPolicy
 
