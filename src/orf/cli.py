@@ -16,7 +16,6 @@ from orf.parsers.frontmatter import (
     parse_frontmatter,
     FrontmatterParseError,
     has_frontmatter,
-    strip_frontmatter,
 )
 from orf.logging import setup_logger, get_logger
 
@@ -117,7 +116,7 @@ def apply_md(
         click.echo(f"Created {result.output_path}")
     else:
         logger.error(f"Conversion failed: {result.errors}")
-        click.echo(f"Conversion failed:", err=True)
+        click.echo("Conversion failed:", err=True)
         for error in result.errors:
             click.echo(f"  - {error}", err=True)
         sys.exit(1)
@@ -201,6 +200,66 @@ def convert_batch(
             pbar.update(1)
 
     click.echo(f"\nCompleted: {success_count} succeeded, {fail_count} failed")
+
+
+@main.command("apply-xliff")
+@click.argument("input_file", type=click.Path(exists=True))
+@click.option("--xliff", "-x", required=True, help="Translated XLIFF file")
+@click.option("--output", "-o", required=True, help="Output file path")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["docx", "pptx", "epub", "html", "odt"]),
+    default="docx",
+    help="Output format",
+)
+def apply_xliff(input_file: str, xliff: str, output: str, format: str):
+    """Apply XLIFF translation to original document.
+
+    INPUT_FILE: Original document (DOCX/PPTX/EPUB/HTML)
+    """
+    input_path = Path(input_file)
+    output_path = Path(output)
+    xliff_path = Path(xliff)
+
+    logger.info(f"Applying XLIFF {xliff_path} to {input_path} -> {output_path} ({format})")
+
+    if format == "docx":
+        from orf.channels.xliff2docx import XLIFF2DOCXConverter
+
+        converter = XLIFF2DOCXConverter()
+    elif format == "pptx":
+        from orf.channels.xliff2pptx import XLIFF2PPTXConverter
+
+        converter = XLIFF2PPTXConverter()
+    elif format == "epub":
+        from orf.channels.xliff2epub import XLIFF2EPUBConverter
+
+        converter = XLIFF2EPUBConverter()
+    elif format == "html":
+        from orf.channels.xliff2html import XLIFF2HTMLConverter
+
+        converter = XLIFF2HTMLConverter()
+    elif format == "odt":
+        from orf.channels.xliff2odf import XLIFF2ODFConverter
+
+        converter = XLIFF2ODFConverter()
+    else:
+        logger.error(f"Unsupported format: {format}")
+        click.echo(f"Error: Unsupported format '{format}'", err=True)
+        sys.exit(1)
+
+    result = converter.convert(input_path, xliff_path, output_path)
+
+    if result.success:
+        logger.info(f"Conversion successful: {result.output_path}")
+        click.echo(f"Created {result.output_path}")
+    else:
+        logger.error(f"Conversion failed: {result.errors}")
+        click.echo("Conversion failed:", err=True)
+        for error in result.errors:
+            click.echo(f"  - {error}", err=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
