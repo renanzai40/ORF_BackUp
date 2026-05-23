@@ -68,7 +68,7 @@ class MD2EPUBConverter(BaseConverter):
 
         try:
             logger.info(f"Running: {' '.join(cmd)}")
-            result = subprocess.run(
+            subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
