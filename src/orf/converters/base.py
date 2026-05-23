@@ -8,7 +8,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, Optional
 
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
