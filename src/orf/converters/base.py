@@ -6,9 +6,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, cast
 
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
@@ -19,15 +19,12 @@ class ConversionResult:
     """转换结果"""
     output_path: Path
     success: bool
-    warnings: list[str] = None
-    errors: list[str] = None
-    metadata: dict = None  # 转换相关元数据
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self):
-        if self.warnings is None:
-            self.warnings = []
-        if self.errors is None:
-            self.errors = []
+    def __post_init__(self) -> None:
+        pass
 
 
 class BaseConverter(ABC):
@@ -37,7 +34,7 @@ class BaseConverter(ABC):
         self,
         manifest: Optional[Manifest] = None,
         frontmatter: Optional[FrontmatterMetadata] = None,
-    ):
+    ) -> None:
         """初始化转换器
 
         Args:
@@ -84,9 +81,9 @@ class BaseConverter(ABC):
         """支持的输出格式名称（如 'DOCX', 'ODT', 'EPUB'）"""
         pass
 
-    def get_log_context(self) -> dict:
+    def get_log_context(self) -> dict[str, Any]:
         """获取日志上下文信息"""
-        context = {"converter": self.supported_format}
+        context: dict[str, Any] = {"converter": self.supported_format}
 
         if self.manifest:
             context["source_format"] = self.manifest.source.format
