@@ -35,30 +35,21 @@ class TestApplyMdAutoDetect:
             mock_detector.detect.return_value = "DOCX"
             mock_detector_class.return_value = mock_detector
 
-            with patch("orf.channels.md2docx.MD2DOCXConverter") as mock_converter_class:
-                mock_converter = MagicMock()
-                mock_result = MagicMock()
-                mock_result.success = True
-                mock_result.output_path = output
-                mock_result.errors = []
-                mock_converter.convert.return_value = mock_result
-                mock_converter_class.return_value = mock_converter
+            result = runner.invoke(
+                main,
+                [
+                    "apply-md",
+                    str(sample_md),
+                    "--target-format",
+                    "auto",
+                    "--output",
+                    str(output),
+                ],
+            )
 
-                result = runner.invoke(
-                    main,
-                    [
-                        "apply-md",
-                        str(sample_md),
-                        "--target-format",
-                        "auto",
-                        "--output",
-                        str(output),
-                    ],
-                )
-
-                assert result.exit_code == 0
-                mock_detector.detect.assert_called_once_with(sample_md)
-                mock_converter.convert.assert_called_once()
+            assert result.exit_code == 0
+            mock_detector.detect.assert_called_once_with(sample_md)
+            assert output.exists(), f"Output file not created: {output}"
 
     def test_auto_detect_not_found(self, runner, sample_md, tmp_path):
         """Test --target-format auto exits with error when detection fails."""
