@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import zipfile
 from pathlib import Path
+from typing import Optional, Any
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.skeleton.inline_formatting import XLIFFInlineParser, EPUBHTMLInlineApplier
@@ -29,7 +30,7 @@ class XLIFF2EPUBConverter(BaseConverter):
     XHTML chapter, and repacks the EPUB with inline formatting converted to HTML.
     """
 
-    def __init__(self, manifest=None, frontmatter=None):
+    def __init__(self, manifest: Optional[Any] = None, frontmatter: Optional[Any] = None) -> None:
         super().__init__(manifest, frontmatter)
         self.inline_parser = XLIFFInlineParser()
         self.epub_applier = EPUBHTMLInlineApplier()
@@ -48,7 +49,7 @@ class XLIFF2EPUBConverter(BaseConverter):
         epub_skeleton: Path | str,
         xliff_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         """Apply XLIFF translations to EPUB skeleton.
 

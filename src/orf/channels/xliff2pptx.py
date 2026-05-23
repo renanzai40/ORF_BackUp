@@ -75,7 +75,7 @@ class XLIFF2PPTXConverter(BaseConverter):
         pptx_skeleton: Path | str,
         xliff_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         """Convert XLIFF translation back to PPTX with inline formatting.
 
@@ -259,8 +259,8 @@ class XLIFF2PPTXConverter(BaseConverter):
         # Build a mapping from source text to target text
         trans_map: dict[str, Any] = {}
         for unit in xliff_data["units"]:
-            source: str = unit["source"]  # type: ignore[index]
-            target: str = unit["target"]  # type: ignore[index]
+            source = str(unit["source"])
+            target = str(unit["target"])
             if source and target:
                 trans_map[source] = {
                     "target": target,

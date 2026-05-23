@@ -65,7 +65,7 @@ class XLIFF2ODFConverter(BaseConverter):
         skeleton_path: Path | str,
         xliff_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         """Convert XLIFF + skeleton ODF to translated ODF.
 
