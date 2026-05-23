@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 import click
-from tqdm import tqdm
 
 from orf.channels.md2docx import MD2DOCXConverter
 from orf.channels.md2odt import MD2ODTConverter
@@ -82,8 +81,12 @@ def apply_md(
             logger.info(f"Auto-detected format: {detected} -> {target_format}")
         except FormatDetectionError as e:
             logger.error(f"Format detection failed: {e}")
-            click.echo(f"Error: {e}", err=True)
-            sys.exit(1)
+            raise click.ClickException(
+                f"Format detection failed: {e}\n"
+                f"Hint: 1) Ensure manifest.json exists with source.format field\n"
+                f"       2) Check the input file is a valid document\n"
+                f"       3) Use --target-format <format> to specify manually"
+            )
 
     if output is None:
         output_path = input_path.with_suffix(f".{target_format}")
@@ -126,9 +129,11 @@ def apply_md(
         from orf.channels.md2pdf import MD2PDFConverter
         converter = MD2PDFConverter(manifest=manifest, frontmatter=frontmatter)
     else:
-        logger.error(f"Unsupported format: {target_format}")
-        click.echo(f"Error: Unsupported format '{target_format}'", err=True)
-        sys.exit(1)
+        raise click.ClickException(
+            f"Unsupported format '{target_format}'\n"
+            f"Hint: Valid formats are: docx, odt, epub, html, rtf, pdf\n"
+            f"       Use --target-format <format> to specify"
+        )
 
     options = {}
     if template:
@@ -142,17 +147,27 @@ def apply_md(
     if embed_images:
         options["embed_images"] = True
 
-    result = converter.convert(input_path, output_path, **options)
+    with click.progressbar(
+        length=1,
+        label=f"Converting to {target_format}",
+        show_pos=True,
+        show_percent=True,
+    ) as bar:
+        result = converter.convert(input_path, output_path, **options)
+        bar.update(1)
 
     if result.success:
         logger.info(f"Conversion successful: {result.output_path}")
         click.echo(f"Created {result.output_path}")
     else:
         logger.error(f"Conversion failed: {result.errors}")
-        click.echo("Conversion failed:", err=True)
-        for error in result.errors:
-            click.echo(f"  - {error}", err=True)
-        sys.exit(1)
+        errors_str = ", ".join(result.errors) if result.errors else "Unknown error"
+        raise click.ClickException(
+            f"Conversion failed: {errors_str}\n"
+            f"Hint: 1) Check Pandoc is installed (pip install pandoc)\n"
+            f"       2) Verify input file is valid\n"
+            f"       3) Try --verbose for detailed logs"
+        )
 
 
 @main.command("convert-batch")
@@ -192,14 +207,17 @@ def convert_batch(
     elif target_format == "epub":
         converter_class = MD2EPUBConverter
     else:
-        click.echo(f"Unsupported format: {target_format}", err=True)
-        sys.exit(1)
+        raise click.ClickException(
+            f"Unsupported format '{target_format}'\n"
+            f"Hint: Valid formats are: docx, odt, epub\n"
+            f"       Use --target-format <format> to specify"
+        )
 
     success_count = 0
     fail_count = 0
 
-    with tqdm(total=len(md_files), desc=f"Converting to {target_format}") as pbar:
-        for md_file in md_files:
+    with click.progressbar(md_files, label=f"Converting to {target_format}", show_pos=True, show_percent=True) as bar:
+        for md_file in bar:
             try:
                 manifest = None
                 try:
@@ -229,8 +247,6 @@ def convert_batch(
             except Exception as e:
                 fail_count += 1
                 logger.error(f"Error processing {md_file}: {e}")
-
-            pbar.update(1)
 
     click.echo(f"\nCompleted: {success_count} succeeded, {fail_count} failed")
 
@@ -278,9 +294,11 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str):
 
         converter = XLIFF2ODFConverter()
     else:
-        logger.error(f"Unsupported format: {format}")
-        click.echo(f"Error: Unsupported format '{format}'", err=True)
-        sys.exit(1)
+        raise click.ClickException(
+            f"Unsupported format '{format}'\n"
+            f"Hint: Valid formats are: docx, pptx, epub, html, odt\n"
+            f"       Use --format <format> to specify"
+        )
 
     result = converter.convert(input_path, xliff_path, output_path)
 
@@ -289,10 +307,55 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str):
         click.echo(f"Created {result.output_path}")
     else:
         logger.error(f"Conversion failed: {result.errors}")
-        click.echo("Conversion failed:", err=True)
-        for error in result.errors:
-            click.echo(f"  - {error}", err=True)
-        sys.exit(1)
+        raise click.ClickException(
+            f"Conversion failed: {result.errors}\n"
+            f"Hint: 1) Check XLIFF file is valid\n"
+            f"       2) Verify original document exists\n"
+            f"       3) Try --verbose for detailed logs"
+        )
+
+
+@main.command("info")
+@click.argument("input_file", type=click.Path(exists=True))
+def info(input_file: str):
+    """Show information about a document file.
+
+    INPUT_FILE: Document file to inspect (DOCX, ODT, EPUB, etc.)
+    """
+    from orf.detection import FormatDetector
+
+    input_path = Path(input_file)
+
+    # Detect format
+    detector = FormatDetector()
+    try:
+        detected_format = detector.detect(input_path)
+    except FormatDetectionError as e:
+        raise click.ClickException(f"Format detection failed: {e}")
+
+    # Get file size
+    file_size = input_path.stat().st_size
+    size_mb = file_size / (1024 * 1024)
+
+    # Check manifest presence and get resource count
+    manifest_path = find_manifest(input_path)
+    manifest_status = "present" if manifest_path else "not found"
+
+    resource_count = None
+    if manifest_path:
+        try:
+            manifest = parse_manifest(manifest_path)
+            if manifest.images:
+                resource_count = len(manifest.images)
+        except Exception as e:
+            logger.warning(f"Failed to parse manifest for resource count: {e}")
+
+    # Output
+    click.echo(f"Format: {detected_format}")
+    click.echo(f"Size: {size_mb:.2f} MB")
+    if resource_count is not None:
+        click.echo(f"Resources: {resource_count} images")
+    click.echo(f"Manifest: {manifest_status}")
 
 
 if __name__ == "__main__":
