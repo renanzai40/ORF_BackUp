@@ -49,7 +49,6 @@ class ManifestResources:
 
 @dataclass
 class Manifest:
-    """完整的 manifest 结构"""
     version: str
     generated_at: str
     tool: str
@@ -58,8 +57,8 @@ class Manifest:
     extraction: dict
     outputs: ManifestOutputs
     skeleton: Optional[ManifestSkeleton] = None
-    resources: ManifestResources
-    images: list[dict] = None  # [{mime_type, width, height, data_size_bytes}]
+    images: Optional[list[dict]] = None
+    resources: Optional[ManifestResources] = None
 
 
 class ManifestParseError(Exception):
