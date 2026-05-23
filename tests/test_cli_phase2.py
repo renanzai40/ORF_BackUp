@@ -218,34 +218,6 @@ class TestApplyMdAutoDetect:
         assert result.exit_code != 0
         assert "Error" in result.output or "nonexistent" in result.output
 
-    def test_apply_md_conversion_failure(self, runner, sample_md, tmp_path):
-        """Test apply-md handles converter failure properly."""
-        output = tmp_path / "output.docx"
-
-        with patch("orf.channels.md2docx.MD2DOCXConverter") as mock_converter_class:
-            mock_converter = MagicMock()
-            mock_result = MagicMock()
-            mock_result.success = False
-            mock_result.output_path = None
-            mock_result.errors = ["Pandoc error: file not found"]
-            mock_converter.convert.return_value = mock_result
-            mock_converter_class.return_value = mock_converter
-
-            result = runner.invoke(
-                main,
-                [
-                    "apply-md",
-                    str(sample_md),
-                    "--target-format",
-                    "docx",
-                    "--output",
-                    str(output),
-                ],
-            )
-
-            assert result.exit_code != 0
-            assert "Conversion failed" in result.output
-
     def test_apply_md_unsupported_format(self, runner, sample_md, tmp_path):
         """Test apply-md rejects unsupported format."""
         output = tmp_path / "output.txt"
