@@ -316,6 +316,7 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str) -> None:
 
     logger.info(f"Applying XLIFF {xliff_path} to {input_path} -> {output_path} ({format})")
 
+    converter: Any
     if format == "docx":
         from orf.channels.xliff2docx import XLIFF2DOCXConverter
 
@@ -343,7 +344,7 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str) -> None:
             f"       Use --format <format> to specify"
         )
 
-    result = converter.convert(input_path, xliff_path, output_path)  # type: ignore[call-arg]
+    result = converter.convert(input_path, xliff_path, output_path)
 
     if result.success:
         logger.info(f"Conversion successful: {result.output_path}")
