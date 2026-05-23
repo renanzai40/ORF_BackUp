@@ -49,7 +49,7 @@ class MD2PDFConverter(BaseConverter):
         else:
             return self._convert_pandoc(input_path, output_path, **options)
 
-    def _convert_pandoc(
+    def _convert_pandoc(  # type: ignore[override]
         self,
         input_path: Path,
         output_path: Path,
@@ -103,7 +103,7 @@ class MD2PDFConverter(BaseConverter):
                 errors=["Pandoc not installed or not in PATH"],
             )
 
-    def _convert_weasyprint(
+    def _convert_weasyprint(  # type: ignore[override]
         self,
         input_path: Path,
         output_path: Path,

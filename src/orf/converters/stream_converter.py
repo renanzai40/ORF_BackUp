@@ -8,7 +8,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Generator, Optional
+from typing import Any, Callable, Generator, Optional
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.logging import get_logger
@@ -40,7 +40,7 @@ class StreamingConverter(BaseConverter, ABC):
     def __init__(
         self,
         chunk_size: int = 64 * 1024,  # 默认 64KB 块大小
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """初始化流式转换器
 
@@ -71,7 +71,7 @@ class StreamingConverter(BaseConverter, ABC):
     def _process_chunk(
         self,
         chunk: StreamChunk,
-        **options,
+        **options: Any,
     ) -> str:
         """处理单个块
 
@@ -106,7 +106,7 @@ class StreamingConverter(BaseConverter, ABC):
         input_path: Path | str,
         output_path: Path | str,
         progress_callback: Optional[Callable[[int, int], None]] = None,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         """流式转换（带进度回调）
 
@@ -166,14 +166,14 @@ class StreamingConverter(BaseConverter, ABC):
                 )
 
         # 合并块
-        result = self._merge_chunks(processed, output_path)
+        merge_result: ConversionResult = self._merge_chunks(processed, output_path)
 
         self._logger.info(
-            f"Stream conversion complete: {result.success}",
+            f"Stream conversion complete: {merge_result.success}",
             extra=self.get_log_context(),
         )
 
-        return result
+        return merge_result
 
     def iter_chunks(
         self,

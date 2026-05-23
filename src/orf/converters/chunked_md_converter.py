@@ -87,7 +87,7 @@ class ChunkedMDConverter(StreamingConverter):
 
         return chunks
 
-    def _process_chunk(self, chunk: StreamChunk, **options) -> str:
+    def _process_chunk(self, chunk: StreamChunk, **options) -> str:  # type: ignore[override]
         """Pass through chunk content (actual conversion happens at channel level).
 
         Args:

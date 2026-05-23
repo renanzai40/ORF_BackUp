@@ -22,7 +22,7 @@ class MD2DOCXConverter(BaseConverter):
         manifest: Optional[Manifest] = None,
         frontmatter: Optional[FrontmatterMetadata] = None,
         reference_docx: Optional[Path | str] = None,
-    ):
+    ) -> None:
         super().__init__(manifest, frontmatter)
         self.reference_docx = Path(reference_docx) if reference_docx else None
 

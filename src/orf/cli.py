@@ -9,6 +9,7 @@ import click
 from orf.channels.md2docx import MD2DOCXConverter
 from orf.channels.md2odt import MD2ODTConverter
 from orf.channels.md2epub import MD2EPUBConverter
+from orf.converters.base import BaseConverter
 from orf.parsers.manifest import parse_manifest, find_manifest, ManifestParseError
 from orf.parsers.frontmatter import (
     parse_frontmatter,
@@ -23,7 +24,7 @@ logger = get_logger("cli")
 
 @click.group()
 @click.option("--verbose", "-v", is_flag=True, help="启用详细日志")
-def main(verbose: bool):
+def main(verbose: bool) -> None:
     """ORF - Omni-Re-Formatter: 将本地化后的 MD/XLIFF 还原为目标复杂格式。"""
     log_level = "DEBUG" if verbose else "INFO"
     setup_logger(level=log_level)
@@ -55,7 +56,7 @@ def apply_md(
     author: str | None,
     lang: str,
     embed_images: bool,
-):
+) -> None:
     """将 MD 文件转换为目标格式
 
     INPUT_MD: 输入的 MD 文件路径（通常由 OL 翻译后的文件）
@@ -113,20 +114,20 @@ def apply_md(
         logger.warning(f"Failed to parse frontmatter: {e}")
 
     if target_format == "docx":
-        converter = MD2DOCXConverter(manifest=manifest, frontmatter=frontmatter)
+        converter: BaseConverter = MD2DOCXConverter(manifest=manifest, frontmatter=frontmatter)
     elif target_format == "odt":
-        converter = MD2ODTConverter(manifest=manifest, frontmatter=frontmatter)
+        converter: BaseConverter = MD2ODTConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
     elif target_format == "epub":
-        converter = MD2EPUBConverter(manifest=manifest, frontmatter=frontmatter)
+        converter: BaseConverter = MD2EPUBConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
     elif target_format == "html":
         from orf.channels.md2html import MD2HTMLConverter
-        converter = MD2HTMLConverter(manifest=manifest, frontmatter=frontmatter)
+        converter: BaseConverter = MD2HTMLConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
     elif target_format == "rtf":
         from orf.channels.md2rtf import MD2RTFConverter
-        converter = MD2RTFConverter(manifest=manifest, frontmatter=frontmatter)
+        converter: BaseConverter = MD2RTFConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
     elif target_format == "pdf":
         from orf.channels.md2pdf import MD2PDFConverter
-        converter = MD2PDFConverter(manifest=manifest, frontmatter=frontmatter)
+        converter: BaseConverter = MD2PDFConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
     else:
         raise click.ClickException(
             f"Unsupported format '{target_format}'\n"
@@ -179,7 +180,7 @@ def convert_batch(
     target_format: str,
     output_dir: str | None,
     pattern: str,
-):
+) -> None:
     """批量转换 MD 文件"""
     input_path = Path(input_dir)
     output_path = Path(output_dir) if output_dir else input_path
@@ -261,7 +262,7 @@ def convert_batch(
     default="docx",
     help="Output format",
 )
-def apply_xliff(input_file: str, xliff: str, output: str, format: str):
+def apply_xliff(input_file: str, xliff: str, output: str, format: str) -> None:
     """Apply XLIFF translation to original document.
 
     INPUT_FILE: Original document (DOCX/PPTX/EPUB/HTML)
@@ -275,23 +276,23 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str):
     if format == "docx":
         from orf.channels.xliff2docx import XLIFF2DOCXConverter
 
-        converter = XLIFF2DOCXConverter()
+        converter: BaseConverter = XLIFF2DOCXConverter()  # type: ignore[assignment]
     elif format == "pptx":
         from orf.channels.xliff2pptx import XLIFF2PPTXConverter
 
-        converter = XLIFF2PPTXConverter()
+        converter: BaseConverter = XLIFF2PPTXConverter()  # type: ignore[assignment]
     elif format == "epub":
         from orf.channels.xliff2epub import XLIFF2EPUBConverter
 
-        converter = XLIFF2EPUBConverter()
+        converter: BaseConverter = XLIFF2EPUBConverter()  # type: ignore[assignment]
     elif format == "html":
         from orf.channels.xliff2html import XLIFF2HTMLConverter
 
-        converter = XLIFF2HTMLConverter()
+        converter: BaseConverter = XLIFF2HTMLConverter()  # type: ignore[assignment]
     elif format == "odt":
         from orf.channels.xliff2odf import XLIFF2ODFConverter
 
-        converter = XLIFF2ODFConverter()
+        converter: BaseConverter = XLIFF2ODFConverter()  # type: ignore[assignment]
     else:
         raise click.ClickException(
             f"Unsupported format '{format}'\n"
@@ -316,7 +317,7 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str):
 
 @main.command("info")
 @click.argument("input_file", type=click.Path(exists=True))
-def info(input_file: str):
+def info(input_file: str) -> None:
     """Show information about a document file.
 
     INPUT_FILE: Document file to inspect (DOCX, ODT, EPUB, etc.)

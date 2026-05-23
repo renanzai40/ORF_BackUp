@@ -28,7 +28,7 @@ class OverflowIssue:
     overflow_percentage: float
     severity: Severity
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.overflow_percentage < 0:
             self.overflow_percentage = 0
         if self.overflow_percentage > 100:
@@ -202,7 +202,7 @@ class LayoutAnalyzer:
                 
         return images
 
-    def _call_vision_api(self, images: List[Path]) -> List[dict]:
+    def _call_vision_api(self, images: List[Path]) -> List[dict[str, Any]:
         """Call vision API to detect overflow in rendered images.
         
         Args:
@@ -257,7 +257,7 @@ class LayoutAnalyzer:
             
         return results
 
-    def _mock_vision_results(self, images: List[Path]) -> List[dict]:
+    def _mock_vision_results(self, images: List[Path]) -> List[dict[str, Any]]:
         """Return mock vision results when API is not available.
         
         Args:

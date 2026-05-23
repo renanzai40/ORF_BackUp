@@ -151,7 +151,7 @@ class XLIFF2PPTXConverter(BaseConverter):
             },
         )
 
-    def _load_pptx_skeleton(self, pptx_path: Path) -> dict[str, object]:
+    def _load_pptx_skeleton(self, pptx_path: Path) -> dict[str, Any]:
         """Load PPTX skeleton file and extract its contents.
 
         PPTX is a ZIP archive with slides stored in ppt/slides/slideN.xml.
@@ -164,7 +164,6 @@ class XLIFF2PPTXConverter(BaseConverter):
         """
         files: dict[str, bytes] = {}
         with zipfile.ZipFile(str(pptx_path), "r") as zf:
-            files: dict[str, bytes] = {}
             for name in zf.namelist():
                 files[name] = zf.read(name)
 
@@ -260,8 +259,8 @@ class XLIFF2PPTXConverter(BaseConverter):
         # Build a mapping from source text to target text
         trans_map: dict[str, Any] = {}
         for unit in xliff_data["units"]:
-            source = unit["source"]
-            target = unit["target"]
+            source: str = unit["source"]  # type: ignore[index]
+            target: str = unit["target"]  # type: ignore[index]
             if source and target:
                 trans_map[source] = {
                     "target": target,

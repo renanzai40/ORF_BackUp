@@ -35,7 +35,7 @@ class MD2JSONConverter(BaseConverter):
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() == ".md"
 
-    def convert(
+    def convert(  # type: ignore[override]
         self,
         input_path: Path | str,
         output_path: Path | str,

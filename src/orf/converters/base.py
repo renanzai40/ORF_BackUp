@@ -49,7 +49,7 @@ class BaseConverter(ABC):
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         """执行格式转换
 

@@ -21,7 +21,7 @@ class MD2RTFConverter(BaseConverter):
         self,
         manifest: Optional[Manifest] = None,
         frontmatter: Optional[FrontmatterMetadata] = None,
-    ):
+    ) -> None:
         super().__init__(manifest, frontmatter)
 
     @property
