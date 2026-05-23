@@ -22,7 +22,7 @@ class MD2ODTConverter(BaseConverter):
         manifest: Optional[Manifest] = None,
         frontmatter: Optional[FrontmatterMetadata] = None,
         reference_odt: Optional[Path | str] = None,
-    ):
+    ) -> None:
         super().__init__(manifest, frontmatter)
         self.reference_odt = Path(reference_odt) if reference_odt else None
 

@@ -65,7 +65,7 @@ class SkeletonLoader:
             raise ValueError("No XML loaded. Call load_skeleton first.")
 
         root = etree.fromstring(self.xml.encode("utf-8"))
-        return root.xpath(
+        return root.xpath(  # type: ignore[no-any-return]
             "//w:p",
             namespaces={"w": W_NS},
         )

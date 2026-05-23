@@ -73,12 +73,12 @@ class InlineFormattingError(ConversionError):
     """Raised when inline formatting tags cannot be properly handled."""
 
     def __init__(
-        self, tag: str, context: str, original_segment: Optional[str] = None
+        self, tag: str, context_str: str, original_segment: Optional[str] = None
     ) -> None:
         self.tag = tag
-        self.context = context
+        self.context_str = context_str
         self.original_segment = original_segment
-        message = f"Inline formatting error with tag '{tag}' in context: {context}"
+        message = f"Inline formatting error with tag '{tag}' in context: {context_str}"
         super().__init__(message)
 
 

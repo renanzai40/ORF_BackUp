@@ -22,7 +22,7 @@ class MD2HTMLConverter(BaseConverter):
         manifest: Optional[Manifest] = None,
         frontmatter: Optional[FrontmatterMetadata] = None,
         css: Optional[Path | str] = None,
-    ):
+    ) -> None:
         super().__init__(manifest, frontmatter)
         self.css = Path(css) if css else None
 

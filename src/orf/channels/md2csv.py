@@ -61,7 +61,7 @@ class MD2CSVConverter(BaseConverter):
 
         return rows
 
-    def convert(
+    def convert(  # type: ignore[override]
         self,
         input_path: Path | str,
         output_path: Path | str,
