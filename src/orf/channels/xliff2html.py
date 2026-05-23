@@ -231,7 +231,7 @@ class XLIFF2HTMLConverter(BaseConverter):
         html_content: str,
         translations: dict[str, str],
         xliff_content: str,
-        **options,
+        **options: Any,
     ) -> str:
         """Apply translations and inline formatting to HTML content.
 
