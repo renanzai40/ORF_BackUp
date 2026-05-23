@@ -79,6 +79,7 @@ def test_has_frontmatter():
     with_fm = """---
 key: value
 processor: "OL"
+---
 
 # Content
 """
