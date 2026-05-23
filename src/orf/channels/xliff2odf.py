@@ -60,7 +60,7 @@ class XLIFF2ODFConverter(BaseConverter):
         path = Path(input_skeleton)
         return path.exists() and path.suffix.lower() in ODF_EXTENSIONS
 
-    def convert(
+    def convert(  # type: ignore[override]
         self,
         skeleton_path: Path | str,
         xliff_path: Path | str,

@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from orf.logging import get_logger
 
@@ -28,8 +28,8 @@ class ManifestSource:
 @dataclass
 class ManifestOutputs:
     """输出文件信息"""
-    markdown: Optional[dict] = None  # {path, paragraph_count, table_count}
-    xliff: Optional[dict] = None      # {path, trans_unit_count}
+    markdown: Optional[dict[str, Any]] = None  # {path, paragraph_count, table_count}
+    xliff: Optional[dict[str, Any]] = None      # {path, trans_unit_count}
 
 
 @dataclass
@@ -54,10 +54,10 @@ class Manifest:
     tool: str
     tool_version: str
     source: ManifestSource
-    extraction: dict
+    extraction: dict[str, Any]
     outputs: ManifestOutputs
     skeleton: Optional[ManifestSkeleton] = None
-    images: Optional[list[dict]] = None
+    images: Optional[list[dict[str, Any]]] = None
     resources: Optional[ManifestResources] = None
 
 

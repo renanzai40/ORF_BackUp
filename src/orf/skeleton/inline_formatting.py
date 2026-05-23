@@ -140,7 +140,7 @@ class XLIFFInlineParser:
         # Build position mapping: stripped_pos -> original_pos
         original_pos = 0
         in_tag = False
-        mapping = []
+        mapping: list[tuple[int, int]] = []
 
         for i, char in enumerate(text):
             if char == '<':
@@ -174,7 +174,7 @@ class XLIFFInlineParser:
 
         return remapped
 
-    def _find_stripped_pos(self, mapping: List[tuple], original_pos: int) -> int:
+    def _find_stripped_pos(self, mapping: List[tuple[int, int]], original_pos: int) -> int:
         """Find the stripped text position corresponding to an original position."""
         # Find closest stripped position <= original_pos
         result = 0
@@ -516,6 +516,7 @@ def apply_inline_formatting_to_document(
     Returns:
         Document with formatting applied.
     """
+    applier: InlineFormattingApplier
     if format.lower() in ("docx", "word"):
         applier = DOCXInlineApplier()
     elif format.lower() in ("pptx", "powerpoint"):

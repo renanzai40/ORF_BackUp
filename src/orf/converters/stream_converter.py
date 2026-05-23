@@ -22,7 +22,7 @@ class StreamChunk:
     content: str
     size: int = field(init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         object.__setattr__(self, "size", len(self.content.encode("utf-8")))
 
     @property
@@ -41,7 +41,7 @@ class StreamingConverter(BaseConverter, ABC):
         self,
         chunk_size: int = 64 * 1024,  # 默认 64KB 块大小
         **kwargs,
-    ):
+    ) -> None:
         """初始化流式转换器
 
         Args:

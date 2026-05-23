@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import zipfile
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from lxml import etree
 
@@ -70,7 +70,7 @@ class XLIFF2PPTXConverter(BaseConverter):
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() == ".pptx"
 
-    def convert(
+    def convert(  # type: ignore[override]
         self,
         pptx_skeleton: Path | str,
         xliff_path: Path | str,
@@ -151,7 +151,7 @@ class XLIFF2PPTXConverter(BaseConverter):
             },
         )
 
-    def _load_pptx_skeleton(self, pptx_path: Path) -> dict:
+    def _load_pptx_skeleton(self, pptx_path: Path) -> dict[str, object]:
         """Load PPTX skeleton file and extract its contents.
 
         PPTX is a ZIP archive with slides stored in ppt/slides/slideN.xml.
@@ -163,15 +163,14 @@ class XLIFF2PPTXConverter(BaseConverter):
             dict with keys: files (dict of filename -> bytes), bytes (bytes)
         """
         files: dict[str, bytes] = {}
-        files: dict[str, bytes] = {}
-
         with zipfile.ZipFile(str(pptx_path), "r") as zf:
+            files: dict[str, bytes] = {}
             for name in zf.namelist():
                 files[name] = zf.read(name)
 
         return {"files": files, "bytes": b""}
 
-    def _parse_xliff(self, xliff_path: Path) -> dict:
+    def _parse_xliff(self, xliff_path: Path) -> dict[str, list[dict[str, object]]]:
         """Parse XLIFF file and extract translation units.
 
         Args:
@@ -194,7 +193,7 @@ class XLIFF2PPTXConverter(BaseConverter):
 
         # Handle XLIFF namespace
         ns = {"xliff": XLIFF_NS}
-        units: list[dict] = []
+        units: list[dict[str, object]] = []
 
         # Find all trans-unit elements
         for unit in root.xpath("//xliff:trans-unit", namespaces=ns):
@@ -243,8 +242,8 @@ class XLIFF2PPTXConverter(BaseConverter):
     def _apply_translations_to_slides(
         self,
         slide_files: dict[str, bytes],
-        xliff_data: dict,
-        options: dict,
+        xliff_data: dict[str, list[dict[str, object]]],
+        options: dict[str, object],
     ) -> dict[str, bytes]:
         """Apply translation units to PPTX slide XML files.
 
@@ -259,7 +258,7 @@ class XLIFF2PPTXConverter(BaseConverter):
         modified = dict(slide_files)
 
         # Build a mapping from source text to target text
-        trans_map: dict[str, dict] = {}
+        trans_map: dict[str, Any] = {}
         for unit in xliff_data["units"]:
             source = unit["source"]
             target = unit["target"]
@@ -284,7 +283,7 @@ class XLIFF2PPTXConverter(BaseConverter):
     def _apply_translation_to_slide_xml(
         self,
         xml_content: str,
-        trans_map: dict,
+        trans_map: dict[str, Any],
     ) -> str:
         """Apply translations to a single slide XML content.
 

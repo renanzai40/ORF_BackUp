@@ -55,7 +55,7 @@ class SkeletonLoader:
             raise ValueError("No document.xml loaded. Call load_skeleton first.")
         return self.xml
 
-    def find_paragraphs(self) -> list[etree._Element]:
+    def find_paragraphs(self) -> list[Any]:
         """Find all <w:p> elements in document order.
 
         Returns:

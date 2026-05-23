@@ -64,7 +64,7 @@ class XLIFF2HTMLConverter(BaseConverter):
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() in (".html", ".htm")
 
-    def convert(
+    def convert(  # type: ignore[override]
         self,
         html_template: Path | str,
         xliff_path: Path | str,
