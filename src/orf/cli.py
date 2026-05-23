@@ -154,7 +154,7 @@ def apply_md(
     elif target_format == "ipynb":
         try:
             from orf.channels.md2ipynb import MD2IPYNBConverter
-            converter: BaseConverter = MD2IPYNBConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+            converter = MD2IPYNBConverter(manifest=manifest, frontmatter=frontmatter)
         except ImportError as e:
             raise click.ClickException(
                 f"IPYNB conversion requires nbformat.\n"
@@ -164,7 +164,7 @@ def apply_md(
     elif target_format == "msg":
         try:
             from orf.channels.md2msg import MD2MSGConverter
-            converter: BaseConverter = MD2MSGConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+            converter = MD2MSGConverter(manifest=manifest, frontmatter=frontmatter)
         except ImportError as e:
             raise click.ClickException(
                 f"MSG conversion requires aspose-email-foss.\n"
@@ -244,7 +244,7 @@ def convert_batch(
         return
 
     if target_format == "docx":
-        converter_class = MD2DOCXConverter
+        converter_class: type = MD2DOCXConverter
     elif target_format == "odt":
         converter_class = MD2ODTConverter
     elif target_format == "epub":
@@ -319,23 +319,23 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str) -> None:
     if format == "docx":
         from orf.channels.xliff2docx import XLIFF2DOCXConverter
 
-        converter: BaseConverter = XLIFF2DOCXConverter()  # type: ignore[assignment]
+        converter = XLIFF2DOCXConverter()
     elif format == "pptx":
         from orf.channels.xliff2pptx import XLIFF2PPTXConverter
 
-        converter: BaseConverter = XLIFF2PPTXConverter()  # type: ignore[assignment]
+        converter = XLIFF2PPTXConverter()
     elif format == "epub":
         from orf.channels.xliff2epub import XLIFF2EPUBConverter
 
-        converter: BaseConverter = XLIFF2EPUBConverter()  # type: ignore[assignment]
+        converter = XLIFF2EPUBConverter()
     elif format == "html":
         from orf.channels.xliff2html import XLIFF2HTMLConverter
 
-        converter: BaseConverter = XLIFF2HTMLConverter()  # type: ignore[assignment]
+        converter = XLIFF2HTMLConverter()
     elif format == "odt":
         from orf.channels.xliff2odf import XLIFF2ODFConverter
 
-        converter: BaseConverter = XLIFF2ODFConverter()  # type: ignore[assignment]
+        converter = XLIFF2ODFConverter()
     else:
         raise click.ClickException(
             f"Unsupported format '{format}'\n"
@@ -343,7 +343,7 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str) -> None:
             f"       Use --format <format> to specify"
         )
 
-    result = converter.convert(input_path, xliff_path, output_path)
+    result = converter.convert(input_path, xliff_path, output_path)  # type: ignore[call-arg]
 
     if result.success:
         logger.info(f"Conversion successful: {result.output_path}")

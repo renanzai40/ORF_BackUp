@@ -167,7 +167,7 @@ class CloudResourceManager:
         Raises:
             ValueError: If required config keys are missing
         """
-        client_class = self._PROVIDERS[self.provider]
+        client_class: Any = self._PROVIDERS[self.provider]
 
         if self.provider == "s3":
             return client_class(

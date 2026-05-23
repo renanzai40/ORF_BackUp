@@ -7,7 +7,7 @@ Uses boto3 Session for client creation with proper error handling.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from orf.cloud.cloud_resource_manager import CloudClient
 from orf.logging import get_logger
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 logger = get_logger("cloud.s3")
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name == "boto3":
         import boto3
         return boto3
