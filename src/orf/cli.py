@@ -35,7 +35,7 @@ def main(verbose: bool) -> None:
 @click.option(
     "--target-format",
     "-t",
-    type=click.Choice(["docx", "odt", "epub", "html", "rtf", "pdf", "auto"]),
+    type=click.Choice(["docx", "odt", "epub", "html", "rtf", "pdf", "csv", "json", "xlsx", "xml", "ipynb", "eml", "msg"]),
     default="docx",
     help="目标格式",
 )
@@ -128,10 +128,52 @@ def apply_md(
     elif target_format == "pdf":
         from orf.channels.md2pdf import MD2PDFConverter
         converter: BaseConverter = MD2PDFConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+    elif target_format == "csv":
+        from orf.channels.md2csv import MD2CSVConverter
+        converter: BaseConverter = MD2CSVConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+    elif target_format == "json":
+        from orf.channels.md2json import MD2JSONConverter
+        converter: BaseConverter = MD2JSONConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+    elif target_format == "xml":
+        from orf.channels.md2xml import MD2XMLConverter
+        converter: BaseConverter = MD2XMLConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+    elif target_format == "eml":
+        from orf.channels.md2eml import MD2EMLConverter
+        converter: BaseConverter = MD2EMLConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+    elif target_format == "xlsx":
+        try:
+            from orf.channels.md2xlsx import MD2XLSXConverter
+            converter: BaseConverter = MD2XLSXConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+        except ImportError as e:
+            raise click.ClickException(
+                f"XLSX conversion requires openpyxl.\n"
+                f"Install with: pip install omni-re-formatter[office]\n"
+                f"Error: {e}"
+            )
+    elif target_format == "ipynb":
+        try:
+            from orf.channels.md2ipynb import MD2IPYNBConverter
+            converter: BaseConverter = MD2IPYNBConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+        except ImportError as e:
+            raise click.ClickException(
+                f"IPYNB conversion requires nbformat.\n"
+                f"Install with: pip install omni-re-formatter[notebook]\n"
+                f"Error: {e}"
+            )
+    elif target_format == "msg":
+        try:
+            from orf.channels.md2msg import MD2MSGConverter
+            converter: BaseConverter = MD2MSGConverter(manifest=manifest, frontmatter=frontmatter)  # type: ignore[assignment]
+        except ImportError as e:
+            raise click.ClickException(
+                f"MSG conversion requires aspose-email-foss.\n"
+                f"Install with: pip install omni-re-formatter[email-output]\n"
+                f"Error: {e}"
+            )
     else:
         raise click.ClickException(
             f"Unsupported format '{target_format}'\n"
-            f"Hint: Valid formats are: docx, odt, epub, html, rtf, pdf\n"
+            f"Hint: Valid formats are: docx, odt, epub, html, rtf, pdf, csv, json, xlsx, xml, ipynb, eml, msg\n"
             f"       Use --target-format <format> to specify"
         )
 

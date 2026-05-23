@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.logging import get_logger
@@ -49,11 +50,11 @@ class MD2PDFConverter(BaseConverter):
         else:
             return self._convert_pandoc(input_path, output_path, **options)
 
-    def _convert_pandoc(  # type: ignore[override]
+    def _convert_pandoc(
         self,
         input_path: Path,
         output_path: Path,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         """Convert MD → PDF using Pandoc with pdflatex."""
         cmd = [
@@ -103,11 +104,11 @@ class MD2PDFConverter(BaseConverter):
                 errors=["Pandoc not installed or not in PATH"],
             )
 
-    def _convert_weasyprint(  # type: ignore[override]
+    def _convert_weasyprint(
         self,
         input_path: Path,
         output_path: Path,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         """Convert MD → HTML → PDF using WeasyPrint."""
         # Check WeasyPrint availability using importlib (avoids ruff false positive)

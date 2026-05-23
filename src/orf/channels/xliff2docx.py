@@ -217,12 +217,12 @@ class XLIFF2DOCXConverter(BaseConverter):
             logger.warning(f"Failed to parse inline elements: {e}")
             return []
 
-    def convert(  # type: ignore[override]
+    def convert(  # type: ignore[no-untyped-def]
         self,
         input_skeleton: Path | str,
         xliff_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         """Convert XLIFF + skeleton to DOCX.
 

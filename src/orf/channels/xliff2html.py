@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
@@ -69,7 +69,7 @@ class XLIFF2HTMLConverter(BaseConverter):
         html_template: Path | str,
         xliff_path: Path | str,
         output_path: Path | str,
-        **options,
+        **options: Any,
     ) -> ConversionResult:
         """Convert XLIFF translation to HTML with inline formatting preserved.
 
