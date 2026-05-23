@@ -11,13 +11,12 @@ Raises FormatDetectionError when detection fails at all stages.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 from orf.error_handlers.conversion_error import FormatDetectionError
 from orf.logging import get_logger
 from orf.parsers.manifest import find_manifest, parse_manifest
 
-from orf.detection.magic_bytes import MAGIC_SIGNATURES, MIME_TYPES
+from orf.detection.magic_bytes import MAGIC_SIGNATURES
 
 logger = get_logger("detection.format_detector")
 

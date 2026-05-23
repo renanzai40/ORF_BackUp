@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.logging import get_logger
 
 logger = get_logger("channel.md2pdf")
 
-# WeasyPrint import with fallback
+# WeasyPrint availability check (actual import happens inside _convert_weasyprint)
 _weasyprint_error: str | None = None
 try:
-    from weasyprint import HTML
+    import weasyprint
 except ImportError:
     _weasyprint_error = (
         "WeasyPrint is not installed. Install it with: pip install weasyprint\n"
