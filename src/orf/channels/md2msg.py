@@ -132,9 +132,6 @@ class MD2MSGConverter(BaseConverter):
             from aspose.email.mapi.properties.known_property_ids import (
                 KnownPropertyIds,
             )
-            from aspose.email.standard.mail.streams import (
-                MemoryStream,
-            )
             from aspose.email.save_options import SaveOptions
 
             # Create MailMessage for body content
@@ -222,8 +219,7 @@ class MD2MSGConverter(BaseConverter):
             mapi_msg: MapiMessage instance
             properties: Dict of MAPI property names to values
         """
-        from aspose.email.mapi.properties import MapiProperty
-        from aspose.email.mapi.properties.known_property_ids import (
+        from aspose.email.mapi.properties.known_property_ids import (  # noqa: F401
             KnownPropertyIds,
         )
 
