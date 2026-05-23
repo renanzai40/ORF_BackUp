@@ -53,14 +53,12 @@ class ImageManager:
         self,
         image_path: Path | str,
         format: str,
-        output_dir: Optional[Path | str] = None,
     ) -> ImageResource:
         """Register an image with MD5-based deduplication.
 
         Args:
             image_path: Path to the image file.
             format: Target format for the image.
-            output_dir: Optional override for output directory.
 
         Returns:
             ImageResource for the registered image.
@@ -69,7 +67,6 @@ class ImageManager:
             ResourceManagementError: If image cannot be read or processed.
         """
         image_path = Path(image_path)
-        output_dir_path = Path(output_dir) if output_dir else self._output_dir
 
         try:
             content = image_path.read_bytes()
