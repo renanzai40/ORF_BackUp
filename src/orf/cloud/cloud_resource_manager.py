@@ -170,14 +170,14 @@ class CloudResourceManager:
         client_class: Any = self._PROVIDERS[self.provider]
 
         if self.provider == "s3":
-            return client_class(
+            return client_class(  # type: ignore[no-any-return]
                 bucket=self.config.get("bucket", ""),
                 prefix=self.config.get("prefix", ""),
                 region_name=self.config.get("region_name"),
                 endpoint_url=self.config.get("endpoint_url"),
             )
         elif self.provider == "azure":
-            return client_class(
+            return client_class(  # type: ignore[no-any-return]
                 connection_string=self.config.get("connection_string", ""),
                 container=self.config.get("container", ""),
                 prefix=self.config.get("prefix", ""),
