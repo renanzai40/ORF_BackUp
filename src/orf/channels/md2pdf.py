@@ -110,17 +110,18 @@ class MD2PDFConverter(BaseConverter):
         **options,
     ) -> ConversionResult:
         """Convert MD → HTML → PDF using WeasyPrint."""
-        # Check WeasyPrint availability at runtime
-        try:
-            import weasyprint
-            from weasyprint import HTML
-        except ImportError:
+        # Check WeasyPrint availability using importlib (avoids ruff false positive)
+        import importlib.util
+        if importlib.util.find_spec("weasyprint") is None:
             logger.error("WeasyPrint is not installed. Install with: pip install weasyprint")
             return ConversionResult(
                 output_path=output_path,
                 success=False,
                 errors=["WeasyPrint not installed. Use 'pandoc' engine or pip install weasyprint"],
             )
+
+        # Import WeasyPrint for actual use
+        from weasyprint import HTML  # noqa: F401
 
         # Import MD2HTMLConverter for the intermediate HTML step
         from orf.channels.md2html import MD2HTMLConverter
