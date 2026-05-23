@@ -7,7 +7,7 @@ Uses azure-storage-blob BlobServiceClient for operations with proper error handl
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from orf.cloud.cloud_resource_manager import CloudClient
 from orf.logging import get_logger
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 logger = get_logger("cloud.azure_blob")
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name == "BlobServiceClient":
         from azure.storage.blob import BlobServiceClient
         return BlobServiceClient
