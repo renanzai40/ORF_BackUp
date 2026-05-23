@@ -41,6 +41,9 @@ test = ["coverage"]
 weasyprint = ["weasyprint>=60.0"]
 cloud = ["boto3>=1.34.0", "azure-storage-blob>=12.19.0"]
 ai = ["openai>=1.12.0"]
+office = ["openpyxl>=3.0.0"]
+notebook = ["nbformat>=5.0.0"]
+email-output = ["aspose-email-foss>=24.0.0"]
 
 [project.scripts]
 orf = "orf.cli:main"
