@@ -1149,25 +1149,25 @@ tests/
 ## ATDD Acceptance Criteria
 
 ### Normal Flow
-- [ ] `orf apply-md translated.md --target-format auto` auto-detects format from manifest.json
-- [ ] Magic bytes detection works for PDF/RTF/HTML
-- [ ] Office formats (DOCX/PPTX) detected via manifest, fallback to extension
-- [ ] Image deduplication produces same MD5 → same file
-- [ ] MD→HTML output with CSS injection working
-- [ ] MD→RTF output working
-- [ ] MD→PDF output working (both pandoc and weasyprint engines)
-- [ ] `orf convert-batch` supports html, rtf, pdf formats
+- [x] `orf apply-md translated.md --target-format auto` auto-detects format from manifest.json
+- [x] Magic bytes detection works for PDF/RTF/HTML
+- [x] Office formats (DOCX/PPTX) detected via manifest, fallback to extension
+- [x] Image deduplication produces same MD5 → same file
+- [x] MD→HTML output with CSS injection working
+- [x] MD→RTF output working
+- [x] MD→PDF output working (both pandoc and weasyprint engines)
+- [x] `orf convert-batch` supports html, rtf, pdf formats
 
 ### Error Flow
-- [ ] No manifest → fallback to magic bytes → fallback to extension
-- [ ] Unknown format → `FormatDetectionError` with clear message
-- [ ] Image missing → `ResourceManagementError` with placeholder + warning
-- [ ] PDF engine unavailable → clear error with install suggestion
+- [x] No manifest → fallback to magic bytes → fallback to extension
+- [x] Unknown format → `FormatDetectionError` with clear message
+- [x] Image missing → `ResourceManagementError` with placeholder + warning
+- [x] PDF engine unavailable → clear error with install suggestion
 
 ### Performance
-- [ ] Format detection ≤ 50ms
-- [ ] Image dedup ≥ 50MB/s
-- [ ] MD→PDF ≥ 10MB/s (via weasyprint)
+- [x] Format detection ≤ 50ms
+- [x] Image dedup ≥ 50MB/s
+- [x] MD→PDF ≥ 10MB/s (via weasyprint)
 
 ---
 
