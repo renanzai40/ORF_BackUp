@@ -11,29 +11,29 @@ ORF 是 Omni 文档本地化生态的最后一环，负责将标准化中间件�
 
 ## 支持格式
 
-### MD 回写 (Phase 0-2 ✅)
+### MD 回写
 - DOCX, ODT, EPUB, HTML, RTF, PDF, PPTX
 - ICML (InDesign), SRT (字幕)
 
-### XLIFF 回写 (Phase 1 ✅)
+### XLIFF 回写
 - DOCX, PPTX, EPUB, HTML, ODF
 
-### 云存储集成 (Phase 4 ✅)
+### 云存储
 - AWS S3, Azure Blob Storage
 
-### AI 辅助 (Phase 4 ✅)
+### AI 辅助
 - 布局溢出检测与修正
 
-### 数据格式 (Phase 5 ✅)
+### 数据格式
 - XLSX, CSV, JSON
 
-### 结构化标记 (Phase 5 ✅)
+### 结构化标记
 - XML
 
-### Jupyter 笔记本 (Phase 5 ✅)
+### Jupyter 笔记本
 - IPYNB
 
-### 邮件格式 (Phase 5 ✅)
+### 邮件格式
 - EML, MSG
 
 ## 安装
@@ -84,20 +84,16 @@ orf convert-batch ./translated --target-format docx --pattern "*.md"
 
 ## 项目状态
 
-### Phase 0-4: ✅ 已完成
-- 272+ 个测试用例通过
+- 294+ 个测试用例通过
 - MD 回写: 9 种格式 (DOCX, ODT, EPUB, HTML, RTF, PDF, PPTX, ICML, SRT)
 - XLIFF 回写: 5 种格式 (DOCX, PPTX, EPUB, HTML, ODF)
 - 云存储: S3 + Azure Blob 集成
 - AI: 布局溢出检测与修正
+- 数据格式: XLSX, CSV, JSON
+- 结构化标记: XML
+- Jupyter 笔记本: IPYNB
+- 邮件格式: EML, MSG
 - 完整的错误处理和日志系统
-
-### Phase 5: ✅ 已完成
-- XLSX (openpyxl), CSV (stdlib), JSON (stdlib)
-- XML (stdlib), IPYNB (nbformat)
-- EML (stdlib), MSG (aspose-email-foss)
-- CLI 已注册所有新格式
-- 可选依赖已添加到 pyproject.toml
 
 ## 开发
 
