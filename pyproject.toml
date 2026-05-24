@@ -1,6 +1,6 @@
 [project]
 name = "omni-re-formatter"
-version = "0.1.0"
+version = "0.2.0"
 description = "Omni-Re-Formatter: 将本地化后的 MD/XLIFF 还原为目标复杂格式"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -44,9 +44,11 @@ ai = ["openai>=1.12.0"]
 office = ["openpyxl>=3.0.0"]
 notebook = ["nbformat>=5.0.0"]
 email-output = ["aspose-email-foss>=24.0.0"]
+mcp = ["fastmcp>=0.1.0"]
 
 [project.scripts]
 orf = "orf.cli:main"
+orf-mcp-server = "orf.mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
