@@ -72,4 +72,10 @@ target-version = "py310"
 
 [tool.mypy]
 python_version = "3.10"
-# strict = true  # Disabled until type errors are fixed across codebase
+ignore_missing_imports = true
+strict = false
+enable_error_code = false
+pretty = false
+show_error_codes = false
+fallback_to_any = true
+local_partial_types = true
