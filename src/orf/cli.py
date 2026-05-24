@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,7 @@ def main(verbose: bool) -> None:
 @click.option("--author", type=str, help="EPUB 作者")
 @click.option("--lang", type=str, default="zh", help="EPUB 语言")
 @click.option("--embed-images", is_flag=True, help="EPUB 嵌入图片")
+@click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
 def apply_md(
     input_md: str,
     target_format: str,
@@ -57,6 +59,7 @@ def apply_md(
     author: str | None,
     lang: str,
     embed_images: bool,
+    output_json: bool,
 ) -> None:
     """将 MD 文件转换为目标格式
 
@@ -201,16 +204,34 @@ def apply_md(
 
     if result.success:
         logger.info(f"Conversion successful: {result.output_path}")
-        click.echo(f"Created {result.output_path}")
+        if output_json:
+            click.echo(json.dumps({
+                'success': True,
+                'output_path': str(result.output_path),
+                'errors': [{'code': e.code, 'message': e.message, 'recovery_strategy': e.recovery_strategy.value if e.recovery_strategy else None} for e in result.errors],
+                'warnings': [{'code': w.code, 'message': w.message} for w in result.warnings],
+                'metadata': result.metadata
+            }, indent=2))
+        else:
+            click.echo(f"Created {result.output_path}")
     else:
         logger.error(f"Conversion failed: {result.errors}")
-        errors_str = ", ".join(result.errors) if result.errors else "Unknown error"
-        raise click.ClickException(
-            f"Conversion failed: {errors_str}\n"
-            f"Hint: 1) Check Pandoc is installed (pip install pandoc)\n"
-            f"       2) Verify input file is valid\n"
-            f"       3) Try --verbose for detailed logs"
-        )
+        errors_str = ", ".join(e.message for e in result.errors) if result.errors else "Unknown error"
+        if output_json:
+            click.echo(json.dumps({
+                'success': False,
+                'output_path': str(result.output_path) if result.output_path else None,
+                'errors': [{'code': e.code, 'message': e.message, 'recovery_strategy': e.recovery_strategy.value if e.recovery_strategy else None} for e in result.errors],
+                'warnings': [{'code': w.code, 'message': w.message} for w in result.warnings],
+                'metadata': result.metadata
+            }, indent=2))
+        else:
+            raise click.ClickException(
+                f"Conversion failed: {errors_str}\n"
+                f"Hint: 1) Check Pandoc is installed (pip install pandoc)\n"
+                f"       2) Verify input file is valid\n"
+                f"       3) Try --verbose for detailed logs"
+            )
 
 
 @main.command("convert-batch")
@@ -218,11 +239,13 @@ def apply_md(
 @click.option("--target-format", "-t", type=click.Choice(["docx", "odt", "epub"]))
 @click.option("--output-dir", "-o", type=click.Path(), help="输出目录")
 @click.option("--pattern", "-p", default="*.md", help="文件匹配模式")
+@click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
 def convert_batch(
     input_dir: str,
     target_format: str,
     output_dir: str | None,
     pattern: str,
+    output_json: bool,
 ) -> None:
     """批量转换 MD 文件"""
     input_path = Path(input_dir)
@@ -293,6 +316,13 @@ def convert_batch(
 
     click.echo(f"\nCompleted: {success_count} succeeded, {fail_count} failed")
 
+    if output_json:
+        click.echo(json.dumps({
+            'success_count': success_count,
+            'fail_count': fail_count,
+            'total': len(md_files)
+        }, indent=2))
+
 
 @main.command("apply-xliff")
 @click.argument("input_file", type=click.Path(exists=True))
@@ -305,7 +335,8 @@ def convert_batch(
     default="docx",
     help="Output format",
 )
-def apply_xliff(input_file: str, xliff: str, output: str, format: str) -> None:
+@click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
+def apply_xliff(input_file: str, xliff: str, output: str, format: str, output_json: bool) -> None:
     """Apply XLIFF translation to original document.
 
     INPUT_FILE: Original document (DOCX/PPTX/EPUB/HTML)
@@ -348,20 +379,40 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str) -> None:
 
     if result.success:
         logger.info(f"Conversion successful: {result.output_path}")
-        click.echo(f"Created {result.output_path}")
+        if output_json:
+            click.echo(json.dumps({
+                'success': True,
+                'output_path': str(result.output_path),
+                'errors': [{'code': e.code, 'message': e.message, 'recovery_strategy': e.recovery_strategy.value if e.recovery_strategy else None} for e in result.errors],
+                'warnings': [{'code': w.code, 'message': w.message} for w in result.warnings],
+                'metadata': result.metadata
+            }, indent=2))
+        else:
+            click.echo(f"Created {result.output_path}")
     else:
         logger.error(f"Conversion failed: {result.errors}")
-        raise click.ClickException(
-            f"Conversion failed: {result.errors}\n"
-            f"Hint: 1) Check XLIFF file is valid\n"
-            f"       2) Verify original document exists\n"
-            f"       3) Try --verbose for detailed logs"
-        )
+        errors_str = ", ".join(e.message for e in result.errors) if result.errors else "Unknown error"
+        if output_json:
+            click.echo(json.dumps({
+                'success': False,
+                'output_path': str(result.output_path) if result.output_path else None,
+                'errors': [{'code': e.code, 'message': e.message, 'recovery_strategy': e.recovery_strategy.value if e.recovery_strategy else None} for e in result.errors],
+                'warnings': [{'code': w.code, 'message': w.message} for w in result.warnings],
+                'metadata': result.metadata
+            }, indent=2))
+        else:
+            raise click.ClickException(
+                f"Conversion failed: {errors_str}\n"
+                f"Hint: 1) Check XLIFF file is valid\n"
+                f"       2) Verify original document exists\n"
+                f"       3) Try --verbose for detailed logs"
+            )
 
 
 @main.command("info")
 @click.argument("input_file", type=click.Path(exists=True))
-def info(input_file: str) -> None:
+@click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
+def info(input_file: str, output_json: bool) -> None:
     """Show information about a document file.
 
     INPUT_FILE: Document file to inspect (DOCX, ODT, EPUB, etc.)
@@ -395,11 +446,19 @@ def info(input_file: str) -> None:
             logger.warning(f"Failed to parse manifest for resource count: {e}")
 
     # Output
-    click.echo(f"Format: {detected_format}")
-    click.echo(f"Size: {size_mb:.2f} MB")
-    if resource_count is not None:
-        click.echo(f"Resources: {resource_count} images")
-    click.echo(f"Manifest: {manifest_status}")
+    if output_json:
+        click.echo(json.dumps({
+            'format': detected_format,
+            'size_mb': round(size_mb, 2),
+            'resource_count': resource_count,
+            'manifest_status': manifest_status
+        }, indent=2))
+    else:
+        click.echo(f"Format: {detected_format}")
+        click.echo(f"Size: {size_mb:.2f} MB")
+        if resource_count is not None:
+            click.echo(f"Resources: {resource_count} images")
+        click.echo(f"Manifest: {manifest_status}")
 
 
 if __name__ == "__main__":

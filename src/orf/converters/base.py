@@ -8,10 +8,28 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
+
+if TYPE_CHECKING:
+    from orf.error_handlers.conversion_error import RecoveryStrategy
+
+
+@dataclass
+class ErrorDetail:
+    """Detailed error information for conversion failures."""
+    code: str
+    message: str
+    recovery_strategy: Optional["RecoveryStrategy"] = None
+
+
+@dataclass
+class WarningDetail:
+    """Warning information during conversion."""
+    code: str
+    message: str
 
 
 @dataclass
@@ -19,8 +37,8 @@ class ConversionResult:
     """转换结果"""
     output_path: Path
     success: bool
-    warnings: list[str] = field(default_factory=list)
-    errors: list[str] = field(default_factory=list)
+    errors: list[ErrorDetail] = field(default_factory=list)
+    warnings: list[WarningDetail] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
