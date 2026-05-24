@@ -66,7 +66,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-          pip install weasyprint boto3 azure-storage-blob openai
+          pip install lxml weasyprint boto3 azure-storage-blob openai
 
       - name: Run tests with coverage
         run: pytest tests/ -v --cov=src/orf/ --cov-report=xml --cov-fail-under=80
