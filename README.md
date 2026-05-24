@@ -252,11 +252,43 @@ mypy src/orf --ignore-missing-imports
 python -m build
 ```
 
-## 相关项目
+## Pipeline — Omni Localization Suite
 
-- [OPP (Omni-Pre-Processor)](https://github.com/1StepMore/Omni_Pre_Processor) - 文档提取为 MD/XLIFF（含 MCP Server）
-- [OL (Omni-Localizer)](https://github.com/1StepMore) - 翻译 MD/XLIFF（含 SKILL.md Agent 集成）
-- **ORF 作为 Omni 生态的 MCP 集成层**：OPP → MCP Server / OL → SKILL.md / ORF → MCP Server
+ORF is **Step 3** (final step) of the Omni Localization Suite pipeline:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                     OMNI LOCALIZATION SUITE                             │
+│                                                                        │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐               │
+│  │     OPP     │───▶│     OL      │───▶│     ORF      │               │
+│  │  (提取)     │    │   (翻译)    │    │   (回写)    │               │
+│  └─────────────┘    └─────────────┘    └─────────────┘               │
+│                                                                        │
+│  Step 1: OPP        Step 2: OL            Step 3: ORF                  │
+│  Extract →          Translate →           Backfill →                  │
+│  MD + XLIFF +       MD + XLIFF            DOCX/PPTX                   │
+│  skeleton.zip                                                    │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Complete Workflow
+
+```bash
+# Step 1: OPP - Extract document to MD/XLIFF + skeleton.zip
+opp --target-format=both --source-lang=en --target-lang=zh document.docx
+
+# Step 2: OL - Translate to target language
+ol translate-md document.md -s en -t zh -o translated/
+
+# Step 3: ORF - Backfill translated content to target format ← YOU ARE HERE
+orf apply-xliff document.docx --xliff translated/document.xlf --output result.docx
+```
+
+## Related Projects
+
+- [OPP (Omni-Pre-Processor)](https://github.com/1StepMore/Omni_Pre_Processor) - **PREREQUISITE**. Produces skeleton.zip and manifest.json that ORF uses.
+- [OL (Omni-Localizer)](https://github.com/1StepMore/Omni_Localizer) - **PREREQUISITE**. Produces translated MD/XLIFF that ORF backfills.
 
 ## 许可证
 
