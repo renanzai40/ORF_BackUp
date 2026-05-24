@@ -36,7 +36,7 @@ def main(verbose: bool) -> None:
 @click.option(
     "--target-format",
     "-t",
-    type=click.Choice(["docx", "odt", "epub", "html", "rtf", "pdf", "csv", "json", "xlsx", "xml", "ipynb", "eml", "msg"]),
+    type=click.Choice(["auto", "docx", "odt", "epub", "html", "rtf", "pdf", "csv", "json", "xlsx", "xml", "ipynb", "eml", "msg"]),
     default="docx",
     help="目标格式",
 )
