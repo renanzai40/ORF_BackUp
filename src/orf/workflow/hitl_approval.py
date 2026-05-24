@@ -174,8 +174,6 @@ class HITLApproval:
             ApprovalResult with decision
         """
         if request_id in self._pending_approvals:
-            request = self._pending_approvals[request_id]
-            
             result = ApprovalResult(
                 approved=approved,
                 approver=approver,

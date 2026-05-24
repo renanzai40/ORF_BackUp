@@ -1,0 +1,12 @@
+{
+  "sessionID": "ses_1a6a88417ffekmEY3JQd5aZ4o4",
+  "updatedAt": "2026-05-24T16:00:00.000Z",
+  "stopped": true,
+  "reason": "Boulder completed - all Phase 6 tasks done, v0.2.0 released",
+  "sources": {
+    "background-task": {
+      "state": "stopped",
+      "updatedAt": "2026-05-24T16:00:00.000Z"
+    }
+  }
+}

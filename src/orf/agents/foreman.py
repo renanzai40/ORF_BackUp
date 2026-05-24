@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Any
 from pathlib import Path
 
-from orf.converters.base import ConversionResult, ErrorDetail, WarningDetail
+from orf.converters.base import ErrorDetail, WarningDetail
 from orf.error_handlers.conversion_error import RecoveryStrategy
 
 

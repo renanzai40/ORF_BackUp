@@ -13,7 +13,7 @@ class MCPConfig:
     timeout_seconds: int = 30
     allowed_formats: Optional[list[str]] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.allowed_formats is None:
             self.allowed_formats = [
                 "docx",

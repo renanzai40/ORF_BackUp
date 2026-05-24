@@ -2,7 +2,6 @@
 
 from typing import Optional
 import json
-from pathlib import Path
 import subprocess
 import sys
 
@@ -11,11 +10,7 @@ try:
 except ImportError:
     FastMCP = None
 
-from orf.mcp.schemas import (
-    ApplyMdInput, ApplyMdResult, ApplyXLIFFInput, ApplyXLIFFResult,
-    BatchConvertInput, BatchResult, DetectFormatInput, DetectFormatResult,
-    InfoInput, InfoResult, ErrorDetail
-)
+
 from orf.mcp.security import PathValidator
 
 # Global server instance
@@ -35,7 +30,7 @@ def _run_cli_command(args: list[str]) -> dict:
         # Try to parse error as JSON
         try:
             return json.loads(result.stdout)
-        except:
+        except Exception:
             return {"success": False, "errors": [{"code": "CLI_ERROR", "message": result.stderr or "Unknown error", "recovery_strategy": None}]}
 
 
