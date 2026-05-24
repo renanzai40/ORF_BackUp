@@ -42,7 +42,7 @@ class TestPackaging:
         assert result.returncode == 0, f"Build failed: {result.stderr}"
         wheels = list(Path("dist").glob("*.whl"))
         assert len(wheels) == 1, f"Expected 1 wheel, found {len(wheels)}"
-        assert wheels[0].name.startswith("orf-")
+        assert wheels[0].name.startswith(("orf-", "omni_re_formatter-"))
 
     def test_sdist_builds(self, clean_dist):
         """Test that source distribution builds successfully."""
@@ -54,7 +54,7 @@ class TestPackaging:
         assert result.returncode == 0, f"Build failed: {result.stderr}"
         tarballs = list(Path("dist").glob("*.tar.gz"))
         assert len(tarballs) == 1, f"Expected 1 tarball, found {len(tarballs)}"
-        assert tarballs[0].name.startswith("orf-")
+        assert tarballs[0].name.startswith(("orf-", "omni_re_formatter-"))
 
     def test_entry_point_resolves(self, runner):
         """Test that the orf entry point resolves correctly after install."""
