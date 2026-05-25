@@ -13,6 +13,8 @@
 - **parsers/manifest.py:99-106**: OPP manifest 字段兼容性
   - 添加 `file_path`/`path`、`original_filename`/`name`、`format`/`type` 字段映射
   - 兼容 OPP 不同版本输出的字段名差异
+- **cli.py:224**: `click.progressbar` 在 JSON 模式下污染 stdout
+  - `--json` 模式下 progressbar 输出到 stderr，保持 stdout 纯净供 JSON 使用
 
 ---
 

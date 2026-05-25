@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import json
 from pathlib import Path
 from typing import Any
@@ -221,6 +222,7 @@ def apply_md(
         label=f"Converting to {target_format}",
         show_pos=True,
         show_percent=True,
+        file=sys.stderr if output_json else None,
     ) as bar:
         result = converter.convert(input_path, output_path, **options)
         bar.update(1)
