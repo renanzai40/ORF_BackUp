@@ -141,7 +141,7 @@ class TestXLIFF2PPTXConverter:
 
         assert result.success is False
         assert len(result.errors) > 0
-        assert "Failed to load PPTX skeleton" in result.errors[0]
+        assert "Failed to load PPTX skeleton" in result.errors[0].message.message
 
     def test_convert_invalid_xliff(self, sample_pptx_skeleton: Path, tmp_path: Path):
         """Test conversion with invalid/malformed XLIFF."""
@@ -155,7 +155,7 @@ class TestXLIFF2PPTXConverter:
 
         assert result.success is False
         assert len(result.errors) > 0
-        assert "Failed to parse XLIFF" in result.errors[0]
+        assert "Failed to parse XLIFF" in result.errors[0].message.message
 
     def test_convert_empty_xliff(self, sample_pptx_skeleton: Path, tmp_path: Path):
         """Test conversion with XLIFF containing no trans-units."""
@@ -187,7 +187,7 @@ class TestXLIFF2PPTXConverter:
             result = converter.convert(sample_pptx_skeleton, sample_xliff, output)
 
             assert result.success is False
-            assert "Failed to repack PPTX" in result.errors[0]
+            assert "Failed to repack PPTX" in result.errors[0].message.message
 
     def test_load_pptx_skeleton(self, sample_pptx_skeleton: Path):
         """Test PPTX skeleton loading."""

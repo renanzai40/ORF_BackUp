@@ -116,7 +116,7 @@ class TestStreamingConverter:
         result = converter.convert_stream(input_file, output_file)
 
         assert result.success is False
-        assert "produced no chunks" in result.errors[0]
+        assert "produced no chunks" in result.errors[0].message.message
 
     def test_iter_chunks(self, tmp_path):
         """测试生成器迭代块"""
@@ -160,4 +160,4 @@ class TestStreamingConverter:
         result = converter.convert_stream(input_file, output_file)
 
         assert result.success is False
-        assert "Chunk 1 failed" in result.errors[0]
+        assert "Chunk 1 failed" in result.errors[0].message

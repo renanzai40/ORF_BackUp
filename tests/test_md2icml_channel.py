@@ -83,7 +83,7 @@ class TestMD2ICMLConverter:
 
         assert result.success is False
         assert len(result.errors) > 0
-        assert "Pandoc error" in result.errors[0]
+        assert "Pandoc error" in result.errors[0].message.message
 
     @patch("subprocess.run")
     def test_convert_pandoc_not_found(self, mock_run, sample_md: Path, tmp_path: Path):
@@ -94,7 +94,7 @@ class TestMD2ICMLConverter:
         result = converter.convert(sample_md, output)
 
         assert result.success is False
-        assert "not in PATH" in result.errors[0]
+        assert "not in PATH" in result.errors[0].message.message
 
     def test_convert_invalid_input(self, tmp_path: Path):
         invalid_file = tmp_path / "nonexistent.md"
@@ -104,4 +104,4 @@ class TestMD2ICMLConverter:
         result = converter.convert(invalid_file, output)
 
         assert result.success is False
-        assert "Invalid input file" in result.errors[0]
+        assert "Invalid input file" in result.errors[0].message

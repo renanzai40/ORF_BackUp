@@ -85,7 +85,7 @@ class TestXLIFF2HTMLConverter:
         converter = XLIFF2HTMLConverter()
         result = converter.convert(missing_html, sample_xliff, output)
         assert result.success is False
-        assert "HTML template not found" in result.errors[0]
+        assert "HTML template not found" in result.errors[0].message.message
 
     def test_convert_missing_xliff(self, sample_html_template: Path, tmp_path: Path):
         output = tmp_path / "output.html"
@@ -93,7 +93,7 @@ class TestXLIFF2HTMLConverter:
         converter = XLIFF2HTMLConverter()
         result = converter.convert(sample_html_template, missing_xliff, output)
         assert result.success is False
-        assert "XLIFF file not found" in result.errors[0]
+        assert "XLIFF file not found" in result.errors[0].message.message
 
     def test_convert_success(self, sample_html_template: Path, sample_xliff: Path, tmp_path: Path):
         output = tmp_path / "output.html"
@@ -132,7 +132,7 @@ class TestXLIFF2HTMLConverter:
         try:
             result = converter.convert(html_file, sample_xliff, output)
             assert result.success is False
-            assert "Failed to read HTML template" in result.errors[0]
+            assert "Failed to read HTML template" in result.errors[0].message.message
         finally:
             html_file.chmod(0o644)
 
@@ -145,7 +145,7 @@ class TestXLIFF2HTMLConverter:
         try:
             result = converter.convert(sample_html_template, sample_xliff, output)
             assert result.success is False
-            assert "Failed to write output HTML" in result.errors[0]
+            assert "Failed to write output HTML" in result.errors[0].message.message
         finally:
             output.chmod(0o644)
 

@@ -93,7 +93,7 @@ class TestMD2SRTConverter:
         result = converter.convert(invalid_file, output)
 
         assert result.success is False
-        assert "Invalid input file" in result.errors[0]
+        assert "Invalid input file" in result.errors[0].message.message
 
     def test_clean_subtitle_text(self):
         converter = MD2SRTConverter()
