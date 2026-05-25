@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.2.1 (2026-05-25)
+
+### 🐛 修复
+
+- **cli.py:219**: 修复转换失败时 crash（AttributeError on string errors）
+  - 4 处错误处理代码现在能同时处理 `ErrorDetail` 对象和纯字符串
+  - 影响范围：`apply-md` / `apply-xliff` 成功/失败路径的 JSON 输出 + 文本错误输出
+- **frontmatter.py:80**: `original_file` 改为 Optional（某些 pipeline 场景不需原始文件名）
+- **manifest.py**: `Manifest.version` → `Manifest.manifest_version` 与 OPP JSON key 保持一致
+
+---
+
 ## v0.2.0 (2026-05-24)
 
 ### Agent-Oriented 架构重构

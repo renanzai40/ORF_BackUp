@@ -17,10 +17,10 @@ logger = get_logger("parser.frontmatter")
 class FrontmatterMetadata:
     source_lang: str
     target_lang: str
-    original_file: str
-    processor: str
-    version: str
-    translated_at: str
+    processor: str = "OL"
+    version: str = "unknown"
+    translated_at: str = ""
+    original_file: str = ""
 
 
 class FrontmatterParseError(Exception):
@@ -77,7 +77,7 @@ def parse_frontmatter(md_path: Path | str) -> FrontmatterMetadata:
         raise FrontmatterParseError(f"Invalid YAML in frontmatter: {e}")
 
     # 提取必要字段
-    required_fields = ["source_lang", "target_lang", "original_file"]
+    required_fields = ["source_lang", "target_lang"]
     for field in required_fields:
         if field not in data:
             raise FrontmatterParseError(f"Missing required field in frontmatter: {field}")
@@ -85,10 +85,10 @@ def parse_frontmatter(md_path: Path | str) -> FrontmatterMetadata:
     return FrontmatterMetadata(
         source_lang=data["source_lang"],
         target_lang=data["target_lang"],
-        original_file=data["original_file"],
         processor=data.get("processor", "OL"),
         version=data.get("version", "unknown"),
         translated_at=data.get("translated_at", ""),
+        original_file=data.get("original_file", ""),
     )
 
 

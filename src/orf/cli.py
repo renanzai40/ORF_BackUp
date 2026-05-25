@@ -24,6 +24,29 @@ from orf.logging import setup_logger, get_logger
 logger = get_logger("cli")
 
 
+def _error_item_to_dict(e: Any) -> dict[str, Any]:
+    """Normalize error items (ErrorDetail or str) to dict for JSON output."""
+    if hasattr(e, 'code'):
+        return {
+            'code': e.code,
+            'message': e.message,
+            'recovery_strategy': e.recovery_strategy.value if e.recovery_strategy else None,
+        }
+    return {'code': 'UNKNOWN', 'message': str(e), 'recovery_strategy': None}
+
+
+def _error_item_to_str(e: Any) -> str:
+    """Normalize error items (ErrorDetail or str) to string."""
+    return e.message if hasattr(e, 'message') else str(e)
+
+
+def _warning_item_to_dict(w: Any) -> dict[str, str]:
+    """Normalize warning items (WarningDetail or str) to dict for JSON output."""
+    if hasattr(w, 'code'):
+        return {'code': w.code, 'message': w.message}
+    return {'code': 'UNKNOWN', 'message': str(w)}
+
+
 @click.group()
 @click.option("--verbose", "-v", is_flag=True, help="启用详细日志")
 def main(verbose: bool) -> None:
@@ -208,21 +231,21 @@ def apply_md(
             click.echo(json.dumps({
                 'success': True,
                 'output_path': str(result.output_path),
-                'errors': [{'code': e.code, 'message': e.message, 'recovery_strategy': e.recovery_strategy.value if e.recovery_strategy else None} for e in result.errors],
-                'warnings': [{'code': w.code, 'message': w.message} for w in result.warnings],
+                'errors': [_error_item_to_dict(e) for e in result.errors],
+                'warnings': [_warning_item_to_dict(w) for w in result.warnings],
                 'metadata': result.metadata
             }, indent=2))
         else:
             click.echo(f"Created {result.output_path}")
     else:
         logger.error(f"Conversion failed: {result.errors}")
-        errors_str = ", ".join(e.message for e in result.errors) if result.errors else "Unknown error"
+        errors_str = ", ".join(_error_item_to_str(e) for e in result.errors) if result.errors else "Unknown error"
         if output_json:
             click.echo(json.dumps({
                 'success': False,
                 'output_path': str(result.output_path) if result.output_path else None,
-                'errors': [{'code': e.code, 'message': e.message, 'recovery_strategy': e.recovery_strategy.value if e.recovery_strategy else None} for e in result.errors],
-                'warnings': [{'code': w.code, 'message': w.message} for w in result.warnings],
+                'errors': [_error_item_to_dict(e) for e in result.errors],
+                'warnings': [_warning_item_to_dict(w) for w in result.warnings],
                 'metadata': result.metadata
             }, indent=2))
         else:
@@ -383,21 +406,21 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str, output_js
             click.echo(json.dumps({
                 'success': True,
                 'output_path': str(result.output_path),
-                'errors': [{'code': e.code, 'message': e.message, 'recovery_strategy': e.recovery_strategy.value if e.recovery_strategy else None} for e in result.errors],
-                'warnings': [{'code': w.code, 'message': w.message} for w in result.warnings],
+                'errors': [_error_item_to_dict(e) for e in result.errors],
+                'warnings': [_warning_item_to_dict(w) for w in result.warnings],
                 'metadata': result.metadata
             }, indent=2))
         else:
             click.echo(f"Created {result.output_path}")
     else:
         logger.error(f"Conversion failed: {result.errors}")
-        errors_str = ", ".join(e.message for e in result.errors) if result.errors else "Unknown error"
+        errors_str = ", ".join(_error_item_to_str(e) for e in result.errors) if result.errors else "Unknown error"
         if output_json:
             click.echo(json.dumps({
                 'success': False,
                 'output_path': str(result.output_path) if result.output_path else None,
-                'errors': [{'code': e.code, 'message': e.message, 'recovery_strategy': e.recovery_strategy.value if e.recovery_strategy else None} for e in result.errors],
-                'warnings': [{'code': w.code, 'message': w.message} for w in result.warnings],
+                'errors': [_error_item_to_dict(e) for e in result.errors],
+                'warnings': [_warning_item_to_dict(w) for w in result.warnings],
                 'metadata': result.metadata
             }, indent=2))
         else:

@@ -66,7 +66,7 @@ def test_parse_manifest_success(sample_manifest: Path):
     manifest = parse_manifest(sample_manifest)
 
     assert isinstance(manifest, Manifest)
-    assert manifest.version == "1.0"
+    assert manifest.manifest_version == "1.0"
     assert manifest.source.format == "DOCX"
     assert manifest.source.original_filename == "spec.docx"
     assert manifest.skeleton is not None

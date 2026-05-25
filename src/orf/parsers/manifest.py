@@ -49,7 +49,7 @@ class ManifestResources:
 
 @dataclass
 class Manifest:
-    version: str
+    manifest_version: str
     generated_at: str
     tool: str
     tool_version: str
@@ -123,7 +123,7 @@ def parse_manifest(manifest_path: Path | str) -> Manifest:
         )
 
         return Manifest(
-            version=data.get("manifest_version", "unknown"),
+            manifest_version=data.get("manifest_version", "unknown"),
             generated_at=data.get("generated_at", ""),
             tool=data.get("tool", ""),
             tool_version=data.get("tool_version", ""),
