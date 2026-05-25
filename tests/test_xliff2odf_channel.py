@@ -172,7 +172,7 @@ class TestXLIFF2ODFConverter:
         result = converter.convert(invalid_file, sample_xliff, output)
 
         assert result.success is False
-        assert "Skeleton file not found" in result.errors[0].message.message
+        assert "Skeleton file not found" in result.errors[0].message
 
     def test_convert_invalid_xliff(self, sample_skeleton_odt: Path, tmp_path: Path):
         invalid_file = tmp_path / "nonexistent.xlf"
@@ -182,7 +182,7 @@ class TestXLIFF2ODFConverter:
         result = converter.convert(sample_skeleton_odt, invalid_file, output)
 
         assert result.success is False
-        assert "XLIFF file not found" in result.errors[0].message.message
+        assert "XLIFF file not found" in result.errors[0].message
 
     @patch("subprocess.run")
     def test_convert_subprocess_error(self, mock_run, sample_skeleton_odt: Path, sample_xliff: Path, tmp_path: Path):
@@ -208,7 +208,7 @@ class TestXLIFF2ODFConverter:
         result = converter.convert(sample_skeleton_odt, sample_xliff, output)
 
         assert result.success is False
-        assert "xliff2odf command not found" in result.errors[0].message.message
+        assert "xliff2odf command not found" in result.errors[0].message
 
     @patch("subprocess.run")
     def test_convert_with_exclude_patterns(self, mock_run, sample_skeleton_odt: Path, sample_xliff: Path, tmp_path: Path):
@@ -271,7 +271,7 @@ class TestXLIFF2ODFConverter:
         result = converter.convert(sample_skeleton_odt, sample_xliff, output)
 
         assert result.success is False
-        assert "output file was not created" in result.errors[0].message.message
+        assert "output file was not created" in result.errors[0].message
 
     @patch("subprocess.run")
     def test_convert_with_multiple_exclude_patterns(self, mock_run, sample_skeleton_odt: Path, sample_xliff: Path, tmp_path: Path):

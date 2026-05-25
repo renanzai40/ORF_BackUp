@@ -163,7 +163,7 @@ class TestXLIFF2DOCXConverter:
         result = converter.convert(invalid_file, sample_xliff, output)
 
         assert result.success is False
-        assert "Failed to load skeleton" in result.errors[0].message.message
+        assert "Failed to load skeleton" in result.errors[0].message
 
     @patch("orf.channels.xliff2docx.SkeletonLoader")
     def test_convert_xliff_parse_error(self, mock_loader_class, sample_skeleton_docx: Path, tmp_path: Path):
@@ -182,7 +182,7 @@ class TestXLIFF2DOCXConverter:
         result = converter.convert(sample_skeleton_docx, invalid_xliff, output)
 
         assert result.success is False
-        assert "XLIFF parse error" in result.errors[0].message.message
+        assert "XLIFF parse error" in result.errors[0].message
 
     @patch("orf.channels.xliff2docx.SkeletonLoader")
     def test_convert_no_trans_units(self, mock_loader_class, sample_skeleton_docx: Path, tmp_path: Path):

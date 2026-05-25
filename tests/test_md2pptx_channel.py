@@ -82,7 +82,7 @@ class TestMD2PPTXConverter:
 
         assert result.success is False
         assert len(result.errors) > 0
-        assert "md2pptx error" in result.errors[0].message.message
+        assert "md2pptx error" in result.errors[0].message
 
     @patch("subprocess.run")
     def test_convert_md2pptx_not_found(self, mock_run, sample_md: Path, tmp_path: Path):
@@ -93,7 +93,7 @@ class TestMD2PPTXConverter:
         result = converter.convert(sample_md, output)
 
         assert result.success is False
-        assert "not in PATH" in result.errors[0].message.message
+        assert "not in PATH" in result.errors[0].message
 
     def test_convert_invalid_input(self, tmp_path: Path):
         invalid_file = tmp_path / "nonexistent.md"

@@ -105,7 +105,7 @@ class TestMD2PDFConverter:
 
         assert result.success is False
         assert len(result.errors) > 0
-        assert "Pandoc error" in result.errors[0].message.message
+        assert "Pandoc error" in result.errors[0].message
 
     @patch("subprocess.run")
     def test_convert_pandoc_not_found(self, mock_run, sample_md: Path, tmp_path: Path):
@@ -116,7 +116,7 @@ class TestMD2PDFConverter:
         result = converter.convert(sample_md, output)
 
         assert result.success is False
-        assert "not in PATH" in result.errors[0].message.message
+        assert "not in PATH" in result.errors[0].message
 
     def test_convert_weasyprint_import_error(self, sample_md: Path, tmp_path: Path):
         output = tmp_path / "output.pdf"
@@ -128,7 +128,7 @@ class TestMD2PDFConverter:
             result = converter.convert(sample_md, output, engine="weasyprint")
 
             assert result.success is False
-            assert "not installed" in result.errors[0].message.message
+            assert "not installed" in result.errors[0].message
 
     def test_convert_invalid_input(self, tmp_path: Path):
         invalid_file = tmp_path / "nonexistent.md"
