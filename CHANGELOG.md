@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.2.2 (2026-05-26)
+
+### 🐛 修复
+
+- **mcp/server.py:20-73**: MCP `apply_md` 工具 JSON-RPC 响应为空
+  - 添加空 stdout 检查和 JSON 解析异常处理
+  - 修复 `_run_cli_command` 在 CLI 返回空输出时抛出 `JSONDecodeError` 的问题
+- **converters/base.py:44-61**: `ConversionResult.errors` 类型不匹配
+  - `__post_init__` 自动将字符串错误归一化为 `ErrorDetail` 对象
+  - 覆盖全部 22 个文件、77 处字符串错误传参
+- **parsers/manifest.py:99-106**: OPP manifest 字段兼容性
+  - 添加 `file_path`/`path`、`original_filename`/`name`、`format`/`type` 字段映射
+  - 兼容 OPP 不同版本输出的字段名差异
+
+---
+
 ## v0.2.1 (2026-05-25)
 
 ### 🐛 修复

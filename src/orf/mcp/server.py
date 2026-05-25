@@ -12,6 +12,9 @@ except ImportError:
 
 
 from orf.mcp.security import PathValidator
+from orf.logging import get_logger
+
+logger = get_logger("mcp.server")
 
 # Global server instance
 _mcp: Optional["FastMCP"] = None
@@ -24,14 +27,53 @@ def _run_cli_command(args: list[str]) -> dict:
         capture_output=True,
         text=True
     )
+
+    # Bug 4 Fix: Handle empty stdout
+    if not result.stdout.strip():
+        logger.error(f"CLI returned empty stdout. args={args}, stderr={result.stderr[:500]}")
+        return {
+            "success": False,
+            "output_path": None,
+            "errors": [{
+                "code": "EMPTY_OUTPUT",
+                "message": f"CLI returned empty. stderr: {result.stderr[:500]}",
+                "recovery_strategy": None
+            }],
+            "warnings": [],
+            "metadata": {}
+        }
+
+    try:
+        parsed = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parse error: {e}. stdout: {result.stdout[:200]}")
+        return {
+            "success": False,
+            "output_path": None,
+            "errors": [{
+                "code": "JSON_PARSE_ERROR",
+                "message": f"JSON decode failed: {e}. Output: {result.stdout[:500]}",
+                "recovery_strategy": None
+            }],
+            "warnings": [],
+            "metadata": {}
+        }
+
     if result.returncode == 0:
-        return json.loads(result.stdout)
+        return parsed
     else:
-        # Try to parse error as JSON
-        try:
-            return json.loads(result.stdout)
-        except Exception:
-            return {"success": False, "errors": [{"code": "CLI_ERROR", "message": result.stderr or "Unknown error", "recovery_strategy": None}]}
+        # CLI failed but might have valid error JSON
+        return parsed if "success" in parsed else {
+            "success": False,
+            "output_path": None,
+            "errors": [{
+                "code": "CLI_ERROR",
+                "message": result.stderr or "Unknown error",
+                "recovery_strategy": None
+            }],
+            "warnings": [],
+            "metadata": {}
+        }
 
 
 def get_server() -> "FastMCP":

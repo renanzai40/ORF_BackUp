@@ -42,7 +42,28 @@ class ConversionResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        pass
+        normalized_errors = []
+        for e in self.errors:
+            if hasattr(e, 'code'):
+                normalized_errors.append(e)
+            else:
+                normalized_errors.append(ErrorDetail(
+                    code="CONVERSION_ERROR",
+                    message=str(e),
+                    recovery_strategy=None
+                ))
+        self.errors = normalized_errors
+
+        normalized_warnings = []
+        for w in self.warnings:
+            if hasattr(w, 'code'):
+                normalized_warnings.append(w)
+            else:
+                normalized_warnings.append(WarningDetail(
+                    code="WARNING",
+                    message=str(w)
+                ))
+        self.warnings = normalized_warnings
 
 
 class BaseConverter(ABC):

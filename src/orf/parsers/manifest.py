@@ -96,12 +96,13 @@ def parse_manifest(manifest_path: Path | str) -> Manifest:
             raise ManifestParseError(f"Missing required field: {field}")
 
     try:
+        source_data = data["source"]
         source = ManifestSource(
-            file_path=data["source"]["file_path"],
-            original_filename=data["source"]["original_filename"],
-            format=data["source"]["format"],
-            file_size_bytes=data["source"].get("file_size_bytes", 0),
-            file_hash_md5=data["source"].get("file_hash_md5", ""),
+            file_path=source_data.get("file_path") or source_data.get("path", ""),
+            original_filename=source_data.get("original_filename") or source_data.get("name", ""),
+            format=source_data.get("format") or source_data.get("type", "UNKNOWN"),
+            file_size_bytes=source_data.get("file_size_bytes", 0),
+            file_hash_md5=source_data.get("file_hash_md5", ""),
         )
 
         outputs = ManifestOutputs(
