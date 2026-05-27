@@ -168,3 +168,16 @@ class MD2PDFConverter(BaseConverter):
                 success=False,
                 errors=[f"WeasyPrint error: {e}"],
             )
+
+    def inject_images(
+        self,
+        skeleton_path: Path | str,
+        images: list,
+        output_path: Path | str,
+    ) -> tuple[list, list]:
+        logger.warning(
+            "MD2PDF does not support inject_images via paragraph_index. "
+            "Images in MD are handled by Pandoc automatically. "
+            "Use --embed-media with Pandoc for inline image embedding."
+        )
+        return ([], images)

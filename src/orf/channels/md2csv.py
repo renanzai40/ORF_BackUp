@@ -126,3 +126,15 @@ class MD2CSVConverter(BaseConverter):
                 success=False,
                 errors=[str(e)],
             )
+
+    def inject_images(
+        self,
+        skeleton_path: Path | str,
+        images: list,
+        output_path: Path | str,
+    ) -> tuple[list, list]:
+        logger.warning(
+            "MD2CSV does not support inject_images via paragraph_index. "
+            "Images in MD are handled by Pandoc automatically."
+        )
+        return ([], images)

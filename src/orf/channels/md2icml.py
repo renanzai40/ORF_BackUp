@@ -88,3 +88,15 @@ class MD2ICMLConverter(BaseConverter):
                 success=False,
                 errors=["Pandoc not installed or not in PATH"],
             )
+
+    def inject_images(
+        self,
+        skeleton_path: Path | str,
+        images: list,
+        output_path: Path | str,
+    ) -> tuple[list, list]:
+        logger.warning(
+            "MD2ICML does not support inject_images via paragraph_index. "
+            "Images in MD are handled by Pandoc automatically."
+        )
+        return ([], images)

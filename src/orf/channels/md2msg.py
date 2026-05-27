@@ -247,3 +247,15 @@ class MD2MSGConverter(BaseConverter):
                     mapi_msg.set_property(prop_name, prop_value)
                 except Exception as e:
                     logger.warning(f"Could not set custom property {prop_name}: {e}")
+
+    def inject_images(
+        self,
+        skeleton_path: Path | str,
+        images: list,
+        output_path: Path | str,
+    ) -> tuple[list, list]:
+        logger.warning(
+            "MD2MSG does not support inject_images via paragraph_index. "
+            "Images in MD are handled by Pandoc automatically."
+        )
+        return ([], images)

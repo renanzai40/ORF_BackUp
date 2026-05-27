@@ -199,3 +199,16 @@ class MD2XMLConverter(BaseConverter):
                 success=False,
                 errors=[str(e)],
             )
+
+    def inject_images(
+        self,
+        skeleton_path: Path | str,
+        images: list,
+        output_path: Path | str,
+    ) -> tuple[list, list]:
+        logger.warning(
+            "MD2XML does not support inject_images via paragraph_index. "
+            "Images in MD are handled by Pandoc automatically. "
+            "Use --embed-media with Pandoc for inline image embedding."
+        )
+        return ([], images)

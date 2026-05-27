@@ -48,6 +48,27 @@ def _warning_item_to_dict(w: Any) -> dict[str, str]:
     return {'code': 'UNKNOWN', 'message': str(w)}
 
 
+def _safe_json_dumps(data: dict) -> str:
+    """Serialize data to JSON, filtering non-serializable metadata values."""
+    import json
+    cleaned = dict(data)
+    if 'metadata' in cleaned:
+        cleaned['metadata'] = _sanitize_for_json(cleaned['metadata'])
+    return json.dumps(cleaned, indent=2, default=str)
+
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """Recursively sanitize objects for JSON serialization."""
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(item) for item in obj]
+    elif isinstance(obj, (str, int, float, bool, type(None))):
+        return obj
+    else:
+        return str(type(obj).__name__)
+
+
 @click.group()
 @click.option("--verbose", "-v", is_flag=True, help="启用详细日志")
 def main(verbose: bool) -> None:
@@ -264,26 +285,26 @@ def apply_md(
     if result.success:
         logger.info(f"Conversion successful: {result.output_path}")
         if output_json:
-            click.echo(json.dumps({
+            click.echo(_safe_json_dumps({
                 'success': True,
                 'output_path': str(result.output_path),
                 'errors': [_error_item_to_dict(e) for e in result.errors],
                 'warnings': [_warning_item_to_dict(w) for w in result.warnings],
                 'metadata': result.metadata
-            }, indent=2))
+            }))
         else:
             click.echo(f"Created {result.output_path}")
     else:
         logger.error(f"Conversion failed: {result.errors}")
         errors_str = ", ".join(_error_item_to_str(e) for e in result.errors) if result.errors else "Unknown error"
         if output_json:
-            click.echo(json.dumps({
+            click.echo(_safe_json_dumps({
                 'success': False,
                 'output_path': str(result.output_path) if result.output_path else None,
                 'errors': [_error_item_to_dict(e) for e in result.errors],
                 'warnings': [_warning_item_to_dict(w) for w in result.warnings],
                 'metadata': result.metadata
-            }, indent=2))
+            }))
         else:
             raise click.ClickException(
                 f"Conversion failed: {errors_str}\n"
@@ -472,26 +493,26 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str, output_js
     if result.success:
         logger.info(f"Conversion successful: {result.output_path}")
         if output_json:
-            click.echo(json.dumps({
+            click.echo(_safe_json_dumps({
                 'success': True,
                 'output_path': str(result.output_path),
                 'errors': [_error_item_to_dict(e) for e in result.errors],
                 'warnings': [_warning_item_to_dict(w) for w in result.warnings],
                 'metadata': result.metadata
-            }, indent=2))
+            }))
         else:
             click.echo(f"Created {result.output_path}")
     else:
         logger.error(f"Conversion failed: {result.errors}")
         errors_str = ", ".join(_error_item_to_str(e) for e in result.errors) if result.errors else "Unknown error"
         if output_json:
-            click.echo(json.dumps({
+            click.echo(_safe_json_dumps({
                 'success': False,
                 'output_path': str(result.output_path) if result.output_path else None,
                 'errors': [_error_item_to_dict(e) for e in result.errors],
                 'warnings': [_warning_item_to_dict(w) for w in result.warnings],
                 'metadata': result.metadata
-            }, indent=2))
+            }))
         else:
             raise click.ClickException(
                 f"Conversion failed: {errors_str}\n"

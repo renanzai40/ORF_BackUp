@@ -151,3 +151,15 @@ class MD2EMLConverter(BaseConverter):
             max_line_length=0,  # No line length limit for EML
             linesep="\r\n",
         )
+
+    def inject_images(
+        self,
+        skeleton_path: Path | str,
+        images: list,
+        output_path: Path | str,
+    ) -> tuple[list, list]:
+        logger.warning(
+            "MD2EML does not support inject_images via paragraph_index. "
+            "Images in MD are handled by Pandoc automatically."
+        )
+        return ([], images)

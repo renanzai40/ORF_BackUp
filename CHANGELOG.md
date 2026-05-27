@@ -51,7 +51,11 @@
 - **cli.py:75**: `apply-md` 命令新增 `--images-json` 参数
   - 支持接收 OPP 图片 placement JSON 文件
   - 加载后调用 converter 的 `inject_images()` 方法注入图片
-- **md2docx.py / md2epub.py**: 新增 `inject_images()` stub methods
+- **cli.py:267-285**: JSON 输出 metadata 序列化修复
+  - 新增 `_safe_json_dumps()` / `_sanitize_for_json()` 过滤不可序列化对象
+  - 修复 `result.metadata` 含复杂对象时 `json.dumps` 崩溃问题
+- **16 MD converters**: 新增 `inject_images()` stub methods
+  - 所有 Pandoc-based MD 转换器（md2docx/md2odt/md2pdf/md2rtf/md2html/md2csv/md2json/md2xlsx/md2xml/md2ipynb/md2eml/md2msg/md2icml/md2srt/md2epub）
   - MD 链路图片由 Pandoc 自动处理（base64 内嵌在 MD 中）
   - stub 返回 `(empty, all_images)` 并记录 WARNING 日志说明不支持段落索引注入
 
