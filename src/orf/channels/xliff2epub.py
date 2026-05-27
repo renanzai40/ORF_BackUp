@@ -6,12 +6,17 @@ from XLIFF <bx>/<ex> tags converted to HTML <strong>/<em> tags.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import re
 import zipfile
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any, Optional
+
+from bs4 import BeautifulSoup
 
 from orf.converters.base import BaseConverter, ConversionResult
+from orf.mcp.schemas import ImagePlacement
 from orf.skeleton.inline_formatting import XLIFFInlineParser, EPUBHTMLInlineApplier
 from orf.error_handlers.conversion_error import XLIFFParseError, InlineFormattingError
 from orf.logging import get_logger
@@ -365,3 +370,136 @@ class XLIFF2EPUBConverter(BaseConverter):
                 zf.writestr(name, content)
 
         logger.info(f"EPUB repacked to: {output_path}")
+
+    def inject_images(
+        self,
+        epub_path: Path | str,
+        images: list[ImagePlacement],
+        output_path: Path | str,
+    ) -> tuple[list[ImagePlacement], list[ImagePlacement]]:
+        """Inject images into EPUB at specified spine positions.
+
+        Args:
+            epub_path: Path to EPUB file.
+            images: List of ImagePlacement objects from OPP.
+            output_path: Path to write the output EPUB.
+
+        Returns:
+            Tuple of (injected_images, orphaned_images).
+        """
+        epub_path = Path(epub_path)
+        output_path = Path(output_path)
+
+        orphaned: list[ImagePlacement] = []
+        injected: list[ImagePlacement] = []
+
+        positioned = [img for img in images if img.spine_index is not None]
+        unpositioned = [img for img in images if img.spine_index is None]
+
+        if unpositioned:
+            for img in unpositioned:
+                logger.warning(
+                    "Image has no spine_index, appending to end: mime_type=%s",
+                    img.mime_type,
+                )
+            orphaned.extend(unpositioned)
+
+        if not positioned:
+            if images:
+                with zipfile.ZipFile(epub_path, "r") as zf_in:
+                    with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf_out:
+                        for item in zf_in.namelist():
+                            zf_out.writestr(item, zf_in.read(item))
+            return (injected, orphaned)
+
+        try:
+            files = self._load_epub_skeleton(epub_path)
+        except Exception as e:
+            logger.error("Failed to load EPUB for image injection: %s", e)
+            orphaned.extend(images)
+            return (injected, orphaned)
+
+        xhtml_files = self._find_xhtml_files(files)
+        xhtml_paths = sorted(xhtml_files.keys())
+
+        img_by_spine: dict[int, list[ImagePlacement]] = {}
+        for img in positioned:
+            idx = img.spine_index
+            assert idx is not None, "positioned images must have spine_index"
+            if idx not in img_by_spine:
+                img_by_spine[idx] = []
+            img_by_spine[idx].append(img)
+
+        for spine_idx, imgs in img_by_spine.items():
+            if spine_idx < 0 or spine_idx >= len(xhtml_paths):
+                logger.warning(
+                    "spine_index %d out of range, %d chapters available",
+                    spine_idx,
+                    len(xhtml_paths),
+                )
+                orphaned.extend(imgs)
+                continue
+
+            chapter_path = xhtml_paths[spine_idx]
+            chapter_content = xhtml_files[chapter_path]
+            if isinstance(chapter_content, bytes):
+                chapter_content = chapter_content.decode("utf-8")
+
+            soup = BeautifulSoup(chapter_content, "html.parser")
+
+            for img in imgs:
+                try:
+                    img_bytes = self._get_image_bytes(img)
+                    ext_map = {
+                        "image/png": ".png",
+                        "image/jpeg": ".jpg",
+                        "image/gif": ".gif",
+                    }
+                    ext = ext_map.get(img.mime_type, ".png")
+                    md5_hash = hashlib.md5(img_bytes).hexdigest()
+                    img_name = f"image_{md5_hash[:8]}{ext}"
+                    img_path = f"OEBPS/images/{img_name}"
+
+                    if img_path not in files:
+                        files[img_path] = img_bytes
+
+                    data_uri = f"../images/{img_name}"
+                    new_tag = soup.new_tag("img", src=data_uri)
+                    if img.width:
+                        new_tag["width"] = img.width
+                    if img.height:
+                        new_tag["height"] = img.height
+
+                    body = soup.find("body")
+                    if body:
+                        body.append(new_tag)
+                    else:
+                        soup.append(new_tag)
+
+                    files[chapter_path] = str(soup).encode("utf-8")
+                    injected.append(img)
+                    logger.debug(
+                        "Injected image at spine %d: %s",
+                        spine_idx,
+                        img.mime_type,
+                    )
+                except Exception as e:
+                    logger.error("Failed to inject image: %s", e)
+                    orphaned.append(img)
+
+        self._repack_epub(files, output_path)
+
+        if orphaned:
+            logger.warning(
+                "%d images could not be positioned and were not injected",
+                len(orphaned),
+            )
+
+        return (injected, orphaned)
+
+    def _get_image_bytes(self, img: ImagePlacement) -> bytes:
+        if img.data_base64:
+            return base64.b64decode(img.data_base64)
+        if img.file_path:
+            return Path(img.file_path).read_bytes()
+        raise ValueError("ImagePlacement must have data_base64 or file_path")

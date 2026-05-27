@@ -1,5 +1,54 @@
 # Changelog
 
+## v0.3.0 (2026-05-27)
+
+### ✨ 新功能
+
+- **图片精确定位注入**：ORF 现在支持在 XLIFF 回填时精确注入图片到目标文档
+  - OPP 提取图片时附带 `paragraph_index` / `slide_index` / `element_index` / `spine_index` 等位置元数据
+  - ORF 通过新增 `--images-json` 参数接收图片注入指令
+  - 支持 DOCX、PPTX、HTML、EPUB 四种格式的图片注入
+
+### 🆕 新增 API
+
+- **MCP `apply_xliff` 扩展**：新增 `images` 参数，接收 OPP 传来的图片 placement 数据
+- **CLI `--images-json` 参数**：`apply-xliff` 命令新增图片注入支持
+- **源格式自动检测**：`detect_from_skeleton()` 从 skeleton.zip 内部结构自动识别源格式
+
+### 📦 新增数据结构
+
+- **`ImagePlacement`** (mcp/schemas.py)：图片注入指令数据结构
+  ```python
+  {
+      data_base64: str,           # base64 编码的图片数据
+      mime_type: str,             # image/png, image/jpeg, etc.
+      width: Optional[int],
+      height: Optional[int],
+      # 位置字段 (格式互斥)
+      paragraph_index: Optional[int],  # DOCX
+      slide_index: Optional[int],      # PPTX
+      page_number: Optional[int],       # PDF
+      element_index: Optional[int],    # HTML
+      spine_index: Optional[int],       # EPUB
+  }
+  ```
+
+### 🔧 通道注入实现
+
+| 通道 | 方法 | 注入方式 |
+|------|------|---------|
+| `xliff2docx` | `inject_images()` | 按 `paragraph_index` 插入 `<w:drawing>` 到段落 |
+| `xliff2pptx` | `inject_images()` | 按 `slide_index` 插入 `<p:pic>` 到幻灯片 |
+| `xliff2html` | `inject_images()` | 按 `element_index` 插入 `<img>` 到 DOM |
+| `xliff2epub` | `inject_images()` | 按 `spine_index` 插入到章节 XHTML |
+
+### 🐛 Orphaned 图片处理
+
+- 无位置信息的图片统一采用 **WARNING 日志 + 末尾追加**策略
+- 不再静默丢弃图片
+
+---
+
 ## v0.2.2 (2026-05-26)
 
 ### 🐛 修复

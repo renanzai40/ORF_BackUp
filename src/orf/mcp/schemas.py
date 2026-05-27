@@ -33,12 +33,60 @@ class ApplyMdResult(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ImagePlacement(BaseModel):
+    """Image placement data from OPP for injection during XLIFF backfill.
+
+    OPP extracts images with position metadata (paragraph_index, slide_index, etc.)
+    and passes them to ORF for precise image restoration.
+    """
+    # Image data source (mutually exclusive)
+    data_base64: Optional[str] = Field(
+        None,
+        description="Base64-encoded image data for small images"
+    )
+    file_path: Optional[str] = Field(
+        None,
+        description="Path to image file for larger images"
+    )
+
+    # Image metadata
+    mime_type: str = Field(..., description="Image MIME type (e.g., image/png)")
+    width: Optional[int] = Field(None, description="Image width in pixels")
+    height: Optional[int] = Field(None, description="Image height in pixels")
+
+    # Position fields (format-specific, mutually exclusive)
+    paragraph_index: Optional[int] = Field(
+        None,
+        description="DOCX: 0-based paragraph index into result.paragraphs"
+    )
+    slide_index: Optional[int] = Field(
+        None,
+        description="PPTX: 0-based slide index"
+    )
+    page_number: Optional[int] = Field(
+        None,
+        description="PDF: 1-based page number"
+    )
+    element_index: Optional[int] = Field(
+        None,
+        description="HTML: 0-based DOM element index"
+    )
+    spine_index: Optional[int] = Field(
+        None,
+        description="EPUB: 0-based spine index"
+    )
+
+
 class ApplyXLIFFInput(BaseModel):
     """Input for apply_xliff tool."""
-    input_file: str = Field(..., description="Original document file path")
+    input_file: str = Field(..., description="Original document file path (skeleton)")
     xliff_path: str = Field(..., description="Translated XLIFF file path")
     output_path: str = Field(..., description="Output file path")
     format: str = Field(..., description="Output format (docx, pptx, epub, html, odt)")
+    images: Optional[list[ImagePlacement]] = Field(
+        default=None,
+        description="Image placement data from OPP for precise image restoration"
+    )
 
 
 class ApplyXLIFFResult(BaseModel):

@@ -361,7 +361,8 @@ def convert_batch(
     help="Output format",
 )
 @click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
-def apply_xliff(input_file: str, xliff: str, output: str, format: str, output_json: bool) -> None:
+@click.option("--images-json", "images_json", type=click.Path(exists=True), help="JSON file with image placement data from OPP")
+def apply_xliff(input_file: str, xliff: str, output: str, format: str, output_json: bool, images_json: str) -> None:
     """Apply XLIFF translation to original document.
 
     INPUT_FILE: Original document (DOCX/PPTX/EPUB/HTML)
@@ -369,6 +370,18 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str, output_js
     input_path = Path(input_file)
     output_path = Path(output)
     xliff_path = Path(xliff)
+
+    images = None
+    if images_json:
+        import json
+        try:
+            with open(images_json) as f:
+                images_data = json.load(f)
+            from orf.mcp.schemas import ImagePlacement
+            images = [ImagePlacement(**img) for img in images_data]
+            logger.info(f"Loaded {len(images)} images from {images_json}")
+        except Exception as e:
+            logger.warning(f"Failed to load images from {images_json}: {e}")
 
     logger.info(f"Applying XLIFF {xliff_path} to {input_path} -> {output_path} ({format})")
 
@@ -401,6 +414,26 @@ def apply_xliff(input_file: str, xliff: str, output: str, format: str, output_js
         )
 
     result = converter.convert(input_path, xliff_path, output_path)
+
+    if result.success and images:
+        try:
+            injected, orphaned = converter.inject_images(
+                input_path, images, output_path
+            )
+            logger.info(
+                f"Injected {len(injected)} images, {len(orphaned)} orphaned"
+            )
+            if orphaned:
+                for img in orphaned:
+                    logger.warning(
+                        f"Orphaned image (no position): mime_type={img.mime_type}"
+                    )
+        except AttributeError:
+            logger.warning(
+                "Converter does not support image injection, continuing without images"
+            )
+        except Exception as e:
+            logger.error(f"Image injection failed: {e}")
 
     if result.success:
         logger.info(f"Conversion successful: {result.output_path}")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import zipfile
 from pathlib import Path
 from typing import Any, Optional
@@ -11,6 +13,7 @@ from lxml import etree
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.error_handlers.conversion_error import XLIFFParseError, InlineFormattingError
 from orf.logging import get_logger
+from orf.mcp.schemas import ImagePlacement
 from orf.parsers.frontmatter import FrontmatterMetadata
 from orf.parsers.manifest import Manifest
 from orf.skeleton.inline_formatting import (
@@ -25,6 +28,9 @@ logger = get_logger("channel.xliff2pptx")
 # PPTX namespaces
 A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 A_PREFIX = f"{{{A_NS}}}"
+P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
+P_PREFIX = f"{{{P_NS}}}"
+R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
 # XLIFF namespace
 XLIFF_NS = "urn:oasis:names:tc:xliff:document:2.0"
@@ -352,3 +358,233 @@ class XLIFF2PPTXConverter(BaseConverter):
                     zf.writestr(name, modified_files[name])
                 else:
                     zf.writestr(name, data)
+
+    def inject_images(
+        self,
+        skeleton_path: Path | str,
+        images: list[ImagePlacement],
+        output_path: Path | str,
+    ) -> tuple[list[ImagePlacement], list[ImagePlacement]]:
+        """Inject images into PPTX skeleton at specified slide positions.
+
+        Args:
+            skeleton_path: Path to skeleton PPTX file.
+            images: List of ImagePlacement objects from OPP.
+            output_path: Path to write the output PPTX.
+
+        Returns:
+            Tuple of (injected_images, orphaned_images).
+        """
+        skeleton_path = Path(skeleton_path)
+        output_path = Path(output_path)
+
+        orphaned: list[ImagePlacement] = []
+        injected: list[ImagePlacement] = []
+
+        positioned = [img for img in images if img.slide_index is not None]
+        unpositioned = [img for img in images if img.slide_index is None]
+
+        if unpositioned:
+            for img in unpositioned:
+                logger.warning(
+                    "Image has no slide_index, appending to end: mime_type=%s",
+                    img.mime_type,
+                )
+            orphaned.extend(unpositioned)
+
+        if not positioned:
+            if images:
+                with zipfile.ZipFile(skeleton_path, "r") as zf_in:
+                    with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf_out:
+                        for item in zf_in.namelist():
+                            zf_out.writestr(item, zf_in.read(item))
+            return (injected, orphaned)
+
+        try:
+            skeleton_data = self._load_pptx_skeleton(skeleton_path)
+            files = skeleton_data["files"]
+        except Exception as e:
+            logger.error("Failed to load PPTX skeleton for image injection: %s", e)
+            orphaned.extend(images)
+            return (injected, orphaned)
+
+        img_by_slide: dict[int, list[ImagePlacement]] = {}
+        for img in positioned:
+            idx = img.slide_index
+            assert idx is not None, "positioned images must have slide_index"
+            if idx not in img_by_slide:
+                img_by_slide[idx] = []
+            img_by_slide[idx].append(img)
+
+        slide_numbers = sorted(img_by_slide.keys())
+
+        for slide_num in slide_numbers:
+            slide_file_name = f"ppt/slides/slide{slide_num + 1}.xml"
+            if slide_file_name not in files:
+                logger.warning(
+                    "Slide %d not found in skeleton, skipping images",
+                    slide_num,
+                )
+                orphaned.extend(img_by_slide[slide_num])
+                continue
+
+            slide_xml = files[slide_file_name].decode("utf-8")
+
+            for i, img in enumerate(img_by_slide[slide_num]):
+                try:
+                    img_bytes = self._get_image_bytes(img)
+                    rId = self._add_image_to_pptx(img_bytes, img.mime_type, files, slide_num)
+                    width, height = self._get_image_dimensions(img, img_bytes)
+                    pic_xml = self._create_pic_xml(rId, width, height, slide_num)
+                    pic_elem = etree.fromstring(pic_xml)
+
+                    root = etree.fromstring(slide_xml.encode("utf-8"))
+                    sp_tree = root.find(f".//{P_PREFIX}spTree")
+                    if sp_tree is not None:
+                        sp_tree.append(pic_elem)
+                        slide_xml = etree.tostring(root, encoding="unicode", xml_declaration=True)
+                        files[slide_file_name] = slide_xml.encode("utf-8")
+                        injected.append(img)
+                        logger.debug(
+                            "Injected image at slide %d: rId=%s, mime=%s",
+                            slide_num,
+                            rId,
+                            img.mime_type,
+                        )
+                    else:
+                        orphaned.append(img)
+                except Exception as e:
+                    logger.error("Failed to inject image into slide %d: %s", slide_num, e)
+                    orphaned.append(img)
+
+        self._repack_pptx(output_path, files, files)
+
+        if orphaned:
+            logger.warning(
+                "%d images could not be positioned and were not injected",
+                len(orphaned),
+            )
+
+        return (injected, orphaned)
+
+    def _get_image_bytes(self, img: ImagePlacement) -> bytes:
+        if img.data_base64:
+            return base64.b64decode(img.data_base64)
+        if img.file_path:
+            return Path(img.file_path).read_bytes()
+        raise ValueError("ImagePlacement must have data_base64 or file_path")
+
+    def _get_image_dimensions(
+        self, img: ImagePlacement, img_bytes: bytes
+    ) -> tuple[int, int]:
+        if img.width is not None and img.height is not None:
+            return (img.width, img.height)
+
+        try:
+            from PIL import Image
+            from io import BytesIO
+
+            img_obj = Image.open(BytesIO(img_bytes))
+            w, h = img_obj.size
+            return (w, h)
+        except Exception:
+            return (914400, 685800)
+
+    def _add_image_to_pptx(
+        self,
+        img_bytes: bytes,
+        mime_type: str,
+        files: dict[str, bytes],
+        slide_num: int,
+    ) -> str:
+        ext_map = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/gif": ".gif",
+            "image/bmp": ".bmp",
+            "image/webp": ".webp",
+        }
+        ext = ext_map.get(mime_type, ".png")
+        md5_hash = hashlib.md5(img_bytes).hexdigest()
+        dedup_name = f"image_{md5_hash[:8]}{ext}"
+        media_name = f"ppt/media/{dedup_name}"
+
+        existing_name = None
+        for name, data in files.items():
+            if name.startswith("ppt/media/") and data == img_bytes:
+                existing_name = name
+                break
+
+        if existing_name:
+            rid = existing_name.replace("ppt/media/", "rId")
+            return rid
+
+        files[media_name] = img_bytes
+
+        slide_rels_name = f"ppt/slides/_rels/slide{slide_num + 1}.xml.rels"
+        if slide_rels_name not in files:
+            rels_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/slide0.png"/></Relationships>'
+            files[slide_rels_name] = rels_xml.encode("utf-8")
+
+        rels_xml = files[slide_rels_name].decode("utf-8")
+        root = etree.fromstring(rels_xml.encode("utf-8"))
+
+        max_rid = 0
+        for rel in root.xpath("//*"):
+            rid = rel.get("Id", "")
+            if rid.startswith("rId"):
+                try:
+                    num = int(rid[3:])
+                    if num > max_rid:
+                        max_rid = num
+                except ValueError:
+                    pass
+
+        new_rid = f"rId{max_rid + 1}"
+        rels_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+        new_rel = etree.SubElement(root, f"{{{rels_ns}}}Relationship")
+        new_rel.set("Id", new_rid)
+        new_rel.set(
+            "Type",
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+        )
+        new_rel.set("Target", f"media/{dedup_name}")
+
+        files[slide_rels_name] = etree.tostring(root, encoding="unicode").encode("utf-8")
+
+        return new_rid
+
+    def _create_pic_xml(
+        self,
+        rId: str,
+        cx: int,
+        cy: int,
+        slide_num: int,
+    ) -> str:
+        x = 457200
+        y = 457200
+        pic = f'''<p:pic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:nvPicPr>
+    <p:cNvPr id="1" name="Picture" descr="image"/>
+    <p:cNvPicPr>
+      <a:picLocks noChangeAspect="1"/>
+    </p:cNvPicPr>
+    <p:nvPr/>
+  </p:nvPicPr>
+  <p:blipFill>
+    <a:blip r:embed="{rId}"/>
+    <a:stretch>
+      <a:fillRect/>
+    </a:stretch>
+  </p:blipFill>
+  <p:spPr>
+    <a:xfrm>
+      <a:off x="{x}" y="{y}"/>
+      <a:ext cx="{cx}" cy="{cy}"/>
+    </a:xfrm>
+    <a:prstGeom prst="rect">
+      <a:avLst/>
+    </a:prstGeom>
+  </p:spPr>
+</p:pic>'''
+        return pic

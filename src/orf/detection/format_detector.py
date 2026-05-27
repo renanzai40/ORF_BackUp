@@ -4,12 +4,14 @@ Detects document format using a priority chain:
 1. manifest.json (from OPP) - explicit format field
 2. Magic bytes - binary signatures in file header
 3. Extension fallback - file extension matching
+4. ZIP structure (skeleton) - internal file paths
 
 Raises FormatDetectionError when detection fails at all stages.
 """
 
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 
 from orf.error_handlers.conversion_error import FormatDetectionError
@@ -148,3 +150,86 @@ class FormatDetector:
             str(file_path),
             f"Cannot detect format: no manifest, magic bytes unknown, unknown extension '{ext}'"
         )
+
+    def detect_from_skeleton(self, skeleton_path: Path | str) -> str:
+        """Detect source format from skeleton.zip internal ZIP structure.
+
+        Analyzes the internal file paths within a skeleton ZIP to determine
+        the original document format. This is used by XLIFF backfill channels
+        to determine the appropriate image injection strategy.
+
+        Args:
+            skeleton_path: Path to the skeleton ZIP file
+
+        Returns:
+            Format name string (e.g., "DOCX", "PPTX", "EPUB", "HTML")
+
+        Raises:
+            FormatDetectionError: If skeleton cannot be read or format unknown
+        """
+        skeleton_path = Path(skeleton_path)
+
+        if not skeleton_path.exists():
+            raise FormatDetectionError(str(skeleton_path), "Skeleton file does not exist")
+
+        try:
+            with zipfile.ZipFile(skeleton_path, "r") as zf:
+                namelist = zf.namelist()
+
+            # DOCX: word/document.xml
+            if "word/document.xml" in namelist:
+                logger.debug("Detected DOCX format from skeleton structure")
+                return "DOCX"
+
+            # PPTX: ppt/presentation.xml
+            if "ppt/presentation.xml" in namelist:
+                logger.debug("Detected PPTX format from skeleton structure")
+                return "PPTX"
+
+            # XLSX: xl/workbook.xml
+            if "xl/workbook.xml" in namelist:
+                logger.debug("Detected XLSX format from skeleton structure")
+                return "XLSX"
+
+            # EPUB: mimetype file + OEBPS/ or EPUB Content/
+            if "mimetype" in namelist and any(
+                f.startswith("OEBPS/") or f.startswith("Content/")
+                for f in namelist
+            ):
+                logger.debug("Detected EPUB format from skeleton structure")
+                return "EPUB"
+
+            # ODF (ODT): mimetype + content.xml (LibreOffice format)
+            if "mimetype" in namelist and "content.xml" in namelist:
+                logger.debug("Detected ODT format from skeleton structure")
+                return "ODT"
+
+            # HTML: index.html or other top-level HTML files
+            if any(
+                f.lower().endswith((".html", ".htm")) and "/" not in f
+                for f in namelist
+            ):
+                logger.debug("Detected HTML format from skeleton structure")
+                return "HTML"
+
+            # Try second-level HTML files
+            if any(
+                f.lower().endswith((".html", ".htm")) and f.count("/") == 1
+                for f in namelist
+            ):
+                logger.debug("Detected HTML format from skeleton structure (subdirectory)")
+                return "HTML"
+
+            raise FormatDetectionError(
+                str(skeleton_path),
+                "Cannot detect format: no known internal structure"
+            )
+
+        except zipfile.BadZipFile as e:
+            raise FormatDetectionError(
+                str(skeleton_path), f"Invalid ZIP file: {e}"
+            )
+        except OSError as e:
+            raise FormatDetectionError(
+                str(skeleton_path), f"Cannot read skeleton file: {e}"
+            )

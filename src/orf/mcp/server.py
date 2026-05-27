@@ -1,9 +1,15 @@
 """ORF MCP Server with FastMCP."""
 
-from typing import Optional
+from __future__ import annotations
+
+import base64
 import json
+import os
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
+from typing import Optional
 
 try:
     from fastmcp import FastMCP
@@ -12,6 +18,7 @@ except ImportError:
 
 
 from orf.mcp.security import PathValidator
+from orf.mcp.schemas import ImagePlacement
 from orf.logging import get_logger
 
 logger = get_logger("mcp.server")
@@ -112,22 +119,94 @@ def _register_tools():
         return json.dumps(_run_cli_command(args))
 
     @server.tool()
-    def apply_xliff(input_file: str, xliff_path: str, output_path: str, format: str) -> str:
-        """Apply XLIFF translation to original document."""
-        # Validate paths
+    def apply_xliff(
+        input_file: str,
+        xliff_path: str,
+        output_path: str,
+        format: str,
+        images: Optional[list[dict]] = None,
+    ) -> str:
+        """Apply XLIFF translation to original document with optional image injection.
+
+        Args:
+            input_file: Original document file path (skeleton).
+            xliff_path: Translated XLIFF file path.
+            output_path: Output file path.
+            format: Output format (docx, pptx, epub, html, odt).
+            images: Optional list of image placement data from OPP for precise image restoration.
+
+        Returns:
+            JSON result string.
+        """
         for p in [input_file, xliff_path]:
             valid, error = PathValidator.validate(p)
             if not valid:
                 return json.dumps({
                     "success": False,
                     "output_path": None,
-                    "errors": [{"code": "PATH_NOT_ALLOWED", "message": error, "recovery_strategy": None}],
+                    "errors": [{"code": "PATH_NOT_ALLOWED", "message": error}],
                     "warnings": [],
                     "metadata": {}
                 })
 
-        args = ["apply-xliff", input_file, "--xliff", xliff_path, "--output", output_path, "--format", format]
-        return json.dumps(_run_cli_command(args))
+        args = [
+            "apply-xliff", input_file,
+            "--xliff", xliff_path,
+            "--output", output_path,
+            "--format", format,
+        ]
+
+        if images:
+            images_data = []
+            for img_dict in images:
+                try:
+                    img_bytes = None
+                    if "data_base64" in img_dict and img_dict["data_base64"]:
+                        img_bytes = base64.b64decode(img_dict["data_base64"])
+                    elif "file_path" in img_dict and img_dict["file_path"]:
+                        img_bytes = Path(img_dict["file_path"]).read_bytes()
+
+                    if img_bytes:
+                        b64 = base64.b64encode(img_bytes).decode("utf-8")
+                        img_record = {
+                            "data_base64": b64,
+                            "mime_type": img_dict.get("mime_type", "image/png"),
+                            "width": img_dict.get("width"),
+                            "height": img_dict.get("height"),
+                            "paragraph_index": img_dict.get("paragraph_index"),
+                            "slide_index": img_dict.get("slide_index"),
+                            "page_number": img_dict.get("page_number"),
+                            "element_index": img_dict.get("element_index"),
+                            "spine_index": img_dict.get("spine_index"),
+                        }
+                        images_data.append(img_record)
+                except Exception as e:
+                    logger.warning("Failed to process image placement: %s", e)
+                    continue
+
+            if images_data:
+                fd, temp_path = tempfile.mkstemp(suffix=".json", prefix="orf_images_")
+                try:
+                    os.write(fd, json.dumps(images_data).encode("utf-8"))
+                    os.close(fd)
+                    args.extend(["--images-json", temp_path])
+                    temp_created = True
+                except Exception as e:
+                    logger.error("Failed to create temp images file: %s", e)
+                    os.close(fd)
+                    temp_created = False
+            else:
+                temp_created = False
+
+        result = _run_cli_command(args)
+
+        if temp_created:
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
+
+        return json.dumps(result)
 
     @server.tool()
     def batch_convert(input_dir: str, target_format: str, pattern: str = "*.md") -> str:

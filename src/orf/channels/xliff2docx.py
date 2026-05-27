@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -11,6 +14,7 @@ from lxml import etree
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.error_handlers.conversion_error import XLIFFParseError
 from orf.logging import get_logger
+from orf.mcp.schemas import ImagePlacement
 from orf.skeleton.inline_formatting import (
     DOCXInlineApplier,
     InlineElement,
@@ -23,6 +27,12 @@ logger = get_logger("channel.xliff2docx")
 # XLIFF namespaces
 XLIFF_NS = "urn:oasis:names:tc:xliff:document:1.2"
 XLIFF_NS_MAP = {"xliff": XLIFF_NS}
+
+# Drawing namespaces
+A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+WP_NS = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+PIC_NS = "http://schemas.openxmlformats.org/drawingml/2006/picture"
+W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 @dataclass
@@ -417,3 +427,258 @@ class XLIFF2DOCXConverter(BaseConverter):
                 if elem.type.lower() in ("underline", "double-underline", "single-underline"):
                     val = "single" if elem.type.lower() == "underline" else "double"
                     prop_elem.set(f"{{{self.docx_applier.W_NS}}}val", val)
+
+    def inject_images(
+        self,
+        skeleton_path: Path | str,
+        images: list[ImagePlacement],
+        output_path: Path | str,
+    ) -> tuple[list[ImagePlacement], list[ImagePlacement]]:
+        """Inject images into DOCX skeleton at specified paragraph positions.
+
+        Args:
+            skeleton_path: Path to skeleton DOCX file.
+            images: List of ImagePlacement objects from OPP.
+            output_path: Path to write the output DOCX.
+
+        Returns:
+            Tuple of (injected_images, orphaned_images).
+        """
+        skeleton_path = Path(skeleton_path)
+        output_path = Path(output_path)
+
+        orphaned: list[ImagePlacement] = []
+        injected: list[ImagePlacement] = []
+
+        positioned = [img for img in images if img.paragraph_index is not None]
+        unpositioned = [img for img in images if img.paragraph_index is None]
+
+        if unpositioned:
+            for img in unpositioned:
+                logger.warning(
+                    "Image has no paragraph_index, appending to end: mime_type=%s",
+                    img.mime_type,
+                )
+            orphaned.extend(unpositioned)
+
+        if not positioned:
+            if images:
+                self.skeleton_loader.load_skeleton(str(skeleton_path))
+                self.skeleton_loader.repack_docx(str(output_path))
+            return (injected, orphaned)
+
+        try:
+            skeleton_data = self.skeleton_loader.load_skeleton(str(skeleton_path))
+        except Exception as e:
+            logger.error("Failed to load skeleton for image injection: %s", e)
+            orphaned.extend(images)
+            return (injected, orphaned)
+
+        document_xml = skeleton_data["xml"]
+        files = skeleton_data["files"]
+        namelist = list(files.keys())
+
+        root = etree.fromstring(document_xml.encode("utf-8"))
+        paragraphs = root.xpath(f"//{{{W_NS}}}p", namespaces={"w": W_NS})
+
+        img_by_para: dict[int, list[ImagePlacement]] = {}
+        for img in positioned:
+            idx = img.paragraph_index
+            assert idx is not None, "positioned images must have paragraph_index"
+            if idx not in img_by_para:
+                img_by_para[idx] = []
+            img_by_para[idx].append(img)
+
+        for para_idx, imgs in img_by_para.items():
+            if para_idx < 0 or para_idx >= len(paragraphs):
+                logger.warning(
+                    "paragraph_index %d out of range, %d paragraphs available",
+                    para_idx,
+                    len(paragraphs),
+                )
+                orphaned.extend(imgs)
+                continue
+
+            para = paragraphs[para_idx]
+            next_r = None
+            for child in para:
+                if child.tag == f"{{{W_NS}}}r":
+                    next_r = child
+                    break
+
+            for i, img in enumerate(imgs):
+                try:
+                    img_bytes = self._get_image_bytes(img)
+                    rId = self._add_image_to_zip(img_bytes, img.mime_type, files, namelist)
+                    width, height = self._get_image_dimensions(img, img_bytes)
+                    drawing_xml = self._create_drawing_xml(rId, width, height)
+                    drawing_elem = etree.fromstring(drawing_xml)
+
+                    if next_r is not None:
+                        insert_pos = list(para).index(next_r)
+                        para.insert(insert_pos + i, drawing_elem)
+                    else:
+                        para.append(drawing_elem)
+
+                    injected.append(img)
+                    logger.debug(
+                        "Injected image at paragraph %d: rId=%s, mime=%s",
+                        para_idx,
+                        rId,
+                        img.mime_type,
+                    )
+                except Exception as e:
+                    logger.error("Failed to inject image: %s", e)
+                    orphaned.append(img)
+
+        new_xml = etree.tostring(root, encoding="unicode", xml_declaration=True)
+
+        files_copy = dict(files)
+        files_copy["word/document.xml"] = new_xml.encode("utf-8")
+
+        try:
+            with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for name, data in files_copy.items():
+                    zf.writestr(name, data)
+        except Exception as e:
+            logger.error("Failed to repack DOCX with images: %s", e)
+            return (injected, orphaned + [img for img in positioned if img not in injected])
+
+        if orphaned:
+            logger.warning(
+                "%d images could not be positioned and were not injected",
+                len(orphaned),
+            )
+
+        return (injected, orphaned)
+
+    def _get_image_bytes(self, img: ImagePlacement) -> bytes:
+        if img.data_base64:
+            return base64.b64decode(img.data_base64)
+        if img.file_path:
+            return Path(img.file_path).read_bytes()
+        raise ValueError("ImagePlacement must have data_base64 or file_path")
+
+    def _get_image_dimensions(
+        self, img: ImagePlacement, img_bytes: bytes
+    ) -> tuple[int, int]:
+        if img.width is not None and img.height is not None:
+            return (img.width, img.height)
+
+        try:
+            from PIL import Image
+            from io import BytesIO
+
+            img_obj = Image.open(BytesIO(img_bytes))
+            w, h = img_obj.size
+            return (w, h)
+        except Exception:
+            return (200000, 150000)
+
+    def _add_image_to_zip(
+        self,
+        img_bytes: bytes,
+        mime_type: str,
+        files: dict[str, bytes],
+        namelist: list[str],
+    ) -> str:
+        ext_map = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/gif": ".gif",
+            "image/bmp": ".bmp",
+            "image/webp": ".webp",
+        }
+        ext = ext_map.get(mime_type, ".png")
+        md5_hash = hashlib.md5(img_bytes).hexdigest()
+        dedup_name = f"image_{md5_hash[:8]}{ext}"
+
+        existing_rid = None
+        for name, data in files.items():
+            if name.startswith("word/media/") and data == img_bytes:
+                existing_rid = name
+                break
+
+        if existing_rid:
+            return existing_rid.replace("word/media/", "rId")
+
+        media_name = f"word/media/{dedup_name}"
+        files[media_name] = img_bytes
+        namelist.append(media_name)
+
+        rels_name = "word/_rels/document.xml.rels"
+        if rels_name in files:
+            rels_xml = files[rels_name].decode("utf-8")
+            root = etree.fromstring(rels_xml.encode("utf-8"))
+
+            max_rid = 0
+            for rel in root.xpath("//*"):
+                rid = rel.get("Id", "")
+                if rid.startswith("rId"):
+                    try:
+                        num = int(rid[3:])
+                        if num > max_rid:
+                            max_rid = num
+                    except ValueError:
+                        pass
+
+            new_rid = f"rId{max_rid + 1}"
+            rels_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+            new_rel = etree.SubElement(root, f"{{{rels_ns}}}Relationship")
+            new_rel.set("Id", new_rid)
+            new_rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image")
+            new_rel.set("Target", f"media/{dedup_name}")
+
+            files[rels_name] = etree.tostring(root, encoding="unicode").encode("utf-8")
+
+            return new_rid
+        else:
+            return "rId1"
+
+    def _create_drawing_xml(
+        self,
+        rId: str,
+        cx: int,
+        cy: int,
+    ) -> str:
+        drawing = f'''
+<w:drawing xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+           xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+           xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+           xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"
+           xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+             distT="0" distB="0" distL="0" distR="0">
+    <wp:extent cx="{cx}" cy="{cy}"/>
+    <wp:docPr id="1" name="Picture"/>
+    <wp:cNvGraphicFramePr>
+      <a:graphicFrameLocks noChangeAspect="1"/>
+    </wp:cNvGraphicFramePr>
+    <a:graphic>
+      <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+        <pic:pic>
+          <pic:nvPicPr>
+            <pic:cNvPr id="1" name="image"/>
+            <pic:cNvPicPr/>
+          </pic:nvPicPr>
+          <pic:blipFill>
+            <a:blip r:embed="{rId}"/>
+            <a:stretch>
+              <a:fillRect/>
+            </a:stretch>
+          </pic:blipFill>
+          <pic:spPr>
+            <a:xfrm>
+              <a:off x="0" y="0"/>
+              <a:ext cx="{cx}" cy="{cy}"/>
+            </a:xfrm>
+            <a:prstGeom prst="rect">
+              <a:avLst/>
+            </a:prstGeom>
+          </pic:spPr>
+        </pic:pic>
+      </a:graphicData>
+    </a:graphic>
+  </wp:inline>
+</w:drawing>'''
+        return drawing

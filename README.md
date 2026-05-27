@@ -70,6 +70,9 @@ orf apply-md translated.md --target-format epub --output result.epub --json
 # XLIFF 回填（需要 skeleton.zip）
 orf apply-xliff original.docx --xliff translated.xlf --output result.docx
 
+# XLIFF 回填 + 图片注入（OPP 输出 images.json）
+orf apply-xliff original.docx --xliff translated.xlf --output result.docx --images-json images.json
+
 # 批量转换 — JSON 输出
 orf convert-batch ./translated --target-format docx --pattern "*.md" --json
 ```
@@ -82,7 +85,7 @@ orf-mcp-server
 
 # AI Agent 可通过 MCP 协议调用以下工具：
 # - apply_md       将 MD 转换为目标格式
-# - apply_xliff    应用 XLIFF 翻译到原始文档
+# - apply_xliff    应用 XLIFF 翻译到原始文档（含可选图片注入）
 # - batch_convert  批量转换 MD 文件
 # - detect_format  自动检测文档格式
 # - info           获取文档信息
