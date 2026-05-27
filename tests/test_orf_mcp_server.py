@@ -1,12 +1,12 @@
 """Integration tests for ORF MCP Server."""
 
 import pytest
+import asyncio
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import json
 import sys
 
-# Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from orf.mcp.server import get_server, _run_cli_command
@@ -92,10 +92,10 @@ class TestApplyMdTool:
         server = get_server()
         
         # Test path validation blocks traversal
-        result = server.call_tool("apply_md", {
+        result = asyncio.run(server.call_tool("apply_md", {
             "input_md": "../../etc/passwd",
             "target_format": "docx"
-        })
+        }))
         result_data = json.loads(result)
         assert result_data["success"] is False
         assert "PATH_NOT_ALLOWED" in str(result_data["errors"])
@@ -108,12 +108,12 @@ class TestApplyXLIFFTool:
         """apply_xliff should validate paths."""
         server = get_server()
         
-        result = server.call_tool("apply_xliff", {
+        result = asyncio.run(server.call_tool("apply_xliff", {
             "input_file": "../../etc/passwd",
             "xliff_path": "test.xlf",
             "output_path": "out.docx",
             "format": "docx"
-        })
+        }))
         result_data = json.loads(result)
         assert result_data["success"] is False
 
@@ -125,11 +125,11 @@ class TestBatchConvertTool:
         """batch_convert should handle invalid paths."""
         server = get_server()
         
-        result = server.call_tool("batch_convert", {
+        result = asyncio.run(server.call_tool("batch_convert", {
             "input_dir": "../../dangerous",
             "target_format": "docx",
             "pattern": "*.md"
-        })
+        }))
         result_data = json.loads(result)
         assert result_data["success_count"] == 0
         assert len(result_data["errors"]) > 0
@@ -142,9 +142,9 @@ class TestDetectFormatTool:
         """detect_format should handle invalid paths."""
         server = get_server()
         
-        result = server.call_tool("detect_format", {
+        result = asyncio.run(server.call_tool("detect_format", {
             "file_path": "../../etc/passwd"
-        })
+        }))
         result_data = json.loads(result)
         assert result_data["format"] == "UNKNOWN"
         assert result_data["confidence"] == 0.0
@@ -157,9 +157,9 @@ class TestInfoTool:
         """info should handle invalid paths."""
         server = get_server()
         
-        result = server.call_tool("info", {
+        result = asyncio.run(server.call_tool("info", {
             "file_path": "../../etc/passwd"
-        })
+        }))
         result_data = json.loads(result)
         assert result_data["manifest_status"] == "error"
 
@@ -187,10 +187,10 @@ class TestMCPIntegration:
         )
         
         server = get_server()
-        result = server.call_tool("apply_md", {
+        result = asyncio.run(server.call_tool("apply_md", {
             "input_md": "translated.md",
             "target_format": "docx"
-        })
+        }))
         result_data = json.loads(result)
         
         assert result_data["success"] is True

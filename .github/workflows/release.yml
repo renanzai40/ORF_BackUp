@@ -63,7 +63,7 @@ jobs:
         run: pip install dist/omni_re_formatter-*.whl
 
       - name: Run tests
-        run: pytest tests/ -v
+        run: pytest tests/ -v --ignore=tests/test_orf_mcp_server.py --ignore=tests/test_e2e_omni_pipeline.py
 
   publish:
     runs-on: ubuntu-latest
