@@ -64,6 +64,7 @@
   - `_backfill_translation` 重写：strip inline tag 后匹配 normalized text
   - 新增 `_backfill_with_inline_elements()` / `_backfill_split_runs()` 处理跨多 run 文本
   - 修复 OPP XLIFF 含 `<bx>/<ex>` 内联标签时回填 100% 失败的问题
+  - **修复 XPath 无效表达式**：所有 `//{{{W_NS}}}t` 改为 `//w:t`（XPath 1.0 不支持 `{uri}element` 语法）
 - **xliff2docx.py:343-356**: `_backfill_translation` 返回修改后的 document_xml
   - 从 `bool` 改为 `str`，每次调用返回最新的 document_xml
   - 解决 `document_xml` 传值而非传引用导致修改无法回写的问题

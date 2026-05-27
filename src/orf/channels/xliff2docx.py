@@ -393,28 +393,27 @@ class XLIFF2DOCXConverter(BaseConverter):
             return document_xml
 
         root = etree.fromstring(document_xml.encode("utf-8"))
-        W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
         found = False
         source_normalized = re.sub(r'<[^>]+>', '', source_text) if source_text else ""
 
         if inline_elements:
             found = self._backfill_with_inline_elements(
-                root, W_NS, source_normalized, target_text, inline_elements
+                root, source_normalized, target_text, inline_elements
             )
         else:
-            for t_elem in root.xpath(f"//{{{W_NS}}}t"):
+            for t_elem in root.xpath("//w:t"):
                 if t_elem.text and source_normalized in t_elem.text:
                     found = True
                     t_elem.text = target_text
 
         if not found:
-            paragraphs = root.xpath(f"//{{{W_NS}}}p", namespaces={"w": W_NS})
+            paragraphs = root.xpath("//w:p")
             for p in paragraphs:
-                text_runs = [t.text for t in p.xpath(f".//{{{W_NS}}}t") if t.text]
+                text_runs = [t.text for t in p.xpath(".//w:t") if t.text]
                 concat_text = "".join(text_runs)
                 if source_normalized in concat_text:
-                    found = self._backfill_split_runs(p, W_NS, source_normalized, target_text)
+                    found = self._backfill_split_runs(p, source_normalized, target_text)
                     break
 
         new_xml = etree.tostring(root, encoding="unicode", xml_declaration=True)
@@ -423,7 +422,6 @@ class XLIFF2DOCXConverter(BaseConverter):
     def _backfill_with_inline_elements(
         self,
         root: etree._Element,
-        W_NS: str,
         source_normalized: str,
         target_text: str,
         inline_elements: list[InlineElement],
@@ -434,12 +432,12 @@ class XLIFF2DOCXConverter(BaseConverter):
         then applies translations preserving inline structure.
         """
         found = False
-        for p in root.xpath(f"//{{{W_NS}}}p", namespaces={"w": W_NS}):
-            text_runs = p.xpath(f".//{{{W_NS}}}t", namespaces={"w": W_NS})
+        for p in root.xpath("//w:p"):
+            text_runs = p.xpath(".//w:t")
             text_content = "".join(t.text or "" for t in text_runs)
 
             if source_normalized in text_content:
-                found = self._backfill_split_runs(p, W_NS, source_normalized, target_text)
+                found = self._backfill_split_runs(p, source_normalized, target_text)
                 if found:
                     break
 
@@ -448,7 +446,6 @@ class XLIFF2DOCXConverter(BaseConverter):
     def _backfill_split_runs(
         self,
         paragraph: etree._Element,
-        W_NS: str,
         source_normalized: str,
         target_text: str,
     ) -> bool:
@@ -457,7 +454,7 @@ class XLIFF2DOCXConverter(BaseConverter):
         Finds the first run containing source_normalized, replaces it with
         target_text, and clears subsequent runs.
         """
-        runs = paragraph.xpath(f".//{{{W_NS}}}t", namespaces={"w": W_NS})
+        runs = paragraph.xpath(".//w:t")
         concat = "".join(r.text or "" for r in runs)
 
         if source_normalized not in concat:
@@ -567,7 +564,7 @@ class XLIFF2DOCXConverter(BaseConverter):
         namelist = list(files.keys())
 
         root = etree.fromstring(document_xml.encode("utf-8"))
-        paragraphs = root.xpath(f"//{{{W_NS}}}p", namespaces={"w": W_NS})
+        paragraphs = root.xpath("//w:p")
 
         img_by_para: dict[int, list[ImagePlacement]] = {}
         for img in positioned:
