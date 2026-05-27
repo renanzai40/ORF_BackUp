@@ -18,7 +18,6 @@ except ImportError:
 
 
 from orf.mcp.security import PathValidator
-from orf.mcp.schemas import ImagePlacement
 from orf.logging import get_logger
 
 logger = get_logger("mcp.server")
