@@ -24,9 +24,15 @@ from orf.skeleton.skeleton_loader import SkeletonLoader
 
 logger = get_logger("channel.xliff2docx")
 
-# XLIFF namespaces
-XLIFF_NS = "urn:oasis:names:tc:xliff:document:1.2"
-XLIFF_NS_MAP = {"xliff": XLIFF_NS}
+        # XLIFF namespaces
+XLIFF_NS_1_2 = "urn:oasis:names:tc:xliff:document:1.2"
+XLIFF_NS_1_1 = "urn:oasis:names:tc:xliff:document:1.1"
+XLIFF_NS_2_0 = "urn:oasis:names:tc:xliff:document:2.0"
+XLIFF_NS_MAP_1_2 = {"xliff": XLIFF_NS_1_2}
+XLIFF_NS_MAP_1_1 = {"xliff": XLIFF_NS_1_1}
+XLIFF_NS_MAP_2_0 = {"xliff": XLIFF_NS_2_0}
+XLIFF_NS = XLIFF_NS_1_2  # Default to 1.2 for backwards compatibility
+XLIFF_NS_MAP = XLIFF_NS_MAP_1_2
 
 # Drawing namespaces
 A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -112,21 +118,36 @@ class XLIFF2DOCXConverter(BaseConverter):
 
         trans_units: list[dict[str, Any]] = []
 
+        # Auto-detect XLIFF namespace from root element
+        # Check namespace-uri() of root to determine if 1.1 or 1.2
+        root_ns_uri = root.namespaceURI() if hasattr(root, 'namespaceURI') else ""
+        if "xliff" in root_ns_uri.lower():
+            if "1.1" in root_ns_uri:
+                ns_map = XLIFF_NS_MAP_1_1
+                logger.debug("Detected XLIFF 1.1 namespace from root element")
+            else:
+                ns_map = XLIFF_NS_MAP_1_2
+                logger.debug("Detected XLIFF namespace from root element: %s", root_ns_uri)
+        else:
+            # Fallback to 1.2 then 1.1
+            ns_map = XLIFF_NS_MAP_1_2
+            logger.debug("Using XLIFF namespace 1.2 (fallback)")
+
         # Handle both xliff 1.2 and 2.0 formats
         # xliff 1.2: /xliff/file/body/trans-unit
         # xliff 2.0: /xliff/ns:file/ns:unit
 
-        # Try xliff 1.2 first
+        # Try xliff 1.2 trans-unit elements
         for tu in root.xpath(
             "//xliff:trans-unit",
-            namespaces=XLIFF_NS_MAP,
+            namespaces=ns_map,
         ):
             tu_id = tu.get("id")
             if not tu_id:
                 continue
 
-            source_el = tu.find("xliff:source", namespaces=XLIFF_NS_MAP)
-            target_el = tu.find("xliff:target", namespaces=XLIFF_NS_MAP)
+            source_el = tu.find("xliff:source", namespaces=ns_map)
+            target_el = tu.find("xliff:target", namespaces=ns_map)
 
             source_text = (
                 "".join(source_el.itertext()) if source_el is not None else ""
@@ -146,23 +167,55 @@ class XLIFF2DOCXConverter(BaseConverter):
                 "inline_elements": inline_elements,
             })
 
-        # Try xliff 2.0 unit elements if no 1.2 trans-units found
+        # Try xliff 1.1 trans-unit if no 1.2 units found
+        if not trans_units and ns_map == XLIFF_NS_MAP_1_2:
+            for tu in root.xpath(
+                "//xliff:trans-unit",
+                namespaces=XLIFF_NS_MAP_1_1,
+            ):
+                tu_id = tu.get("id")
+                if not tu_id:
+                    continue
+
+                source_el = tu.find("xliff:source", namespaces=XLIFF_NS_MAP_1_1)
+                target_el = tu.find("xliff:target", namespaces=XLIFF_NS_MAP_1_1)
+
+                source_text = (
+                    "".join(source_el.itertext()) if source_el is not None else ""
+                )
+                target_text = (
+                    "".join(target_el.itertext()) if target_el is not None else ""
+                )
+
+                source_xml = etree.tostring(source_el, encoding="unicode") if source_el is not None else ""
+                inline_elements = self._extract_inline_elements(source_xml)
+
+                trans_units.append({
+                    "id": tu_id,
+                    "source": source_text,
+                    "target": target_text,
+                    "inline_elements": inline_elements,
+                })
+            if trans_units:
+                logger.debug("Found %d trans-units using XLIFF 1.1 namespace", len(trans_units))
+
+        # Try xliff 2.0 unit elements if no 1.2/1.1 trans-units found
         if not trans_units:
             for unit in root.xpath(
                 "//xliff:unit",
-                namespaces=XLIFF_NS_MAP,
+                namespaces=XLIFF_NS_MAP_2_0,
             ):
                 unit_id = unit.get("id")
                 if not unit_id:
                     continue
 
                 # xliff 2.0 uses segement elements inside unit
-                segments = unit.findall("xliff:segment", namespaces=XLIFF_NS_MAP)
+                segments = unit.findall("xliff:segment", namespaces=XLIFF_NS_MAP_2_0)
                 if segments:
                     for seg in segments:
                         seg_id = seg.get("id", unit_id)
-                        source_el = seg.find("xliff:source", namespaces=XLIFF_NS_MAP)
-                        target_el = seg.find("xliff:target", namespaces=XLIFF_NS_MAP)
+                        source_el = seg.find("xliff:source", namespaces=XLIFF_NS_MAP_2_0)
+                        target_el = seg.find("xliff:target", namespaces=XLIFF_NS_MAP_2_0)
 
                         source_text = (
                             "".join(source_el.itertext()) if source_el is not None else ""
@@ -182,8 +235,8 @@ class XLIFF2DOCXConverter(BaseConverter):
                         })
                 else:
                     # No segments, treat whole unit as one trans-unit
-                    source_el = unit.find("xliff:source", namespaces=XLIFF_NS_MAP)
-                    target_el = unit.find("xliff:target", namespaces=XLIFF_NS_MAP)
+                    source_el = unit.find("xliff:source", namespaces=XLIFF_NS_MAP_2_0)
+                    target_el = unit.find("xliff:target", namespaces=XLIFF_NS_MAP_2_0)
 
                     source_text = (
                         "".join(source_el.itertext()) if source_el is not None else ""

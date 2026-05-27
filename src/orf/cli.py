@@ -73,6 +73,7 @@ def main(verbose: bool) -> None:
 @click.option("--lang", type=str, default="zh", help="EPUB 语言")
 @click.option("--embed-images", is_flag=True, help="EPUB 嵌入图片")
 @click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
+@click.option("--images-json", "images_json", type=click.Path(exists=True), help="JSON file with image placement data from OPP")
 def apply_md(
     input_md: str,
     target_format: str,
@@ -84,6 +85,7 @@ def apply_md(
     lang: str,
     embed_images: bool,
     output_json: bool,
+    images_json: str | None,
 ) -> None:
     """将 MD 文件转换为目标格式
 
@@ -224,8 +226,40 @@ def apply_md(
         show_percent=True,
         file=sys.stderr if output_json else None,
     ) as bar:
-        result = converter.convert(input_path, output_path, **options)
         bar.update(1)
+        result = converter.convert(input_path, output_path, **options)
+
+    images = None
+    if images_json:
+        try:
+            import json
+            with open(images_json) as f:
+                images_data = json.load(f)
+            from orf.mcp.schemas import ImagePlacement
+            images = [ImagePlacement(**img) for img in images_data]
+            logger.info(f"Loaded {len(images)} images from {images_json}")
+        except Exception as e:
+            logger.warning(f"Failed to load images from {images_json}: {e}")
+
+    if result.success and images:
+        try:
+            injected, orphaned = converter.inject_images(
+                output_path, images, output_path
+            )
+            logger.info(
+                f"Injected {len(injected)} images, {len(orphaned)} orphaned"
+            )
+            if orphaned:
+                for img in orphaned:
+                    logger.warning(
+                        f"Orphaned image (no position): mime_type={img.mime_type}"
+                    )
+        except AttributeError:
+            logger.warning(
+                "Converter does not support image injection"
+            )
+        except Exception as e:
+            logger.error(f"Image injection failed: {e}")
 
     if result.success:
         logger.info(f"Conversion successful: {result.output_path}")

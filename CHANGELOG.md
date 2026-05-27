@@ -42,6 +42,19 @@
 | `xliff2html` | `inject_images()` | 按 `element_index` 插入 `<img>` 到 DOM |
 | `xliff2epub` | `inject_images()` | 按 `spine_index` 插入到章节 XHTML |
 
+### 🛠️ 修复
+
+- **xliff2docx.py:28-38**: XLIFF namespace 兼容性
+  - 新增 `XLIFF_NS_1_1` / `XLIFF_NS_2_0` 常量，支持 OPP 输出的 XLIFF 1.1 namespace
+  - 自动检测 root 元素 namespace，先尝试 1.2 → 1.1 → 2.0 降级策略
+  - 解决 OPP XLIFF 1.1 与 ORF 硬编码 1.2 导致的解析失败问题
+- **cli.py:75**: `apply-md` 命令新增 `--images-json` 参数
+  - 支持接收 OPP 图片 placement JSON 文件
+  - 加载后调用 converter 的 `inject_images()` 方法注入图片
+- **md2docx.py / md2epub.py**: 新增 `inject_images()` stub methods
+  - MD 链路图片由 Pandoc 自动处理（base64 内嵌在 MD 中）
+  - stub 返回 `(empty, all_images)` 并记录 WARNING 日志说明不支持段落索引注入
+
 ### 🐛 Orphaned 图片处理
 
 - 无位置信息的图片统一采用 **WARNING 日志 + 末尾追加**策略

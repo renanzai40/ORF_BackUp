@@ -97,3 +97,21 @@ class MD2DOCXConverter(BaseConverter):
                 success=False,
                 errors=["Pandoc not installed or not in PATH"],
             )
+
+    def inject_images(
+        self,
+        skeleton_path: Path | str,
+        images: list,
+        output_path: Path | str,
+    ) -> tuple[list, list]:
+        """MD2DOCX does not support image injection via paragraph_index.
+
+        Images embedded in MD as base64 data URIs are handled by Pandoc automatically.
+        Use Pandoc's --resource-path and --embed-media flag to control media embedding.
+        """
+        logger.warning(
+            "MD2DOCX does not support inject_images via paragraph_index. "
+            "Images in MD are handled by Pandoc automatically. "
+            "Use --embed-media with Pandoc for inline image embedding."
+        )
+        return ([], images)
