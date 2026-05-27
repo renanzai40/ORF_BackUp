@@ -104,7 +104,7 @@ orf-mcp-server
 
 ## AI Agent 原生架构
 
-ORF v0.2.0 重构为 **Agent-Oriented** 架构，专为 AI Agent 集成设计，而非传统 CLI 工具。
+ORF v0.3.0 重构为 **Agent-Oriented** 架构，专为 AI Agent 集成设计，而非传统 CLI 工具。
 
 ### MCP Server — 为 AI Agent 而生
 
@@ -215,9 +215,10 @@ src/orf/
 └── error_handlers/   # 错误处理与恢复策略
 ```
 
-## 项目状态 (v0.2.0)
+## 项目状态 (v0.3.0)
 
 - **Agent-Oriented 架构**：MCP Server + Foreman/Specialist + HITL 审批
+- **图片精确定位注入**：支持 DOCX/PPTX/HTML/EPUB 图片按位置回填
 - **MCP 工具**：5 个类型安全的 Agent 工具（Pydantic 模型验证）
 - **路径安全**：PathValidator 防止目录遍历
 - **审计日志**：correlation_id + agent_id 全链路追踪
