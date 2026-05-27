@@ -341,16 +341,12 @@ class XLIFF2DOCXConverter(BaseConverter):
                 continue
 
             try:
-                # Find the paragraph in document.xml that matches source text
-                # and backfill with target text + inline formatting
-                success = self._backfill_translation(
+                document_xml = self._backfill_translation(
                     document_xml,
                     tu["source"],
                     target_text,
                     inline_elements,
                 )
-                if success:
-                    inline_elements_applied += len(inline_elements)
             except Exception as e:
                 logger.warning(f"Failed to backfill trans-unit {tu_id}: {e}")
                 warnings.append(f"Failed to backfill unit {tu_id}: {e}")
@@ -381,7 +377,7 @@ class XLIFF2DOCXConverter(BaseConverter):
         source_text: str,
         target_text: str,
         inline_elements: list[InlineElement],
-    ) -> bool:
+    ) -> str:
         """Backfill a single translation into document XML.
 
         Args:
@@ -391,10 +387,10 @@ class XLIFF2DOCXConverter(BaseConverter):
             inline_elements: Inline formatting elements.
 
         Returns:
-            True if backfill was successful.
+            Modified document_xml string (always returns modified xml, even if no match).
         """
         if not source_text and not target_text:
-            return False
+            return document_xml
 
         root = etree.fromstring(document_xml.encode("utf-8"))
         W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -421,11 +417,8 @@ class XLIFF2DOCXConverter(BaseConverter):
                     found = self._backfill_split_runs(p, W_NS, source_normalized, target_text)
                     break
 
-        if found:
-            new_xml = etree.tostring(root, encoding="unicode", xml_declaration=True)
-            document_xml = new_xml
-
-        return found
+        new_xml = etree.tostring(root, encoding="unicode", xml_declaration=True)
+        return new_xml
 
     def _backfill_with_inline_elements(
         self,
