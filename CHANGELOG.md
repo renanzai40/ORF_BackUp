@@ -58,6 +58,12 @@
   - 所有 Pandoc-based MD 转换器（md2docx/md2odt/md2pdf/md2rtf/md2html/md2csv/md2json/md2xlsx/md2xml/md2ipynb/md2eml/md2msg/md2icml/md2srt/md2epub）
   - MD 链路图片由 Pandoc 自动处理（base64 内嵌在 MD 中）
   - stub 返回 `(empty, all_images)` 并记录 WARNING 日志说明不支持段落索引注入
+- **md2docx.py:64**: Pandoc `--embed-media` 强制内嵌图片
+  - 修复 OPP generate_markdown 嵌入 base64 data URI 图片时 Pandoc 丢失 32% 图片的问题
+- **xliff2docx.py:377-490**: 回填逻辑重构（内联标签支持）
+  - `_backfill_translation` 重写：strip inline tag 后匹配 normalized text
+  - 新增 `_backfill_with_inline_elements()` / `_backfill_split_runs()` 处理跨多 run 文本
+  - 修复 OPP XLIFF 含 `<bx>/<ex>` 内联标签时回填 100% 失败的问题
 
 ### 🐛 Orphaned 图片处理
 

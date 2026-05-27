@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -396,52 +397,93 @@ class XLIFF2DOCXConverter(BaseConverter):
             return False
 
         root = etree.fromstring(document_xml.encode("utf-8"))
-
-        # Find all text runs containing the source text
         W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
         found = False
-        for t_elem in root.xpath(f"//{{{W_NS}}}t"):
-            if t_elem.text and source_text in t_elem.text:
-                found = True
-                # Replace text with target text
-                t_elem.text = target_text
+        source_normalized = re.sub(r'<[^>]+>', '', source_text) if source_text else ""
 
-                # Apply inline formatting if any
-                if inline_elements:
-                    try:
-                        self._apply_inline_formatting_to_run(
-                            t_elem,
-                            inline_elements,
-                            target_text,
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to apply inline formatting: {e}")
+        if inline_elements:
+            found = self._backfill_with_inline_elements(
+                root, W_NS, source_normalized, target_text, inline_elements
+            )
+        else:
+            for t_elem in root.xpath(f"//{{{W_NS}}}t"):
+                if t_elem.text and source_normalized in t_elem.text:
+                    found = True
+                    t_elem.text = target_text
 
         if not found:
-            # Fallback: try plain text backfill for paragraph
-            # Find paragraph containing source text
             paragraphs = root.xpath(f"//{{{W_NS}}}p", namespaces={"w": W_NS})
             for p in paragraphs:
-                text_content = "".join(
-                    t.text for t in p.xpath(f".//{{{W_NS}}}t") if t.text
-                )
-                if source_text in text_content:
-                    # Backfill plain text
-                    for t in p.xpath(f".//{{{W_NS}}}t"):
-                        if t.text and source_text in t.text:
-                            t.text = target_text
-                            found = True
-                            break
-                if found:
+                text_runs = [t.text for t in p.xpath(f".//{{{W_NS}}}t") if t.text]
+                concat_text = "".join(text_runs)
+                if source_normalized in concat_text:
+                    found = self._backfill_split_runs(p, W_NS, source_normalized, target_text)
                     break
 
         if found:
-            # Update document_xml with modified content
             new_xml = etree.tostring(root, encoding="unicode", xml_declaration=True)
             document_xml = new_xml
 
         return found
+
+    def _backfill_with_inline_elements(
+        self,
+        root: etree._Element,
+        W_NS: str,
+        source_normalized: str,
+        target_text: str,
+        inline_elements: list[InlineElement],
+    ) -> bool:
+        """Backfill when source has inline formatting tags.
+
+        Finds paragraphs where the source text (with inline tags stripped) matches,
+        then applies translations preserving inline structure.
+        """
+        found = False
+        for p in root.xpath(f"//{{{W_NS}}}p", namespaces={"w": W_NS}):
+            text_runs = p.xpath(f".//{{{W_NS}}}t", namespaces={"w": W_NS})
+            text_content = "".join(t.text or "" for t in text_runs)
+
+            if source_normalized in text_content:
+                found = self._backfill_split_runs(p, W_NS, source_normalized, target_text)
+                if found:
+                    break
+
+        return found
+
+    def _backfill_split_runs(
+        self,
+        paragraph: etree._Element,
+        W_NS: str,
+        source_normalized: str,
+        target_text: str,
+    ) -> bool:
+        """Backfill text that may be split across multiple <w:t> runs.
+
+        Finds the first run containing source_normalized, replaces it with
+        target_text, and clears subsequent runs.
+        """
+        runs = paragraph.xpath(f".//{{{W_NS}}}t", namespaces={"w": W_NS})
+        concat = "".join(r.text or "" for r in runs)
+
+        if source_normalized not in concat:
+            return False
+
+        pos = concat.find(source_normalized)
+        for i, r in enumerate(runs):
+            run_text = r.text or ""
+            run_start = concat.find(run_text, pos) if run_text else -1
+            if run_start <= pos < run_start + len(run_text) or run_start < 0:
+                r.text = target_text
+                for j in range(i + 1, len(runs)):
+                    runs[j].text = ""
+                return True
+
+        runs[0].text = target_text
+        for j in range(1, len(runs)):
+            runs[j].text = ""
+        return True
 
     def _apply_inline_formatting_to_run(
         self,

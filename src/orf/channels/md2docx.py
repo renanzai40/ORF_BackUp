@@ -61,6 +61,8 @@ class MD2DOCXConverter(BaseConverter):
         if template:
             cmd.extend(["--reference-doc", str(template)])
 
+        cmd.append("--embed-media")
+
         if options.get("extract_media"):
             cmd.append("--extract-media=.")
 
