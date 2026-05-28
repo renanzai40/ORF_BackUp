@@ -261,6 +261,8 @@ def apply_md(
             with open(images_json) as f:
                 images_data = json.load(f)
             from orf.mcp.schemas import ImagePlacement
+            if isinstance(images_data, dict) and "images" in images_data:
+                images_data = images_data["images"]
             images = [ImagePlacement(**img) for img in images_data]
             logger.info(f"Loaded {len(images)} images from {images_json}")
         except Exception as e:
@@ -459,6 +461,8 @@ def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], outpu
             with open(images_json) as f:
                 images_data = json.load(f)
             from orf.mcp.schemas import ImagePlacement
+            if isinstance(images_data, dict) and "images" in images_data:
+                images_data = images_data["images"]
             images = [ImagePlacement(**img) for img in images_data]
             logger.info(f"Loaded {len(images)} images from {images_json}")
         except Exception as e:
