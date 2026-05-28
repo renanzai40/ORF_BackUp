@@ -83,6 +83,7 @@ class MD2DOCXConverter(BaseConverter):
                 capture_output=True,
                 text=True,
                 check=True,
+                cwd=str(md_path.parent),
             )
 
             logger.debug(f"Pandoc output: {result.stdout}")

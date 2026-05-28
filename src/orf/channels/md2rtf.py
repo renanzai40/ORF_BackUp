@@ -62,6 +62,7 @@ class MD2RTFConverter(BaseConverter):
                 capture_output=True,
                 text=True,
                 check=True,
+                cwd=str(input_path.parent),
             )
 
             logger.debug(f"Pandoc output: {result.stdout}")

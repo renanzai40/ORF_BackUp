@@ -73,6 +73,7 @@ class MD2EPUBConverter(BaseConverter):
                 capture_output=True,
                 text=True,
                 check=True,
+                cwd=str(input_path.parent),
             )
 
             return ConversionResult(

@@ -19,6 +19,10 @@
   - 修复：先将已翻译输出复制到临时文件，以临时文件为骨架注入图片，再写入最终输出
   - 影响：`convert --images-json` 和 `apply-xliff --images-json` 两个命令
 
+- **Bug #MD-02: pandoc 相对路径图片丢失**: 所有 MD 转换器（md2docx, md2epub, md2html, md2odt, md2rtf, md2pdf）现在传递 `cwd=input_path.parent`
+  - pandoc 运行时未指定 cwd 参数，导致 MD 文件中的相对路径图片（如 `![img](images/photo.png)`）无法找到
+  - 修复：subprocess.run() 添加 `cwd=str(input_path.parent)` 参数，确保 pandoc 从 MD 文件所在目录解析相对路径
+
 ## v0.3.2 (2026-05-28)
 
 ### 🛠️ 修复
