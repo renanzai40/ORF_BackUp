@@ -267,10 +267,20 @@ def apply_md(
             logger.warning(f"Failed to load images from {images_json}: {e}")
 
     if result.success and images:
+        import tempfile
+        import shutil
         try:
+            # Bug #6 fix: inject_images overwrites output_path (uses as skeleton)
+            # Copy translated output to temp skeleton file, inject into temp, then repack to final output
+            tmp_skeleton = tempfile.NamedTemporaryFile(suffix='.docx', delete=False)
+            tmp_skeleton.close()
+            shutil.copy2(result.output_path, tmp_skeleton.name)
+
             injected, orphaned = converter.inject_images(
-                output_path, images, output_path
+                tmp_skeleton.name, images, result.output_path
             )
+            # Clean up temp skeleton
+            Path(tmp_skeleton.name).unlink(missing_ok=True)
             logger.info(
                 f"Injected {len(injected)} images, {len(orphaned)} orphaned"
             )
@@ -487,10 +497,17 @@ def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], outpu
     result = converter.convert(input_path, xliff_path, output_path)
 
     if result.success and images:
+        import tempfile
+        import shutil
         try:
+            tmp_skeleton = tempfile.NamedTemporaryFile(suffix='.docx', delete=False)
+            tmp_skeleton.close()
+            shutil.copy2(result.output_path, tmp_skeleton.name)
+
             injected, orphaned = converter.inject_images(
-                input_path, images, output_path
+                tmp_skeleton.name, images, result.output_path
             )
+            Path(tmp_skeleton.name).unlink(missing_ok=True)
             logger.info(
                 f"Injected {len(injected)} images, {len(orphaned)} orphaned"
             )

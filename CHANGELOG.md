@@ -14,6 +14,11 @@
   - 改为 `xml_declaration=False`
   - 修复所有 trans-unit 翻译未写入输出的静默失败问题
 
+- **Bug #6: `inject_images` 覆盖翻译结果**: `convert` 和 `apply-xliff` 命令中图片注入后翻译被原始骨架覆盖
+  - `inject_images(skeleton_path, images, output_path)` 将 `skeleton_path` 内容重新打包，忽略已翻译内容
+  - 修复：先将已翻译输出复制到临时文件，以临时文件为骨架注入图片，再写入最终输出
+  - 影响：`convert --images-json` 和 `apply-xliff --images-json` 两个命令
+
 ## v0.3.2 (2026-05-28)
 
 ### 🛠️ 修复
