@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.4 (2026-05-29)
+
+### 🛠️ 修复
+
+- **Bug #7: images_json 加载失败**: OPP 生成的 `{"images": [...]}` 格式未被正确解析
+  - CLI 加载逻辑直接遍历 dict keys 而非数组元素
+  - 修复：检测并提取 `images_data["images"]` 数组
+  - 影响：`apply-md --images-json` 和 `apply-xliff --images-json` 两个命令
+
+- **Bug #MD-02: pandoc 相对路径图片丢失**: 所有 MD 转换器（md2docx, md2epub, md2html, md2odt, md2rtf, md2pdf）现在传递 `cwd=input_path.parent`
+  - pandoc 运行时未指定 cwd 参数，导致 MD 文件中的相对路径图片（如 `![img](images/photo.png)`）无法找到
+  - 修复：subprocess.run() 添加 `cwd=str(input_path.parent)` 参数，确保 pandoc 从 MD 文件所在目录解析相对路径
+
 ## v0.3.3 (2026-05-28)
 
 ### 🛠️ 修复
@@ -18,10 +31,6 @@
   - `inject_images(skeleton_path, images, output_path)` 将 `skeleton_path` 内容重新打包，忽略已翻译内容
   - 修复：先将已翻译输出复制到临时文件，以临时文件为骨架注入图片，再写入最终输出
   - 影响：`convert --images-json` 和 `apply-xliff --images-json` 两个命令
-
-- **Bug #MD-02: pandoc 相对路径图片丢失**: 所有 MD 转换器（md2docx, md2epub, md2html, md2odt, md2rtf, md2pdf）现在传递 `cwd=input_path.parent`
-  - pandoc 运行时未指定 cwd 参数，导致 MD 文件中的相对路径图片（如 `![img](images/photo.png)`）无法找到
-  - 修复：subprocess.run() 添加 `cwd=str(input_path.parent)` 参数，确保 pandoc 从 MD 文件所在目录解析相对路径
 
 ## v0.3.2 (2026-05-28)
 
