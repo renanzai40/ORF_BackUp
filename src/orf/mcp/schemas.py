@@ -78,9 +78,16 @@ class ImagePlacement(BaseModel):
 
 
 class ApplyXLIFFInput(BaseModel):
-    """Input for apply_xliff tool."""
+    """Input for apply_xliff tool.
+
+    xliff_path and xliff_content are mutually exclusive - provide exactly one.
+    """
     input_file: str = Field(..., description="Original document file path (skeleton)")
     xliff_path: str = Field(..., description="Translated XLIFF file path")
+    xliff_content: Optional[str] = Field(
+        None,
+        description="Inline XLIFF content (mutually exclusive with xliff_path)"
+    )
     output_path: str = Field(..., description="Output file path")
     format: str = Field(..., description="Output format (docx, pptx, epub, html, odt)")
     images: Optional[list[ImagePlacement]] = Field(

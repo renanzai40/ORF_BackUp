@@ -123,23 +123,54 @@ def _register_tools():
         xliff_path: str,
         output_path: str,
         format: str,
+        xliff_content: Optional[str] = None,
         images: Optional[list[dict]] = None,
     ) -> str:
         """Apply XLIFF translation to original document with optional image injection.
 
         Args:
             input_file: Original document file path (skeleton).
-            xliff_path: Translated XLIFF file path.
+            xliff_path: Translated XLIFF file path (mutually exclusive with xliff_content).
             output_path: Output file path.
             format: Output format (docx, pptx, epub, html, odt).
+            xliff_content: Inline XLIFF content (mutually exclusive with xliff_path).
             images: Optional list of image placement data from OPP for precise image restoration.
 
         Returns:
             JSON result string.
         """
-        for p in [input_file, xliff_path]:
+        if xliff_path and xliff_content:
+            return json.dumps({
+                "success": False,
+                "output_path": None,
+                "errors": [{"code": "MUTUALLY_EXCLUSIVE", "message": "xliff_path and xliff_content are mutually exclusive"}],
+                "warnings": [],
+                "metadata": {}
+            })
+
+        xliff_to_use = xliff_path
+        if xliff_content:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.xliff', delete=False) as tmp:
+                tmp.write(xliff_content)
+                xliff_to_use = tmp.name
+
+        xliff_temp_path = None
+        xliff_to_use = xliff_path
+        if xliff_content:
+            tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.xliff', delete=False)
+            tmp.write(xliff_content)
+            tmp.close()
+            xliff_temp_path = tmp.name
+            xliff_to_use = xliff_temp_path
+
+        for p in [input_file, xliff_to_use]:
             valid, error = PathValidator.validate(p)
             if not valid:
+                if xliff_temp_path:
+                    try:
+                        os.unlink(xliff_temp_path)
+                    except Exception:
+                        pass
                 return json.dumps({
                     "success": False,
                     "output_path": None,
@@ -150,7 +181,7 @@ def _register_tools():
 
         args = [
             "apply-xliff", input_file,
-            "--xliff", xliff_path,
+            "--xliff", xliff_to_use,
             "--output", output_path,
             "--format", format,
         ]
@@ -202,6 +233,12 @@ def _register_tools():
         if temp_created:
             try:
                 os.unlink(temp_path)
+            except Exception:
+                pass
+
+        if xliff_temp_path:
+            try:
+                os.unlink(xliff_temp_path)
             except Exception:
                 pass
 
