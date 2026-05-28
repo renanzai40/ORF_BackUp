@@ -40,6 +40,7 @@ A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 WP_NS = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
 PIC_NS = "http://schemas.openxmlformats.org/drawingml/2006/picture"
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+WORD_NS_MAP = {"w": W_NS}
 
 
 @dataclass
@@ -402,15 +403,15 @@ class XLIFF2DOCXConverter(BaseConverter):
                 root, source_normalized, target_text, inline_elements
             )
         else:
-            for t_elem in root.xpath("//w:t"):
+            for t_elem in root.xpath("//w:t", namespaces=WORD_NS_MAP):
                 if t_elem.text and source_normalized in t_elem.text:
                     found = True
                     t_elem.text = target_text
 
         if not found:
-            paragraphs = root.xpath("//w:p")
+            paragraphs = root.xpath("//w:p", namespaces=WORD_NS_MAP)
             for p in paragraphs:
-                text_runs = [t.text for t in p.xpath(".//w:t") if t.text]
+                text_runs = [t.text for t in p.xpath(".//w:t", namespaces=WORD_NS_MAP) if t.text]
                 concat_text = "".join(text_runs)
                 if source_normalized in concat_text:
                     found = self._backfill_split_runs(p, source_normalized, target_text)
@@ -432,8 +433,8 @@ class XLIFF2DOCXConverter(BaseConverter):
         then applies translations preserving inline structure.
         """
         found = False
-        for p in root.xpath("//w:p"):
-            text_runs = p.xpath(".//w:t")
+        for p in root.xpath("//w:p", namespaces=WORD_NS_MAP):
+            text_runs = p.xpath(".//w:t", namespaces=WORD_NS_MAP)
             text_content = "".join(t.text or "" for t in text_runs)
 
             if source_normalized in text_content:
@@ -454,7 +455,7 @@ class XLIFF2DOCXConverter(BaseConverter):
         Finds the first run containing source_normalized, replaces it with
         target_text, and clears subsequent runs.
         """
-        runs = paragraph.xpath(".//w:t")
+        runs = paragraph.xpath(".//w:t", namespaces=WORD_NS_MAP)
         concat = "".join(r.text or "" for r in runs)
 
         if source_normalized not in concat:
@@ -564,7 +565,7 @@ class XLIFF2DOCXConverter(BaseConverter):
         namelist = list(files.keys())
 
         root = etree.fromstring(document_xml.encode("utf-8"))
-        paragraphs = root.xpath("//w:p")
+        paragraphs = root.xpath("//w:p", namespaces=WORD_NS_MAP)
 
         img_by_para: dict[int, list[ImagePlacement]] = {}
         for img in positioned:

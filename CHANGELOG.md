@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.3 (2026-05-28)
+
+### 🛠️ 修复
+
+- **Bug #4: XPath namespace 未注册**: `_backfill_translation` 等方法中调用 `root.xpath("//w:t")` 前现注册 word 命名空间
+  - 添加 `WORD_NS_MAP = {"w": W_NS}` 常量
+  - 所有 `root.xpath("//w:t")` 和 `root.xpath("//w:p")` 调用现传入 `namespaces=WORD_NS_MAP`
+  - 修复 "Undefined namespace prefix 'w'" 异常导致翻译静默失败的问题
+
 ## v0.3.2 (2026-05-28)
 
 ### 🛠️ 修复
