@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import re
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
@@ -12,6 +17,8 @@ from orf.parsers.frontmatter import FrontmatterMetadata
 from orf.logging import get_logger
 
 logger = get_logger("channel.md2docx")
+
+IMAGE_PATTERN = re.compile(r'!\[([^\]]*)\]\((data:image/([^;]+);base64,([^)]+))\)')
 
 
 class MD2DOCXConverter(BaseConverter):
@@ -50,9 +57,17 @@ class MD2DOCXConverter(BaseConverter):
                 errors=[f"Invalid input file: {input_path}"],
             )
 
+        temp_dir = None
+        md_path = input_path
+
+        base64_images = self._find_base64_images(input_path)
+        if base64_images:
+            md_path, temp_dir = self._preprocess_md_images(input_path)
+            logger.info(f"Extracted {len(base64_images)} base64 images to temp directory")
+
         cmd = [
             "pandoc",
-            str(input_path),
+            str(md_path),
             "-o", str(output_path),
             "--to", "docx",
         ]
@@ -60,11 +75,6 @@ class MD2DOCXConverter(BaseConverter):
         template = options.get("template") or self.reference_docx
         if template:
             cmd.extend(["--reference-doc", str(template)])
-
-        cmd.append("--embed-media")
-
-        if options.get("extract_media"):
-            cmd.append("--extract-media=.")
 
         try:
             logger.info(f"Running: {' '.join(cmd)}")
@@ -99,6 +109,54 @@ class MD2DOCXConverter(BaseConverter):
                 success=False,
                 errors=["Pandoc not installed or not in PATH"],
             )
+        finally:
+            if temp_dir:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def _find_base64_images(self, md_path: Path) -> list[dict[str, Any]]:
+        """Find all base64 data URI images in MD file."""
+        images = []
+        content = md_path.read_text(encoding="utf-8", errors="ignore")
+        for match in IMAGE_PATTERN.finditer(content):
+            images.append({
+                "alt": match.group(1),
+                "full_uri": match.group(2),
+                "mime_type": f"image/{match.group(3)}",
+                "base64_data": match.group(4),
+            })
+        return images
+
+    def _preprocess_md_images(self, md_path: Path) -> tuple[Path, Path]:
+        """Extract base64 images to files and rewrite MD references.
+
+        Returns:
+            Tuple of (modified_md_path, temp_dir_path)
+        """
+        content = md_path.read_text(encoding="utf-8", errors="ignore")
+        temp_dir = Path(tempfile.mkdtemp(prefix="orf_md_images_"))
+        images_dir = temp_dir / "images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+
+        def replace_base64(match: re.Match) -> str:
+            alt = match.group(1)
+            mime_ext = match.group(3)
+            base64_data = match.group(4)
+            try:
+                img_bytes = base64.b64decode(base64_data)
+            except Exception:
+                return match.group(0)
+            img_hash = hashlib.md5(img_bytes).hexdigest()[:12]
+            ext = "png" if mime_ext == "png" else mime_ext
+            filename = f"image_{img_hash}.{ext}"
+            filepath = images_dir / filename
+            filepath.write_bytes(img_bytes)
+            return f"![{alt}]({filepath.as_posix()})"
+
+        new_content = IMAGE_PATTERN.sub(replace_base64, content)
+        new_md_path = temp_dir / md_path.name
+        new_md_path.write_text(new_content, encoding="utf-8")
+
+        return new_md_path, temp_dir
 
     def inject_images(
         self,
@@ -106,14 +164,14 @@ class MD2DOCXConverter(BaseConverter):
         images: list,
         output_path: Path | str,
     ) -> tuple[list, list]:
-        """MD2DOCX does not support image injection via paragraph_index.
+        """MD2DOCX uses pre-process approach for images.
 
-        Images embedded in MD as base64 data URIs are handled by Pandoc automatically.
-        Use Pandoc's --resource-path and --embed-media flag to control media embedding.
+        Images embedded in MD as base64 data URIs are extracted to temp files
+        during convert() and rewritten as local file references before Pandoc.
+        No post-conversion injection needed.
         """
-        logger.warning(
-            "MD2DOCX does not support inject_images via paragraph_index. "
-            "Images in MD are handled by Pandoc automatically. "
-            "Use --embed-media with Pandoc for inline image embedding."
+        logger.debug(
+            "MD2DOCX handles images via pre-processing. "
+            "Base64 images are extracted and rewritten as local file references before Pandoc."
         )
         return ([], images)
