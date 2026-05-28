@@ -417,7 +417,7 @@ class XLIFF2DOCXConverter(BaseConverter):
                     found = self._backfill_split_runs(p, source_normalized, target_text)
                     break
 
-        new_xml = etree.tostring(root, encoding="unicode", xml_declaration=True)
+        new_xml = etree.tostring(root, encoding="unicode", xml_declaration=False)
         return new_xml
 
     def _backfill_with_inline_elements(
@@ -617,7 +617,7 @@ class XLIFF2DOCXConverter(BaseConverter):
                     logger.error("Failed to inject image: %s", e)
                     orphaned.append(img)
 
-        new_xml = etree.tostring(root, encoding="unicode", xml_declaration=True)
+        new_xml = etree.tostring(root, encoding="unicode", xml_declaration=False)
 
         files_copy = dict(files)
         files_copy["word/document.xml"] = new_xml.encode("utf-8")

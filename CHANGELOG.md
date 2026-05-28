@@ -9,6 +9,11 @@
   - 所有 `root.xpath("//w:t")` 和 `root.xpath("//w:p")` 调用现传入 `namespaces=WORD_NS_MAP`
   - 修复 "Undefined namespace prefix 'w'" 异常导致翻译静默失败的问题
 
+- **Bug #5: xml_declaration 与 unicode encoding 不兼容**: `etree.tostring(encoding="unicode", xml_declaration=True)` 导致 ValueError
+  - `encoding="unicode"` 返回 Python str，不兼容 XML 声明
+  - 改为 `xml_declaration=False`
+  - 修复所有 trans-unit 翻译未写入输出的静默失败问题
+
 ## v0.3.2 (2026-05-28)
 
 ### 🛠️ 修复
