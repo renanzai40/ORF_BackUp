@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.3.2 (2026-05-28)
+
+### 🛠️ 修复
+
+- **MD 管道图片注入限制**：文档说明 `--images-json` 参数对 MD 管道无效
+  - `md2docx.inject_images()` 返回 `([], images)` 空操作
+  - MD 管道使用 pre-processing 方案（base64 → temp files → pandoc）
+  - 如需精确图片注入，需使用 XLIFF 管道
+
+- **MD 管道结构丢失**：文档说明 Markdown 格式限制
+  - MD 是行级格式，不保留 DOCX 段落边界
+  - Pandoc 将 `![Image](url)` 当作行内元素处理
+  - 原始 DOCX 的 15 个独立图片段落会在 MD→DOCX 后丢失
+  - 需要精确结构保留时请使用 XLIFF 管道
+
+### ✨ 新功能
+
+- **MCP `xliff_content` 参数**：新增 `xliff_content: Optional[str]` 参数
+  - `apply_xliff` 工具现在接受内联 XLIFF 内容字符串
+  - 新增 `--xliff-content` CLI 选项
+  - 与 `--xliff` 互斥，同时提供返回错误
+
+### 🔧 通道注入实现
+
+| 通道 | 方法 | 注入方式 |
+|------|------|---------|
+| `xliff2docx` | `inject_images()` | 按 `paragraph_index` 插入 `<w:drawing>` 到段落 |
+| `xliff2pptx` | `inject_images()` | 按 `slide_index` 插入 `<p:pic>` 到幻灯片 |
+| `xliff2html` | `inject_images()` | 按 `element_index` 插入 `<img>` 到 DOM |
+| `xliff2epub` | `inject_images()` | 按 `spine_index` 插入到章节 XHTML |
+
 ## v0.3.0 (2026-05-27)
 
 ### ✨ 新功能

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import click
 
@@ -94,7 +94,7 @@ def main(verbose: bool) -> None:
 @click.option("--lang", type=str, default="zh", help="EPUB 语言")
 @click.option("--embed-images", is_flag=True, help="EPUB 嵌入图片")
 @click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
-@click.option("--images-json", "images_json", type=click.Path(exists=True), help="JSON file with image placement data from OPP")
+@click.option("--images-json", "images_json", type=click.Path(exists=True), help="JSON file with image placement data from OPP (NOTE: image injection not supported for MD pipeline; use XLIFF pipeline for precise image placement)")
 def apply_md(
     input_md: str,
     target_format: str,
@@ -111,6 +111,10 @@ def apply_md(
     """将 MD 文件转换为目标格式
 
     INPUT_MD: 输入的 MD 文件路径（通常由 OL 翻译后的文件）
+
+    注意：MD 格式是行级别的，而非段落级别。Pandoc 将 ![Image](url) 作为行内元素处理，
+    原始 DOCX 的段落边界在 MD 输出中不会保留。对于需要精确结构的文档（如图片+标题段落），
+    请使用 XLIFF 管道。
     """
     input_path = Path(input_md)
 
@@ -407,6 +411,7 @@ def convert_batch(
 @main.command("apply-xliff")
 @click.argument("input_file", type=click.Path(exists=True))
 @click.option("--xliff", "-x", required=True, help="Translated XLIFF file")
+@click.option("--xliff-content", "xliff_content", type=str, help="Inline XLIFF content (alternative to --xliff)")
 @click.option("--output", "-o", required=True, help="Output file path")
 @click.option(
     "--format",
@@ -417,14 +422,25 @@ def convert_batch(
 )
 @click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
 @click.option("--images-json", "images_json", type=click.Path(exists=True), help="JSON file with image placement data from OPP")
-def apply_xliff(input_file: str, xliff: str, output: str, format: str, output_json: bool, images_json: str) -> None:
+def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], output: str, format: str, output_json: bool, images_json: str) -> None:
     """Apply XLIFF translation to original document.
 
     INPUT_FILE: Original document (DOCX/PPTX/EPUB/HTML)
     """
     input_path = Path(input_file)
     output_path = Path(output)
+
+    # Mutually exclusive check
+    if xliff and xliff_content:
+        raise click.BadParameter("--xliff and --xliff-content are mutually exclusive")
+
+    # Handle inline XLIFF content
     xliff_path = Path(xliff)
+    if xliff_content:
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.xliff', delete=False) as tmp:
+            tmp.write(xliff_content)
+            xliff_path = Path(tmp.name)
 
     images = None
     if images_json:

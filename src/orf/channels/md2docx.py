@@ -164,11 +164,21 @@ class MD2DOCXConverter(BaseConverter):
         images: list,
         output_path: Path | str,
     ) -> tuple[list, list]:
-        """MD2DOCX uses pre-process approach for images.
+        """MD2DOCX uses pre-processing approach for images.
 
         Images embedded in MD as base64 data URIs are extracted to temp files
         during convert() and rewritten as local file references before Pandoc.
         No post-conversion injection needed.
+
+        The `images` parameter (from images_json) is NOT used in MD pipeline.
+        MD2DOCX extracts images directly from base64 in the markdown content.
+
+        For precise paragraph-level image placement, use the XLIFF pipeline instead.
+        This method returns ([], images) meaning all images are treated as orphaned.
+
+        Returns:
+            tuple[list, list]: First list is empty (no injected images), second list
+                              contains all images as orphaned.
         """
         logger.debug(
             "MD2DOCX handles images via pre-processing. "
