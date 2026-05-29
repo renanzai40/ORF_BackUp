@@ -4,6 +4,10 @@
 
 ### 🛠️ 修复
 
+- **Bug E2E-03: `temp_created` undefined in `apply-xliff` MCP tool**: When `images=None` or empty, the `if images:` block is skipped, leaving `temp_created` undefined. Line 233 `if temp_created:` then raises `NameError`.
+  - Fix: Initialize `temp_created = False` before the `if images:` block
+  - Location: `src/orf/mcp/server.py` line 189
+
 - **Bug #7: images_json 加载失败**: OPP 生成的 `{"images": [...]}` 格式未被正确解析
   - CLI 加载逻辑直接遍历 dict keys 而非数组元素
   - 修复：检测并提取 `images_data["images"]` 数组
