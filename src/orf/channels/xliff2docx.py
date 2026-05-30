@@ -453,7 +453,8 @@ class XLIFF2DOCXConverter(BaseConverter):
         """Backfill text that may be split across multiple <w:t> runs.
 
         Finds the first run containing source_normalized, replaces it with
-        target_text, and clears subsequent runs.
+        target_text, and clears subsequent runs. Strips XLIFF bx/ex tags and
+        applies proper DOCX run formatting.
         """
         runs = paragraph.xpath(".//w:t", namespaces=WORD_NS_MAP)
         concat = "".join(r.text or "" for r in runs)
@@ -462,19 +463,128 @@ class XLIFF2DOCXConverter(BaseConverter):
             return False
 
         pos = concat.find(source_normalized)
+        target_run_idx = None
         for i, r in enumerate(runs):
             run_text = r.text or ""
             run_start = concat.find(run_text, pos) if run_text else -1
             if run_start <= pos < run_start + len(run_text) or run_start < 0:
-                r.text = target_text
-                for j in range(i + 1, len(runs)):
-                    runs[j].text = ""
-                return True
+                target_run_idx = i
+                break
 
-        runs[0].text = target_text
-        for j in range(1, len(runs)):
+        if target_run_idx is None:
+            return False
+
+        formatted_runs = self._build_formatted_runs(target_text)
+        if formatted_runs:
+            target_run = runs[target_run_idx]
+            parent = target_run.getparent()
+            if parent is not None:
+                insert_pos = list(parent).index(target_run)
+                for fr in formatted_runs:
+                    parent.insert(insert_pos, fr)
+                    insert_pos += 1
+                target_run.text = ""
+                for j in range(target_run_idx + 1, len(runs)):
+                    runs[j].text = ""
+            return True
+
+        runs[target_run_idx].text = target_text
+        for j in range(target_run_idx + 1, len(runs)):
             runs[j].text = ""
         return True
+
+    def _build_formatted_runs(self, target_text: str) -> list[etree._Element]:
+        """Parse target_text with XLIFF bx/ex tags and build DOCX w:r elements.
+
+        Args:
+            target_text: Target text potentially containing <bx.../> and <ex.../> tags.
+
+        Returns:
+            List of w:r elements with appropriate rPr formatting, or empty list
+            if no formatting tags found.
+        """
+        W = f"{{{W_NS}}}"
+
+        bx_re = re.compile(r'<bx[^>]*\sid="([^"]*)"[^>]*\stype="([^"]*)"[^>]*/>', re.IGNORECASE)
+        ex_re = re.compile(r'<ex[^>]*\sid="([^"]*)"[^>]*/>', re.IGNORECASE)
+
+        segments: list[tuple[str, dict[str, str]]] = []
+        open_formats: dict[str, str] = {}
+        remaining = target_text
+
+        while remaining:
+            bx_match = bx_re.search(remaining)
+            ex_match = ex_re.search(remaining)
+
+            if not bx_match and not ex_match:
+                if remaining:
+                    segments.append((remaining, dict(open_formats)))
+                break
+
+            earliest = None
+            if bx_match:
+                earliest = (bx_match.start(), bx_match, "bx")
+            if ex_match:
+                ex_start = ex_match.start()
+                if earliest is None or ex_start < earliest[0]:
+                    earliest = (ex_start, ex_match, "ex")
+
+            if earliest is None:
+                segments.append((remaining, dict(open_formats)))
+                break
+
+            tag_pos, match_obj, tag_type = earliest
+
+            if tag_pos > 0:
+                segments.append((remaining[:tag_pos], dict(open_formats)))
+
+            if tag_type == "bx":
+                elem_id, elem_type = match_obj.group(1), match_obj.group(2).lower()
+                open_formats[elem_id] = elem_type
+            else:
+                elem_id = match_obj.group(1)
+                if elem_id in open_formats:
+                    del open_formats[elem_id]
+
+            remaining = remaining[match_obj.end():]
+
+        if not segments:
+            clean = re.sub(r'<bx[^>]*/>|<ex[^>]*/>', '', target_text)
+            if clean == target_text:
+                return []
+            segments = [(clean, {})]
+
+        runs = []
+        for text, active_formats in segments:
+            if not text:
+                continue
+            r = etree.Element(f"{W}r")
+            t = etree.SubElement(r, f"{W}t")
+            t.text = text
+
+            has_formatting = any(
+                fmt in ("bold", "italic", "underline", "double-underline", "single-underline")
+                for fmt in active_formats.values()
+            )
+            if has_formatting:
+                rpr = etree.SubElement(r, f"{W}rPr")
+                if "bold" in active_formats.values():
+                    etree.SubElement(rpr, f"{W}b")
+                if "italic" in active_formats.values():
+                    etree.SubElement(rpr, f"{W}i")
+                for fmt_type, fmt_val in active_formats.items():
+                    if fmt_type in ("underline", "double-underline", "single-underline"):
+                        u_elem = etree.SubElement(rpr, f"{W}u")
+                        if fmt_val == "double-underline":
+                            u_elem.set(f"{W}val", "double")
+                        elif fmt_val == "single-underline":
+                            u_elem.set(f"{W}val", "single")
+                        else:
+                            u_elem.set(f"{W}val", "single")
+
+            runs.append(r)
+
+        return runs
 
     def _apply_inline_formatting_to_run(
         self,
