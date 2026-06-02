@@ -251,6 +251,72 @@ class TestXLIFF2DOCXConverter:
 
         assert result.success is True
 
+    def test_build_formatted_runs_multi_format_type(self):
+        """<bx type="bold,underline"/> should apply BOTH bold and underline.
+
+        OPP's encode_inline_elements emits comma-joined format types
+        (type="bold,underline,strike") when a run has multiple formats.
+        ORF must split the type attribute and apply each format.
+        """
+        converter = XLIFF2DOCXConverter()
+        target_text = '<bx id="1" type="bold,underline"/>Hello<ex id="1"/>'
+        runs = converter._build_formatted_runs(target_text)
+
+        assert len(runs) == 1, f"Expected 1 run, got {len(runs)}"
+
+        w_ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+        rpr = runs[0].find(f"{w_ns}rPr")
+        assert rpr is not None, "rPr missing — multi-format types not applied"
+
+        b = rpr.find(f"{w_ns}b")
+        assert b is not None, "<w:b/> missing — bold not applied"
+
+        u = rpr.find(f"{w_ns}u")
+        assert u is not None, "<w:u/> missing — underline not applied"
+        assert u.get(f"{w_ns}val") == "single", "underline should default to single"
+
+    def test_build_formatted_runs_single_format_type_unchanged(self):
+        """<bx type="bold"/> (single format) still works after multi-format fix."""
+        converter = XLIFF2DOCXConverter()
+        target_text = '<bx id="1" type="bold"/>Hello<ex id="1"/>'
+        runs = converter._build_formatted_runs(target_text)
+
+        assert len(runs) == 1
+        w_ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+        rpr = runs[0].find(f"{w_ns}rPr")
+        assert rpr is not None
+        assert rpr.find(f"{w_ns}b") is not None
+
+    def test_build_formatted_runs_strike_in_multi_format(self):
+        """<bx type="bold,strike"/> should apply both bold and strike."""
+        converter = XLIFF2DOCXConverter()
+        target_text = '<bx id="1" type="bold,strike"/>Hello<ex id="1"/>'
+        runs = converter._build_formatted_runs(target_text)
+
+        w_ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+        rpr = runs[0].find(f"{w_ns}rPr")
+        assert rpr is not None
+        assert rpr.find(f"{w_ns}b") is not None, "bold missing"
+        assert rpr.find(f"{w_ns}strike") is not None, "strike missing"
+
+    def test_build_formatted_runs_close_removes_all_formats(self):
+        """<ex> must remove ALL formats opened by the matching <bx>."""
+        converter = XLIFF2DOCXConverter()
+        target_text = (
+            '<bx id="1" type="bold,underline"/>formatted<ex id="1"/>plain'
+        )
+        runs = converter._build_formatted_runs(target_text)
+
+        assert len(runs) == 2, f"Expected 2 runs, got {len(runs)}"
+
+        w_ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+        formatted_rpr = runs[0].find(f"{w_ns}rPr")
+        assert formatted_rpr is not None, "first run should have rPr"
+        plain_rpr = runs[1].find(f"{w_ns}rPr")
+        assert plain_rpr is None, (
+            "second run after <ex> should NOT have rPr — close tag failed to remove formats"
+        )
+
     @patch("orf.channels.xliff2docx.SkeletonLoader")
     def test_parse_xliff_xliff_2_0_format(
         self, mock_loader_class, sample_skeleton_docx: Path, tmp_path: Path

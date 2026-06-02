@@ -540,11 +540,14 @@ class XLIFF2DOCXConverter(BaseConverter):
 
             if tag_type == "bx":
                 elem_id, elem_type = match_obj.group(1), match_obj.group(2).lower()
-                open_formats[elem_id] = elem_type
+                for fmt in (s.strip() for s in elem_type.split(',')):
+                    if fmt:
+                        open_formats[f"{elem_id}::{fmt}"] = fmt
             else:
                 elem_id = match_obj.group(1)
-                if elem_id in open_formats:
-                    del open_formats[elem_id]
+                keys_to_remove = [k for k in open_formats if k.startswith(f"{elem_id}::")]
+                for k in keys_to_remove:
+                    del open_formats[k]
 
             remaining = remaining[match_obj.end():]
 
