@@ -187,7 +187,6 @@ def _register_tools():
         ]
 
         temp_created = False
-
         if images:
             images_data = []
             for img_dict in images:
