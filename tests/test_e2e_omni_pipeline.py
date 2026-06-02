@@ -152,7 +152,7 @@ This is the translated document content.
                     }),
                     stderr=""
                 )
-            elif "translate" in cmd:
+            elif "translate-md" in cmd or "translate-xliff" in cmd:
                 return MagicMock(
                     returncode=0,
                     stdout=json.dumps({
@@ -204,29 +204,52 @@ This is the translated document content.
     @patch("subprocess.run")
     def test_pipeline_with_xliff(self, mock_run, temp_workspace):
         """Test OPP→OL→ORF pipeline with XLIFF translation."""
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps({
-                "success": True,
-                "output_path": str(temp_workspace / "result.docx"),
-                "errors": [],
-                "warnings": [],
-                "metadata": {}
-            }),
-            stderr=""
-        )
-        
+        def mock_run_side_effect(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get('args', [])
+
+            if "extract" in cmd:
+                return MagicMock(
+                    returncode=0,
+                    stdout=json.dumps({
+                        "status": "success",
+                        "outputs": [str(temp_workspace / "original.xlf")]
+                    }),
+                    stderr=""
+                )
+            elif "translate-xliff" in cmd:
+                return MagicMock(
+                    returncode=0,
+                    stdout=json.dumps({
+                        "status": "success",
+                        "output": str(temp_workspace / "translated.xlf")
+                    }),
+                    stderr=""
+                )
+            elif "apply-xliff" in cmd:
+                return MagicMock(
+                    returncode=0,
+                    stdout=json.dumps({
+                        "success": True,
+                        "output_path": str(temp_workspace / "result.docx"),
+                        "errors": [],
+                        "warnings": [],
+                        "metadata": {}
+                    }),
+                    stderr=""
+                )
+
+            return MagicMock(returncode=0, stdout="{}", stderr="")
+
+        mock_run.side_effect = mock_run_side_effect
+
         from orf.mcp.server import _run_cli_command
-        
-        # OPP extracts with XLIFF option
+
         opp_result = _run_cli_command(["extract", "original.docx", "--format", "xliff"])
         assert opp_result["status"] == "success"
-        
-        # OL translates XLIFF
+
         ol_result = _run_cli_command(["translate-xliff", "original.xlf", "-s", "en", "-t", "zh"])
         assert ol_result["status"] == "success"
-        
-        # ORF applies XLIFF to skeleton
+
         orf_result = _run_cli_command([
             "apply-xliff",
             "original.docx",
@@ -234,7 +257,7 @@ This is the translated document content.
             "--output", "result.docx",
             "--format", "docx"
         ])
-        
+
         assert orf_result["success"] is True
     
     def test_skeleton_backfill_concept(self, temp_workspace):
@@ -271,16 +294,23 @@ class TestPipelineErrorHandling:
         mock_run.return_value = MagicMock(
             returncode=1,
             stdout=json.dumps({
-                "status": "error",
-                "message": "Cannot read DOCX file"
+                "success": False,
+                "errors": [{
+                    "code": "OPP_READ_ERROR",
+                    "message": "Cannot read DOCX file",
+                    "recovery_strategy": None
+                }],
+                "warnings": [],
+                "metadata": {}
             }),
             stderr="Error: Cannot read DOCX"
         )
-        
+
         from orf.mcp.server import _run_cli_command
-        
+
         result = _run_cli_command(["extract", "corrupted.docx"])
-        assert result["status"] == "error"
+        assert result["success"] is False
+        assert any(e["code"] == "OPP_READ_ERROR" for e in result["errors"])
     
     @patch("subprocess.run")
     def test_orf_missing_skeleton(self, mock_run):
