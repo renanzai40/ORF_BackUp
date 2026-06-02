@@ -1,6 +1,6 @@
 """Pydantic models for MCP tool inputs and outputs."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, Any
 
 
@@ -94,6 +94,14 @@ class ApplyXLIFFInput(BaseModel):
         default=None,
         description="Image placement data from OPP for precise image restoration"
     )
+
+    @model_validator(mode='after')
+    def _check_mutually_exclusive(self) -> 'ApplyXLIFFInput':
+        if self.xliff_path and self.xliff_content:
+            raise ValueError(
+                "xliff_path and xliff_content are mutually exclusive - provide exactly one"
+            )
+        return self
 
 
 class ApplyXLIFFResult(BaseModel):
