@@ -563,7 +563,7 @@ class XLIFF2DOCXConverter(BaseConverter):
             t.text = text
 
             has_formatting = any(
-                fmt in ("bold", "italic", "underline", "double-underline", "single-underline")
+                fmt in ("bold", "italic", "underline", "double-underline", "single-underline", "strike")
                 for fmt in active_formats.values()
             )
             if has_formatting:
@@ -573,14 +573,17 @@ class XLIFF2DOCXConverter(BaseConverter):
                 if "italic" in active_formats.values():
                     etree.SubElement(rpr, f"{W}i")
                 for fmt_type, fmt_val in active_formats.items():
-                    if fmt_type in ("underline", "double-underline", "single-underline"):
+                    if fmt_val == "double-underline":
                         u_elem = etree.SubElement(rpr, f"{W}u")
-                        if fmt_val == "double-underline":
-                            u_elem.set(f"{W}val", "double")
-                        elif fmt_val == "single-underline":
-                            u_elem.set(f"{W}val", "single")
-                        else:
-                            u_elem.set(f"{W}val", "single")
+                        u_elem.set(f"{W}val", "double")
+                    elif fmt_val == "single-underline":
+                        u_elem = etree.SubElement(rpr, f"{W}u")
+                        u_elem.set(f"{W}val", "single")
+                    elif fmt_val == "underline":
+                        u_elem = etree.SubElement(rpr, f"{W}u")
+                        u_elem.set(f"{W}val", "single")
+                    if fmt_val == "strike":
+                        etree.SubElement(rpr, f"{W}strike")
 
             runs.append(r)
 
