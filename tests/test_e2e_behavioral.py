@@ -102,13 +102,6 @@ class TestXLIFF2DOCXBackfill:
         yield Path(tmpdir)
         shutil.rmtree(tmpdir, ignore_errors=True)
 
-    @pytest.fixture
-    def minimal_docx(self, temp_dir) -> Path:
-        """Create a minimal DOCX file."""
-        path = temp_dir / "test.docx"
-        create_minimal_docx(path, MINIMAL_DOCX_DOCUMENT)
-        return path
-
     def test_backfill_translation_replaces_source_with_target(self, minimal_docx, temp_dir):
         """Test that _backfill_translation replaces source text with target text.
 

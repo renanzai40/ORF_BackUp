@@ -4,6 +4,45 @@ import pytest
 from pathlib import Path
 
 
+MINIMAL_DOCX_DOCUMENT = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:r>
+        <w:t>Hello world</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:t>Second paragraph</w:t>
+      </w:r>
+    </w:p>
+  </w:body>
+</w:document>
+"""
+
+
+def create_minimal_docx(output_path: Path, document_xml: str):
+    """Create a minimal DOCX file with the given document.xml content."""
+    import zipfile
+
+    with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("word/document.xml", document_xml)
+        zf.writestr("[Content_Types].xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>""")
+        zf.writestr("_rels/.rels", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>""")
+        zf.writestr("word/_rels/document.xml.rels", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+</Relationships>""")
+
+
 @pytest.fixture
 def sample_md_content() -> str:
     """Sample markdown content for testing."""
@@ -139,3 +178,16 @@ def css_template_file(tmp_path: Path) -> Path:
     css_path = tmp_path / "style.css"
     css_path.write_text("body { font-family: Arial; }")
     return css_path
+
+
+@pytest.fixture
+def minimal_docx(tmp_path: Path) -> Path:
+    """Create a minimal DOCX file in a tmp dir for use across test classes.
+
+    Promoted from TestXLIFF2DOCXBackfill in test_e2e_behavioral.py so
+    all test classes (including TestORFXLIFFContract, which uses the
+    same fixture) can share it without per-class duplication.
+    """
+    path = tmp_path / "test.docx"
+    create_minimal_docx(path, MINIMAL_DOCX_DOCUMENT)
+    return path
