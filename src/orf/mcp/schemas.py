@@ -76,6 +76,28 @@ class ImagePlacement(BaseModel):
         description="EPUB: 0-based spine index"
     )
 
+    # DOCX floating image (wp:anchor) fields — contract with OPP.
+    is_floating: bool = Field(
+        False,
+        description="DOCX: True if image is floating (wp:anchor) rather than inline (wp:inline)"
+    )
+    wp_anchor_h: int = Field(
+        0,
+        description="DOCX floating image: horizontal position (wp:posOffset) in EMU"
+    )
+    wp_anchor_v: int = Field(
+        0,
+        description="DOCX floating image: vertical position (wp:posOffset) in EMU"
+    )
+    wp_anchor_relative_h: str = Field(
+        "page",
+        description="DOCX floating image: wp:positionH@relativeFrom (e.g. 'page', 'column', 'margin')"
+    )
+    wp_anchor_relative_v: str = Field(
+        "page",
+        description="DOCX floating image: wp:positionV@relativeFrom (e.g. 'page', 'paragraph', 'margin')"
+    )
+
 
 class ApplyXLIFFInput(BaseModel):
     """Input for apply_xliff tool.

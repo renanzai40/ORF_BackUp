@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import re
 import shutil
 import subprocess
@@ -19,6 +20,7 @@ from orf.logging import get_logger
 logger = get_logger("channel.md2docx")
 
 IMAGE_PATTERN = re.compile(r'!\[([^\]]*)\]\((data:image/([^;]+);base64,([^)]+))\)')
+IMAGE_REF_PATTERN = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
 
 
 class MD2DOCXConverter(BaseConverter):
@@ -60,10 +62,17 @@ class MD2DOCXConverter(BaseConverter):
         temp_dir = None
         md_path = input_path
 
-        base64_images = self._find_base64_images(input_path)
-        if base64_images:
-            md_path, temp_dir = self._preprocess_md_images(input_path)
-            logger.info(f"Extracted {len(base64_images)} base64 images to temp directory")
+        if options.get("separate_images") and options.get("images_dir"):
+            images_dir = Path(options["images_dir"])
+            md_path, _ = self._extract_images_separately(
+                input_path, output_path, images_dir
+            )
+            logger.info(f"Separated images to {images_dir}, stripped MD at {md_path}")
+        else:
+            base64_images = self._find_base64_images(input_path)
+            if base64_images:
+                md_path, temp_dir = self._preprocess_md_images(input_path)
+                logger.info(f"Extracted {len(base64_images)} base64 images to temp directory")
 
         cmd = [
             "pandoc",
@@ -158,6 +167,79 @@ class MD2DOCXConverter(BaseConverter):
         new_md_path.write_text(new_content, encoding="utf-8")
 
         return new_md_path, temp_dir
+
+    def _extract_images_separately(
+        self,
+        input_path: Path,
+        output_path: Path,
+        images_dir: Path,
+    ) -> tuple[Path, None]:
+        """Extract all images to images_dir, write manifest, return stripped MD.
+
+        Unlike _preprocess_md_images which rewrites image refs to point at the
+        extracted files (and relies on Pandoc to embed them), this version
+        REMOVES the image references entirely. The output is a DOCX with no
+        embedded images, plus a directory of extracted images plus a manifest
+        describing the original → extracted mapping.
+
+        Returns:
+            Tuple of (stripped_md_path, None — no temp_dir to clean up;
+            images_dir is owned by the caller)
+        """
+        images_dir.mkdir(parents=True, exist_ok=True)
+        content = input_path.read_text(encoding="utf-8", errors="ignore")
+
+        manifest_entries: list[dict] = []
+        stripped_content = content
+        image_counter = 0
+
+        for match in IMAGE_REF_PATTERN.finditer(content):
+            alt = match.group(1)
+            ref = match.group(2)
+
+            try:
+                if ref.startswith("data:image/"):
+                    mime_match = re.match(r"data:image/([^;]+);base64,(.+)", ref)
+                    if not mime_match:
+                        continue
+                    mime_ext = mime_match.group(1)
+                    data = base64.b64decode(mime_match.group(2))
+                    ext = "png" if mime_ext == "png" else mime_ext
+                else:
+                    img_path = (input_path.parent / ref).resolve()
+                    if not img_path.exists():
+                        logger.warning(f"Image ref not found, skipping: {ref}")
+                        continue
+                    data = img_path.read_bytes()
+                    ext = img_path.suffix.lstrip(".") or "png"
+
+                image_counter += 1
+                img_hash = hashlib.md5(data).hexdigest()[:12]
+                filename = f"image_{image_counter:03d}_{img_hash}.{ext}"
+                out_path = images_dir / filename
+                out_path.write_bytes(data)
+
+                manifest_entries.append({
+                    "original_ref": ref,
+                    "extracted_path": str(out_path.relative_to(images_dir.parent)),
+                    "alt": alt,
+                    "size_bytes": len(data),
+                })
+
+                stripped_content = stripped_content.replace(match.group(0), "")
+            except Exception as e:
+                logger.warning(f"Failed to extract image {ref}: {e}")
+
+        manifest_path = images_dir / "image_manifest.json"
+        manifest_path.write_text(
+            json.dumps({"images": manifest_entries, "total": len(manifest_entries)}, indent=2),
+            encoding="utf-8",
+        )
+
+        stripped_path = output_path.parent / f"{input_path.stem}.stripped.md"
+        stripped_path.write_text(stripped_content, encoding="utf-8")
+
+        return stripped_path, None
 
     def inject_images(
         self,

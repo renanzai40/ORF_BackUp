@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.4.0 (2026-06-03)
+
+### 新功能 / Added
+
+- **ImagePlacement 扩展字段** (`src/orf/mcp/schemas.py`)：新增 5 个字段以支持 OPP 浮动图片契约
+  - `is_floating: bool` — 标记图片为浮动（绝对定位）而非内联
+  - `wp_anchor_h: Optional[float]` / `wp_anchor_v: Optional[float]` — `wp:anchor` 元素在 EMU 单位下的水平/垂直位置
+  - `wp_anchor_relative_h: Optional[str]` / `wp_anchor_relative_v: Optional[str]` — 位置基准（如 `column` / `page` / `margin`）
+- **`xliff2docx._inject_floating_image()`**：新增方法，注入浮动图片时生成 `w:drawing > wp:anchor` 元素而非内联 `wp:inline`
+  - 位置来自 `ImagePlacement` 中的 `wp_anchor_h/v/relative_h/v` 字段
+- **`xliff2docx._create_floating_anchor_xml()`**：辅助方法，根据 `ImagePlacement` 生成完整的 `wp:anchor` XML 片段（含 `positionH` / `positionV` / `wrapNone` 等子元素）
+- **`inject_images()` 路由逻辑**：`is_floating=True` 的图片自动路由到浮动注入路径，不再走内联路径
+- **`md2docx._extract_images_separately()`**：新增 "DOCX + images separate" 模式
+  - 当 `separate_images=True` 且 `images_dir` 提供时，从 MD 中提取所有图片到指定目录
+  - 改写 MD 内容，剥离 `![alt](path)` 为 `![alt](file://相对路径)` 或纯文本占位符
+  - 返回 `(stripped_md, manifest)` 元组，其中 manifest 列出所有提取的图片路径
+  - 默认 `separate_images=False`（保持向后兼容）
+- **CLI 标志** (`src/orf/cli.py`)：`apply-md` 新增 `--separate-images` 和 `--images-dir` 参数启用 MD 图片分离模式
+- **测试覆盖** (2 个新文件)：
+  - `tests/test_xliff2docx_floating.py` — 5 个测试用例验证 `wp:anchor` 注入（合成 DOCX 含浮动 + 内联图片，断言 `positionH/V` XML 正确生成）
+  - `tests/test_md_separate_images.py` — 测试 MD 图片分离模式（提取、改写、manifest 生成）
+
+### 🛠️ 修复 / Fixed
+
+- **`inject_images` 浮动图片丢失** (`src/orf/channels/xliff2docx.py`)：当 `is_floating=True` 时，浮动图片此前走内联注入路径导致 5/12 张浮动图片被静默丢弃（位置信息不匹配）
+  - 修复：路由逻辑检查 `is_floating` 标志，True 则调用 `_inject_floating_image()` 走 `wp:anchor` 路径
+  - 影响：所有带浮动图片的 DOCX（Haier 文档除外 — Haier 0 浮动图片），未来 OPP 输出的真实文档将受益
+
 ## v0.3.4 (2026-05-29)
 
 ### 🛠️ 修复

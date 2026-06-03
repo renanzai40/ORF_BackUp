@@ -184,6 +184,24 @@ ORF 内置完整的 Agent 编排系统，可按文档格式自动路由到专业
 - **agent_id**：调用方 Agent 标识
 - 时间戳、操作类型、结果状态
 
+## Recent additions (v0.4.0)
+
+ORF v0.4.0 扩展了图片处理能力，以适配 OPP 真实 LLM 提取的图片元数据。
+
+### 浮动图片支持 (`wp:anchor`)
+
+XLIFF→DOCX 通道现在支持 **浮动图片**（绝对定位，独立于段落流），由 OPP 在 `images.json` 中通过 `is_floating=true` 标记。当 `ImagePlacement` 包含 `wp_anchor_h` / `wp_anchor_v` / `wp_anchor_relative_h` / `wp_anchor_relative_v` 字段时，ORF 注入 `w:drawing > wp:anchor` 元素（含 `positionH` / `positionV` / `wrapNone`）而非默认的 `wp:inline`。这修复了之前 5/12 浮动图片被静默丢弃的问题。
+
+### MD 图片分离模式 (`--separate-images`)
+
+`apply-md` 命令新增 `--separate-images` / `--images-dir` 标志，启用 **"DOCX + images separate" 模式**。在此模式下，MD 中的 `![alt](path)` 引用被剥离到指定 `images_dir/`，pandoc 生成的 DOCX 仅包含文本结构，图片清单写入 manifest。此模式适用于：MD 源含大量图片导致 pandoc 内嵌体积膨胀、需将图片资源单独发布、需在 DOCX 之外维护图片版本控制等场景。默认关闭（`separate_images=False`）以保持向后兼容。
+
+```bash
+# 启用 MD 图片分离模式
+orf apply-md translated.md --target-format docx --output result.docx \
+  --separate-images --images-dir ./extracted_images
+```
+
 ## 架构
 
 ```

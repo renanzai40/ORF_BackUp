@@ -34,3 +34,13 @@ htmlcov/
 # Build artifacts
 *.egg
 *.whl
+
+# Secrets (match Omni_Localizer/Omni_Pre_Processor)
+.env
+.env.local
+.env.*.local
+
+# Agent / editor runtime state
+.opencode/
+.omo/
+.sisyphus/

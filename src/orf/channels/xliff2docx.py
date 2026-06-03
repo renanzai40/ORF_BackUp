@@ -636,7 +636,12 @@ class XLIFF2DOCXConverter(BaseConverter):
         images: list[ImagePlacement],
         output_path: Path | str,
     ) -> tuple[list[ImagePlacement], list[ImagePlacement]]:
-        """Inject images into DOCX skeleton at specified paragraph positions.
+        """Inject images into DOCX skeleton.
+
+        Routes each image by position type:
+          - is_floating=True, paragraph_index=None -> wp:anchor (page-positioned)
+          - paragraph_index=int                    -> wp:inline (paragraph-anchored)
+          - otherwise                              -> orphaned (logged)
 
         Args:
             skeleton_path: Path to skeleton DOCX file.
@@ -652,8 +657,18 @@ class XLIFF2DOCXConverter(BaseConverter):
         orphaned: list[ImagePlacement] = []
         injected: list[ImagePlacement] = []
 
-        positioned = [img for img in images if img.paragraph_index is not None]
-        unpositioned = [img for img in images if img.paragraph_index is None]
+        floating = [
+            img for img in images
+            if getattr(img, "is_floating", False) and img.paragraph_index is None
+        ]
+        positioned = [
+            img for img in images
+            if img.paragraph_index is not None and not getattr(img, "is_floating", False)
+        ]
+        unpositioned = [
+            img for img in images
+            if img.paragraph_index is None and not getattr(img, "is_floating", False)
+        ]
 
         if unpositioned:
             for img in unpositioned:
@@ -663,7 +678,7 @@ class XLIFF2DOCXConverter(BaseConverter):
                 )
             orphaned.extend(unpositioned)
 
-        if not positioned:
+        if not positioned and not floating:
             if images:
                 self.skeleton_loader.load_skeleton(str(skeleton_path))
                 self.skeleton_loader.repack_docx(str(output_path))
@@ -733,6 +748,21 @@ class XLIFF2DOCXConverter(BaseConverter):
                     logger.error("Failed to inject image: %s", e)
                     orphaned.append(img)
 
+        for img in floating:
+            try:
+                if self._inject_floating_image(root, img, files, namelist):
+                    injected.append(img)
+                    logger.debug(
+                        "Injected floating image: rId=embedded, H=%d EMU, V=%d EMU",
+                        img.wp_anchor_h,
+                        img.wp_anchor_v,
+                    )
+                else:
+                    orphaned.append(img)
+            except Exception as e:
+                logger.error("Failed to inject floating image: %s", e)
+                orphaned.append(img)
+
         new_xml = etree.tostring(root, encoding="unicode", xml_declaration=False)
 
         files_copy = dict(files)
@@ -753,6 +783,118 @@ class XLIFF2DOCXConverter(BaseConverter):
             )
 
         return (injected, orphaned)
+
+    def _inject_floating_image(
+        self,
+        root: etree._Element,
+        img: ImagePlacement,
+        files: dict[str, bytes],
+        namelist: list[str],
+    ) -> bool:
+        """Inject a single floating image as a w:drawing > wp:anchor.
+
+        Floating images are page-positioned via wp:posOffset, so we attach the
+        drawing to the first w:p in the body (Word treats anchors attached at
+        the body level as page-relative). H/V coordinates are read from the
+        image record (already in EMU, supplied by OPP).
+
+        Args:
+            root: The <w:document> element being mutated in place.
+            img: ImagePlacement with is_floating=True and wp_anchor_h/v set.
+            files: Mutable ZIP-file-bytes map (media + rels updated in place).
+            namelist: Mutable list of ZIP member names (media added in place).
+
+        Returns:
+            True on successful injection, False on any failure (caller will
+            route the image to orphaned).
+        """
+        img_bytes = self._get_image_bytes(img)
+        rId = self._add_image_to_zip(img_bytes, img.mime_type, files, namelist)
+        width, height = self._get_image_dimensions(img, img_bytes)
+
+        anchor_xml = self._create_floating_anchor_xml(
+            rId=rId,
+            cx=width,
+            cy=height,
+            pos_h=img.wp_anchor_h,
+            pos_v=img.wp_anchor_v,
+            relative_h=getattr(img, "wp_anchor_relative_h", "page") or "page",
+            relative_v=getattr(img, "wp_anchor_relative_v", "page") or "page",
+        )
+        anchor_elem = etree.fromstring(anchor_xml)
+
+        body = root.find(f"{{{W_NS}}}body")
+        if body is None:
+            return False
+
+        first_para = body.find(f"{{{W_NS}}}p")
+        if first_para is None:
+            return False
+
+        first_para.insert(0, anchor_elem)
+        return True
+
+    def _create_floating_anchor_xml(
+        self,
+        rId: str,
+        cx: int,
+        cy: int,
+        pos_h: int,
+        pos_v: int,
+        relative_h: str = "page",
+        relative_v: str = "page",
+    ) -> str:
+        """Build a w:drawing > wp:anchor element string for a floating image.
+
+        Layout follows the OOXML DrawingML anchor schema:
+          distT/distB/distL/distR = text-wrap margins (EMU, 0 here = free)
+          simplePos=0              = use positionH/V, not simplePos
+          relativeHeight            = z-ordering hint (large = below)
+          behindDoc=0, locked=0, layoutInCell=1, allowOverlap=1 = common defaults
+        """
+        return f'''<w:drawing xmlns:w="{W_NS}" xmlns:wp="{WP_NS}" xmlns:a="{A_NS}" xmlns:pic="{PIC_NS}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="251659264" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">
+    <wp:simplePos x="0" y="0"/>
+    <wp:positionH relativeFrom="{relative_h}">
+      <wp:posOffset>{pos_h}</wp:posOffset>
+    </wp:positionH>
+    <wp:positionV relativeFrom="{relative_v}">
+      <wp:posOffset>{pos_v}</wp:posOffset>
+    </wp:positionV>
+    <wp:extent cx="{cx}" cy="{cy}"/>
+    <wp:effectExtent l="0" t="0" r="0" b="0"/>
+    <wp:wrapNone/>
+    <wp:docPr id="1" name="Picture"/>
+    <wp:cNvGraphicFramePr>
+      <a:graphicFrameLocks noChangeAspect="1"/>
+    </wp:cNvGraphicFramePr>
+    <a:graphic>
+      <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+        <pic:pic>
+          <pic:nvPicPr>
+            <pic:cNvPr id="1" name="image"/>
+            <pic:cNvPicPr/>
+          </pic:nvPicPr>
+          <pic:blipFill>
+            <a:blip r:embed="{rId}"/>
+            <a:stretch>
+              <a:fillRect/>
+            </a:stretch>
+          </pic:blipFill>
+          <pic:spPr>
+            <a:xfrm>
+              <a:off x="0" y="0"/>
+              <a:ext cx="{cx}" cy="{cy}"/>
+            </a:xfrm>
+            <a:prstGeom prst="rect">
+              <a:avLst/>
+            </a:prstGeom>
+          </pic:spPr>
+        </pic:pic>
+      </a:graphicData>
+    </a:graphic>
+  </wp:anchor>
+</w:drawing>'''
 
     def _get_image_bytes(self, img: ImagePlacement) -> bytes:
         if img.data_base64:

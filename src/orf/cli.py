@@ -75,6 +75,31 @@ def main(verbose: bool) -> None:
     """ORF - Omni-Re-Formatter: 将本地化后的 MD/XLIFF 还原为目标复杂格式。"""
     log_level = "DEBUG" if verbose else "INFO"
     setup_logger(level=log_level)
+    _maybe_install_fake_pandoc()
+
+
+def _maybe_install_fake_pandoc() -> None:
+    import os
+    if os.environ.get("OMNI_TEST_FAKE_PANDOC") != "1":
+        return
+    import subprocess as _subprocess
+    import sys
+    from pathlib import Path as _SeamPath
+    _suite_root = _SeamPath(__file__).resolve().parents[3]
+    if str(_suite_root) not in sys.path:
+        sys.path.insert(0, str(_suite_root))
+    from tests.test_e2e_pipeline_fixtures import _FakePandocRunner
+    _fake_runner = _FakePandocRunner()
+    _original_run = _subprocess.run
+    def _patched_run(*args, **kwargs):
+        try:
+            cmd = args[0] if args else kwargs.get("args") or kwargs.get("cmd")
+        except Exception:
+            cmd = None
+        if cmd and isinstance(cmd, (list, tuple)) and len(cmd) > 0 and "pandoc" in str(cmd[0]):
+            return _fake_runner(*args, **kwargs)
+        return _original_run(*args, **kwargs)
+    _subprocess.run = _patched_run
 
 
 @main.command("apply-md")
