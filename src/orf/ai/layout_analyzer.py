@@ -131,20 +131,20 @@ class LayoutAnalyzer:
         images = []
         with tempfile.TemporaryDirectory() as tmpdir:
             try:
-                result = subprocess.run(
-                    ["pdftoppm", "-png", "-r", "150", str(pdf_path), 
+                _ = subprocess.run(
+                    ["pdftoppm", "-png", "-r", "150", str(pdf_path),
                      str(Path(tmpdir) / "page")],
                     capture_output=True,
-                    text=True
+                    text=True,
+                    check=True,
                 )
-                if result.returncode == 0:
-                    images = list(Path(tmpdir).glob("page-*.png"))
-                    logger.info(f"Rendered {len(images)} pages from PDF")
-                else:
-                    logger.warning(f"pdftoppm failed: {result.stderr}")
+                images = list(Path(tmpdir).glob("page-*.png"))
+                logger.info(f"Rendered {len(images)} pages from PDF")
+            except subprocess.CalledProcessError as e:
+                logger.warning(f"pdftoppm failed: {e.stderr}")
             except FileNotFoundError:
                 logger.warning("pdftoppm not found, cannot render PDF")
-                
+
         return images
 
     def _render_docx(self, docx_path: Path) -> List[Path]:
@@ -159,20 +159,20 @@ class LayoutAnalyzer:
         images = []
         with tempfile.TemporaryDirectory() as tmpdir:
             try:
-                result = subprocess.run(
-                    ["libreoffice", "--headless", "--convert-to", "png", 
+                _ = subprocess.run(
+                    ["libreoffice", "--headless", "--convert-to", "png",
                      "--outdir", tmpdir, str(docx_path)],
                     capture_output=True,
-                    text=True
+                    text=True,
+                    check=True,
                 )
-                if result.returncode == 0:
-                    images = list(Path(tmpdir).glob("*.png"))
-                    logger.info(f"Rendered {len(images)} images from DOCX")
-                else:
-                    logger.warning(f"LibreOffice failed: {result.stderr}")
+                images = list(Path(tmpdir).glob("*.png"))
+                logger.info(f"Rendered {len(images)} images from DOCX")
+            except subprocess.CalledProcessError as e:
+                logger.warning(f"LibreOffice failed: {e.stderr}")
             except FileNotFoundError:
                 logger.warning("LibreOffice not found, cannot render DOCX")
-                
+
         return images
 
     def _render_markup(self, markup_path: Path) -> List[Path]:
@@ -188,18 +188,19 @@ class LayoutAnalyzer:
         with tempfile.TemporaryDirectory() as tmpdir:
             try:
                 pdf_path = Path(tmpdir) / "output.pdf"
-                result = subprocess.run(
+                _ = subprocess.run(
                     ["pandoc", str(markup_path), "-o", str(pdf_path)],
                     capture_output=True,
-                    text=True
+                    text=True,
+                    check=True,
                 )
-                if result.returncode == 0 and pdf_path.exists():
+                if pdf_path.exists():
                     images = self._render_pdf(pdf_path)
-                else:
-                    logger.warning(f"pandoc failed: {result.stderr}")
+            except subprocess.CalledProcessError as e:
+                logger.warning(f"pandoc failed: {e.stderr}")
             except FileNotFoundError:
                 logger.warning("pandoc not found, cannot render markup")
-                
+
         return images
 
     def _call_vision_api(self, images: List[Path]) -> List[Dict[str, Any]]:
