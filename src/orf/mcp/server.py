@@ -286,6 +286,144 @@ def _register_tools():
         return json.dumps(_run_cli_command(["info", file_path]))
 
 
+# Module-level aliases for in-process use (tests, callers that import these
+# directly rather than going through the FastMCP server). The bodies of
+# these wrappers duplicate the tool logic above so they work whether or not
+# _register_tools() has been called (i.e., before get_server() is invoked,
+# or in environments where FastMCP is unavailable). The @server.tool()
+# decorators in _register_tools() remain the canonical MCP surface; these
+# aliases are a parallel call path that the existing tests and any direct
+# importers rely on.
+
+
+def apply_md(input_md: str, target_format: str, output_path: Optional[str] = None) -> str:
+    """Convert MD to target format. In-process equivalent of the MCP tool."""
+    valid, error = PathValidator.validate(input_md)
+    if not valid:
+        return json.dumps({
+            "success": False,
+            "output_path": None,
+            "errors": [{"code": "PATH_NOT_ALLOWED", "message": error, "recovery_strategy": None}],
+            "warnings": [],
+            "metadata": {}
+        })
+
+    args = ["apply-md", input_md, "--target-format", target_format]
+    if output_path:
+        args.extend(["--output", output_path])
+
+    return json.dumps(_run_cli_command(args))
+
+
+def apply_xliff(
+    input_file: str,
+    xliff_path: str,
+    output_path: str,
+    format: str,
+    xliff_content: Optional[str] = None,
+    images: Optional[list[dict]] = None,
+) -> str:
+    """Apply XLIFF translation. In-process equivalent of the MCP tool."""
+    if xliff_path and xliff_content:
+        return json.dumps({
+            "success": False,
+            "output_path": None,
+            "errors": [{"code": "MUTUALLY_EXCLUSIVE", "message": "xliff_path and xliff_content are mutually exclusive"}],
+            "warnings": [],
+            "metadata": {}
+        })
+
+    xliff_to_use = xliff_path
+    xliff_temp_path = None
+    if xliff_content:
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.xliff', delete=False)
+        tmp.write(xliff_content)
+        tmp.close()
+        xliff_temp_path = tmp.name
+        xliff_to_use = xliff_temp_path
+
+    for p in [input_file, xliff_to_use]:
+        valid, error = PathValidator.validate(p)
+        if not valid:
+            if xliff_temp_path:
+                try:
+                    os.unlink(xliff_temp_path)
+                except Exception:
+                    pass
+            return json.dumps({
+                "success": False,
+                "output_path": None,
+                "errors": [{"code": "PATH_NOT_ALLOWED", "message": error}],
+                "warnings": [],
+                "metadata": {}
+            })
+
+    args = [
+        "apply-xliff", input_file,
+        "--xliff", xliff_to_use,
+        "--output", output_path,
+        "--format", format,
+    ]
+
+    temp_created = False
+    temp_path = ""
+    if images:
+        images_data = []
+        for img_dict in images:
+            try:
+                img_bytes = None
+                if "data_base64" in img_dict and img_dict["data_base64"]:
+                    img_bytes = base64.b64decode(img_dict["data_base64"])
+                elif "file_path" in img_dict and img_dict["file_path"]:
+                    img_bytes = Path(img_dict["file_path"]).read_bytes()
+
+                if img_bytes:
+                    b64 = base64.b64encode(img_bytes).decode("utf-8")
+                    img_record = {
+                        "data_base64": b64,
+                        "mime_type": img_dict.get("mime_type", "image/png"),
+                        "width": img_dict.get("width"),
+                        "height": img_dict.get("height"),
+                        "paragraph_index": img_dict.get("paragraph_index"),
+                        "slide_index": img_dict.get("slide_index"),
+                        "page_number": img_dict.get("page_number"),
+                        "element_index": img_dict.get("element_index"),
+                        "spine_index": img_dict.get("spine_index"),
+                    }
+                    images_data.append(img_record)
+            except Exception as e:
+                logger.warning("Failed to process image placement: %s", e)
+                continue
+
+        if images_data:
+            fd, temp_path = tempfile.mkstemp(suffix=".json", prefix="orf_images_")
+            try:
+                os.write(fd, json.dumps(images_data).encode("utf-8"))
+                os.close(fd)
+                args.extend(["--images-json", temp_path])
+                temp_created = True
+            except Exception as e:
+                logger.error("Failed to create temp images file: %s", e)
+                os.close(fd)
+                temp_created = False
+
+    result = _run_cli_command(args)
+
+    if temp_created:
+        try:
+            os.unlink(temp_path)
+        except Exception:
+            pass
+
+    if xliff_temp_path:
+        try:
+            os.unlink(xliff_temp_path)
+        except Exception:
+            pass
+
+    return json.dumps(result)
+
+
 def main():
     """Run the MCP server."""
     server = get_server()
