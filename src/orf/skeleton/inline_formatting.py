@@ -4,10 +4,15 @@ Handles conversion and application of inline formatting elements
 extracted from XLIFF <bx>/<ex> tags to various document formats.
 """
 
+import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional
+
+import lxml.etree
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -226,41 +231,57 @@ class DOCXInlineApplier(InlineFormattingApplier):
     ) -> str:
         """Apply inline formatting to DOCX XML content.
 
-        Finds text runs matching the target text and wraps content
-        in appropriate formatting tags.
+        Finds ``<w:r>`` runs whose ``<w:t>`` text equals ``target_text``
+        and injects a ``<w:rPr>`` element as the first child of each
+        matched run (C10: ``rPr`` must precede ``<w:t>`` in a run).
+        ``element.type`` may be a single format or a comma-separated
+        multi-format string (e.g. ``"bold,italic"``).
 
-        Args:
-            content: The DOCX document.xml content as string.
-            inline_elements: List of InlineElement objects to apply.
-            target_text: The target text that should receive formatting.
-
-        Returns:
-            Modified document XML with formatting applied.
+        Returns the original ``content`` unchanged if
+        ``inline_elements`` is empty or the input is not parseable XML.
         """
         if not inline_elements:
             return content
 
-        # Build formatting XML for each element
-        # We need to find text runs and insert rPr elements
+        try:
+            root = lxml.etree.fromstring(content.encode("utf-8"))
+        except (lxml.etree.XMLSyntaxError, UnicodeEncodeError) as exc:
+            logger.warning(
+                "DOCXInlineApplier: failed to parse content XML (%s); returning content unchanged",
+                exc,
+            )
+            return content
 
         for elem in inline_elements:
             if elem.type == "close":
-                continue  # Handle close tags specially
-
-            tag_name = self.TYPE_TO_TAG.get(elem.type.lower(), elem.type)
-            if not tag_name:
                 continue
 
-            # Find text in runs and wrap with formatting
-            # This is a simplified implementation
-            # rpr_xml would be used in actual implementation
+            sub_types = [t.strip() for t in elem.type.split(",") if t.strip()]
+            if not sub_types:
+                continue
 
-            # For actual DOCX formatting, we would need to:
-            # 1. Find w:r elements containing the target text
-            # 2. Insert w:rPr with the appropriate formatting child
-            # This is format-dependent and may need adjustment
+            for run in root.findall(f".//{self.W_PREFIX}r"):
+                t_elem = run.find(f"{self.W_PREFIX}t")
+                if t_elem is None or t_elem.text != target_text:
+                    continue
 
-        return content
+                rpr = lxml.etree.Element(f"{self.W_PREFIX}rPr")
+                for sub_type in sub_types:
+                    tag_name = self.TYPE_TO_TAG.get(sub_type.lower(), sub_type.lower())
+                    if not tag_name:
+                        continue
+                    child = lxml.etree.SubElement(rpr, f"{self.W_PREFIX}{tag_name}")
+                    # <w:u> requires a w:val attribute (single | double).
+                    if sub_type.lower() in ("underline", "double-underline", "single-underline"):
+                        val = "double" if sub_type.lower() == "double-underline" else "single"
+                        child.set(f"{self.W_PREFIX}val", val)
+
+                # C10: rPr must be the first child of w:r.
+                run.insert(0, rpr)
+
+        return lxml.etree.tostring(
+            root, xml_declaration=True, encoding="UTF-8", standalone=True
+        ).decode("utf-8")
 
     def create_run_properties(self, elem_type: str) -> str:
         """Create w:rPr XML for a given formatting type.
@@ -312,29 +333,66 @@ class PPTXInlineApplier(InlineFormattingApplier):
     ) -> str:
         """Apply inline formatting to PPTX slide XML content.
 
-        Args:
-            content: The PPTX slide XML content as string.
-            inline_elements: List of InlineElement objects to apply.
-            target_text: The target text that should receive formatting.
+        Finds ``<a:r>`` runs whose ``<a:t>`` text equals ``target_text``
+        and injects an ``<a:rPr>`` element as the first child of each
+        matched run, setting the relevant DrawingML attributes
+        (``b="1"``, ``i="1"``, ``u="sng"``, ``strike="sng"``).
+        ``element.type`` may be a single format or a comma-separated
+        multi-format string (e.g. ``"bold,italic"``).
 
-        Returns:
-            Modified slide XML with formatting applied.
+        Returns the original ``content`` unchanged if
+        ``inline_elements`` is empty or the input is not parseable XML.
         """
         if not inline_elements:
+            return content
+
+        try:
+            root = lxml.etree.fromstring(content.encode("utf-8"))
+        except (lxml.etree.XMLSyntaxError, UnicodeEncodeError) as exc:
+            logger.warning(
+                "PPTXInlineApplier: failed to parse content XML (%s); returning content unchanged",
+                exc,
+            )
             return content
 
         for elem in inline_elements:
             if elem.type == "close":
                 continue
 
-            attr_name = self.TYPE_TO_ATTR.get(elem.type.lower(), elem.type)
-            if not attr_name:
+            sub_types = [t.strip() for t in elem.type.split(",") if t.strip()]
+            if not sub_types:
                 continue
 
-            # PPTX formatting would be applied to a:rPr elements
-            # Similar approach to DOCX but with DrawingML namespace
+            for run in root.findall(f".//{self.A_PREFIX}r"):
+                t_elem = run.find(f"{self.A_PREFIX}t")
+                if t_elem is None or t_elem.text != target_text:
+                    continue
 
-        return content
+                rpr = lxml.etree.Element(f"{self.A_PREFIX}rPr")
+                for sub_type in sub_types:
+                    attr_name = self.TYPE_TO_ATTR.get(sub_type.lower(), sub_type.lower())
+                    if not attr_name:
+                        continue
+                    sub_lower = sub_type.lower()
+                    if sub_lower == "bold":
+                        rpr.set(f"{self.A_PREFIX}{attr_name}", "1")
+                    elif sub_lower == "italic":
+                        rpr.set(f"{self.A_PREFIX}{attr_name}", "1")
+                    elif sub_lower in ("underline", "double-underline", "single-underline"):
+                        # DrawingML uses sng | dbl | etc. for u/strike.
+                        val = "dbl" if sub_lower == "double-underline" else "sng"
+                        rpr.set(f"{self.A_PREFIX}{attr_name}", val)
+                    elif sub_lower == "strike":
+                        rpr.set(f"{self.A_PREFIX}{attr_name}", "sng")
+                    else:
+                        rpr.set(f"{self.A_PREFIX}{attr_name}", "1")
+
+                # C10: rPr must be the first child of a:r.
+                run.insert(0, rpr)
+
+        return lxml.etree.tostring(
+            root, xml_declaration=True, encoding="UTF-8", standalone=True
+        ).decode("utf-8")
 
     def create_run_properties(self, elem_type: str) -> str:
         """Create a:rPr XML for a given formatting type.
