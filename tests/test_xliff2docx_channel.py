@@ -317,6 +317,37 @@ class TestXLIFF2DOCXConverter:
             "second run after <ex> should NOT have rPr — close tag failed to remove formats"
         )
 
+    def test_build_formatted_runs_rpr_is_first_child(self):
+        """OOXML schema requires <w:rPr> to be the FIRST child of <w:r> when present.
+
+        Regression for audit finding C10: the previous builder appended rPr AFTER
+        <w:t>, producing order [t, rPr]. This is invalid per the W3C OOXML spec
+        and is rejected by strict validators (e.g., LibreOffice in strict mode,
+        Office Open XML SDK schema validation).
+        """
+        w_ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+        w_r = f"{w_ns}r"
+        w_rpr = f"{w_ns}rPr"
+        w_t = f"{w_ns}t"
+
+        converter = XLIFF2DOCXConverter()
+
+        formatted_runs = converter._build_formatted_runs(
+            '<bx id="1" type="bold"/>Hello<ex id="1"/>'
+        )
+        assert len(formatted_runs) == 1
+        assert [child.tag for child in formatted_runs[0]] == [w_rpr, w_t], (
+            f"rPr must be the FIRST child of <w:r> when formatting is present; "
+            f"got {[child.tag for child in formatted_runs[0]]}"
+        )
+
+        plain_runs = converter._build_formatted_runs("plain text")
+        assert len(plain_runs) == 1
+        assert [child.tag for child in plain_runs[0]] == [w_t], (
+            f"runs without formatting must contain only <w:t>; "
+            f"got {[child.tag for child in plain_runs[0]]}"
+        )
+
     @patch("orf.channels.xliff2docx.SkeletonLoader")
     def test_parse_xliff_xliff_2_0_format(
         self, mock_loader_class, sample_skeleton_docx: Path, tmp_path: Path

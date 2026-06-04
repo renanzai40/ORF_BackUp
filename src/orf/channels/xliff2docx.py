@@ -562,8 +562,6 @@ class XLIFF2DOCXConverter(BaseConverter):
             if not text:
                 continue
             r = etree.Element(f"{W}r")
-            t = etree.SubElement(r, f"{W}t")
-            t.text = text
 
             has_formatting = any(
                 fmt in ("bold", "italic", "underline", "double-underline", "single-underline", "strike")
@@ -587,6 +585,9 @@ class XLIFF2DOCXConverter(BaseConverter):
                         u_elem.set(f"{W}val", "single")
                     if fmt_val == "strike":
                         etree.SubElement(rpr, f"{W}strike")
+
+            t = etree.SubElement(r, f"{W}t")
+            t.text = text
 
             runs.append(r)
 
