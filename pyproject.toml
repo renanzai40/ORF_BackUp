@@ -38,6 +38,8 @@ dev = [
     "boto3>=1.34.0",
     "azure-storage-blob>=12.19.0",
     "openai>=1.12.0",
+    "openpyxl>=3.0.0",
+    "moto>=5.0.0",
 ]
 test = ["coverage"]
 weasyprint = ["weasyprint>=60.0"]
