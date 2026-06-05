@@ -96,7 +96,7 @@ class TestApplyMdTool:
             "input_md": "../../etc/passwd",
             "target_format": "docx"
         }))
-        result_data = json.loads(result)
+        result_data = json.loads(result.content[0].text)
         assert result_data["success"] is False
         assert "PATH_NOT_ALLOWED" in str(result_data["errors"])
 
@@ -114,7 +114,7 @@ class TestApplyXLIFFTool:
             "output_path": "out.docx",
             "format": "docx"
         }))
-        result_data = json.loads(result)
+        result_data = json.loads(result.content[0].text)
         assert result_data["success"] is False
 
 
@@ -130,7 +130,7 @@ class TestBatchConvertTool:
             "target_format": "docx",
             "pattern": "*.md"
         }))
-        result_data = json.loads(result)
+        result_data = json.loads(result.content[0].text)
         assert result_data["success_count"] == 0
         assert len(result_data["errors"]) > 0
 
@@ -145,7 +145,7 @@ class TestDetectFormatTool:
         result = asyncio.run(server.call_tool("detect_format", {
             "file_path": "../../etc/passwd"
         }))
-        result_data = json.loads(result)
+        result_data = json.loads(result.content[0].text)
         assert result_data["format"] == "UNKNOWN"
         assert result_data["confidence"] == 0.0
 
@@ -160,7 +160,7 @@ class TestInfoTool:
         result = asyncio.run(server.call_tool("info", {
             "file_path": "../../etc/passwd"
         }))
-        result_data = json.loads(result)
+        result_data = json.loads(result.content[0].text)
         assert result_data["manifest_status"] == "error"
 
 
@@ -191,7 +191,7 @@ class TestMCPIntegration:
             "input_md": "translated.md",
             "target_format": "docx"
         }))
-        result_data = json.loads(result)
+        result_data = json.loads(result.content[0].text)
         
         assert result_data["success"] is True
         assert result_data["output_path"] == "/tmp/result.docx"

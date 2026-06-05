@@ -40,15 +40,33 @@ class TestS3ResourceClient:
         mock_client = MagicMock()
         mock_session.client.return_value = mock_client
         mock_boto3.Session.return_value = mock_session
+
+        # Evict cached botocore.* submodules so they re-import the
+        # mocked exceptions module instead of keeping a stale
+        # ClientError class reference after the fixture teardown.
+        saved = {mod: sys.modules.get(mod) for mod in ("boto3", "botocore", "botocore.exceptions")}
+        saved_dependents = {
+            name: sys.modules[name]
+            for name in list(sys.modules)
+            if name == "botocore.client" or name.startswith("botocore.")
+        }
+        for name in saved_dependents:
+            sys.modules.pop(name, None)
+
         sys.modules["boto3"] = mock_boto3
         sys.modules["botocore"] = mock_botocore
         sys.modules["botocore.exceptions"] = mock_botocore.exceptions
         try:
             yield mock_session, mock_client
         finally:
-            for mod in ["boto3", "botocore", "botocore.exceptions"]:
-                if mod in sys.modules:
-                    del sys.modules[mod]
+            for mod in ("boto3", "botocore", "botocore.exceptions"):
+                sys.modules.pop(mod, None)
+            for name, original in saved_dependents.items():
+                if original is not None:
+                    sys.modules[name] = original
+            for mod, original in saved.items():
+                if original is not None:
+                    sys.modules[mod] = original
 
     @pytest.fixture
     def s3_client(self, mock_boto_session):
