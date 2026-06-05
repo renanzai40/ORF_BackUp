@@ -120,6 +120,35 @@ class BaseConverter(ABC):
         """支持的输出格式名称（如 'DOCX', 'ODT', 'EPUB'）"""
         pass
 
+    def inject_images(
+        self,
+        skeleton_path: Path | str,
+        images: list[Any],
+        output_path: Path | str,
+    ) -> tuple[list[Any], list[Any]]:
+        """Inject images into the converted output.
+
+        Default implementation raises :class:`AttributeError` to preserve
+        backward compatibility with callers (e.g. ``orf.cli``) that
+        ``try/except AttributeError`` around the call to gracefully handle
+        converters that don't support image injection. Subclasses that
+        support image injection should override this method.
+
+        Args:
+            skeleton_path: Path to the skeleton file (used as template).
+            images: List of ``ImagePlacement`` objects to inject.
+            output_path: Where to write the final output with images.
+
+        Returns:
+            Tuple of ``(injected_images, orphaned_images)``.
+
+        Raises:
+            AttributeError: Default behavior — signals "not supported".
+        """
+        raise AttributeError(
+            f"{type(self).__name__} does not support inject_images"
+        )
+
     def get_log_context(self) -> dict[str, Any]:
         """获取日志上下文信息"""
         context: dict[str, Any] = {"converter": self.supported_format}
