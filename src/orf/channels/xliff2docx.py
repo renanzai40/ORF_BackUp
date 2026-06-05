@@ -42,6 +42,17 @@ PIC_NS = "http://schemas.openxmlformats.org/drawingml/2006/picture"
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 WORD_NS_MAP = {"w": W_NS}
 
+# C13 fix: OOXML DrawingML allows these values for relativeFrom attributes.
+# Anything else is rejected at the channel boundary.
+ALLOWED_RELATIVE_FROM: frozenset[str] = frozenset({
+    "page",
+    "column",
+    "margin",
+    "paragraph",
+    "line",
+    "character",
+})
+
 
 @dataclass
 class XLIFFTransUnitData:
@@ -852,55 +863,114 @@ class XLIFF2DOCXConverter(BaseConverter):
           simplePos=0              = use positionH/V, not simplePos
           relativeHeight            = z-ordering hint (large = below)
           behindDoc=0, locked=0, layoutInCell=1, allowOverlap=1 = common defaults
+
+        C13 fix: relative_h/relative_v are validated against the OOXML
+        allowlist and serialized via etree.SubElement + .set() (which
+        XML-escapes attribute values) instead of f-string interpolation.
         """
-        return f'''<w:drawing xmlns:w="{W_NS}" xmlns:wp="{WP_NS}" xmlns:a="{A_NS}" xmlns:pic="{PIC_NS}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="251659264" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">
-    <wp:simplePos x="0" y="0"/>
-    <wp:positionH relativeFrom="{relative_h}">
-      <wp:posOffset>{pos_h}</wp:posOffset>
-    </wp:positionH>
-    <wp:positionV relativeFrom="{relative_v}">
-      <wp:posOffset>{pos_v}</wp:posOffset>
-    </wp:positionV>
-    <wp:extent cx="{cx}" cy="{cy}"/>
-    <wp:effectExtent l="0" t="0" r="0" b="0"/>
-    <wp:wrapNone/>
-    <wp:docPr id="1" name="Picture"/>
-    <wp:cNvGraphicFramePr>
-      <a:graphicFrameLocks noChangeAspect="1"/>
-    </wp:cNvGraphicFramePr>
-    <a:graphic>
-      <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
-        <pic:pic>
-          <pic:nvPicPr>
-            <pic:cNvPr id="1" name="image"/>
-            <pic:cNvPicPr/>
-          </pic:nvPicPr>
-          <pic:blipFill>
-            <a:blip r:embed="{rId}"/>
-            <a:stretch>
-              <a:fillRect/>
-            </a:stretch>
-          </pic:blipFill>
-          <pic:spPr>
-            <a:xfrm>
-              <a:off x="0" y="0"/>
-              <a:ext cx="{cx}" cy="{cy}"/>
-            </a:xfrm>
-            <a:prstGeom prst="rect">
-              <a:avLst/>
-            </a:prstGeom>
-          </pic:spPr>
-        </pic:pic>
-      </a:graphicData>
-    </a:graphic>
-  </wp:anchor>
-</w:drawing>'''
+        # Validate against allowlist BEFORE serializing.
+        if relative_h not in ALLOWED_RELATIVE_FROM:
+            raise ValueError(
+                f"relative_h {relative_h!r} is not in the OOXML allowlist "
+                f"{sorted(ALLOWED_RELATIVE_FROM)}"
+            )
+        if relative_v not in ALLOWED_RELATIVE_FROM:
+            raise ValueError(
+                f"relative_v {relative_v!r} is not in the OOXML allowlist "
+                f"{sorted(ALLOWED_RELATIVE_FROM)}"
+            )
+
+        # Numeric coercion for pos_h/pos_v so non-integer strings can't slip
+        # through as text content either.
+        pos_h_int = int(pos_h)
+        pos_v_int = int(pos_v)
+
+        # Build via etree so attribute values are XML-escaped. .set() will
+        # escape the relative_h/v values even though they're already
+        # allowlisted — defense in depth.
+        NSMAP = {
+            "w": W_NS,
+            "wp": WP_NS,
+            "a": A_NS,
+            "pic": PIC_NS,
+            "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+        }
+        drawing = etree.Element(f"{{{W_NS}}}drawing", nsmap=NSMAP)
+        anchor = etree.SubElement(
+            drawing,
+            f"{{{WP_NS}}}anchor",
+            attrib={
+                "distT": "0",
+                "distB": "0",
+                "distL": "114300",
+                "distR": "114300",
+                "simplePos": "0",
+                "relativeHeight": "251659264",
+                "behindDoc": "0",
+                "locked": "0",
+                "layoutInCell": "1",
+                "allowOverlap": "1",
+            },
+        )
+        etree.SubElement(
+            anchor, f"{{{WP_NS}}}simplePos", x="0", y="0"
+        )
+        pos_h_elem = etree.SubElement(
+            anchor, f"{{{WP_NS}}}positionH", relativeFrom=relative_h,
+        )
+        etree.SubElement(pos_h_elem, f"{{{WP_NS}}}posOffset").text = str(pos_h_int)
+        pos_v_elem = etree.SubElement(
+            anchor, f"{{{WP_NS}}}positionV", relativeFrom=relative_v,
+        )
+        etree.SubElement(pos_v_elem, f"{{{WP_NS}}}posOffset").text = str(pos_v_int)
+        etree.SubElement(
+            anchor, f"{{{WP_NS}}}extent", cx=str(cx), cy=str(cy)
+        )
+        etree.SubElement(
+            anchor, f"{{{WP_NS}}}effectExtent", l="0", t="0", r="0", b="0"
+        )
+        etree.SubElement(anchor, f"{{{WP_NS}}}wrapNone")
+        etree.SubElement(anchor, f"{{{WP_NS}}}docPr", id="1", name="Picture")
+        cNvGraphicFramePr = etree.SubElement(
+            anchor, f"{{{WP_NS}}}cNvGraphicFramePr"
+        )
+        etree.SubElement(
+            cNvGraphicFramePr, f"{{{A_NS}}}graphicFrameLocks", noChangeAspect="1"
+        )
+        graphic = etree.SubElement(anchor, f"{{{A_NS}}}graphic")
+        graphicData = etree.SubElement(
+            graphic, f"{{{A_NS}}}graphicData",
+            uri="http://schemas.openxmlformats.org/drawingml/2006/picture",
+        )
+        pic_pic = etree.SubElement(graphicData, f"{{{PIC_NS}}}pic")
+        nvPicPr = etree.SubElement(pic_pic, f"{{{PIC_NS}}}nvPicPr")
+        etree.SubElement(nvPicPr, f"{{{PIC_NS}}}cNvPr", id="1", name="image")
+        etree.SubElement(nvPicPr, f"{{{PIC_NS}}}cNvPicPr")
+        blipFill = etree.SubElement(pic_pic, f"{{{PIC_NS}}}blipFill")
+        etree.SubElement(
+            blipFill, f"{{{A_NS}}}blip",
+            attrib={"{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed": rId},
+        )
+        stretch = etree.SubElement(blipFill, f"{{{A_NS}}}stretch")
+        etree.SubElement(stretch, f"{{{A_NS}}}fillRect")
+        spPr = etree.SubElement(pic_pic, f"{{{PIC_NS}}}spPr")
+        xfrm = etree.SubElement(spPr, f"{{{A_NS}}}xfrm")
+        etree.SubElement(xfrm, f"{{{A_NS}}}off", x="0", y="0")
+        etree.SubElement(xfrm, f"{{{A_NS}}}ext", cx=str(cx), cy=str(cy))
+        prstGeom = etree.SubElement(spPr, f"{{{A_NS}}}prstGeom", prst="rect")
+        etree.SubElement(prstGeom, f"{{{A_NS}}}avLst")
+
+        return etree.tostring(drawing, encoding="unicode")
 
     def _get_image_bytes(self, img: ImagePlacement) -> bytes:
         if img.data_base64:
             return base64.b64decode(img.data_base64)
         if img.file_path:
+            # C4 fix (defense in depth): validate file_path before reading.
+            from orf.mcp.security import PathValidator
+            valid, err = PathValidator.validate(img.file_path)
+            if not valid:
+                raise ValueError(f"file_path rejected: {err}")
             return Path(img.file_path).read_bytes()
         raise ValueError("ImagePlacement must have data_base64 or file_path")
 
