@@ -471,6 +471,11 @@ class XLIFF2PPTXConverter(BaseConverter):
         if img.data_base64:
             return base64.b64decode(img.data_base64)
         if img.file_path:
+            # C4 fix (defense in depth): validate file_path before reading.
+            from orf.mcp.security import PathValidator
+            valid, err = PathValidator.validate(img.file_path)
+            if not valid:
+                raise ValueError(f"file_path rejected: {err}")
             return Path(img.file_path).read_bytes()
         raise ValueError("ImagePlacement must have data_base64 or file_path")
 
