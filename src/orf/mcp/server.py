@@ -139,6 +139,34 @@ def _register_tools():
         Returns:
             JSON result string.
         """
+        # C4 fix: reject image placements that carry `file_path` (arbitrary
+        # file read). MCP clients must provide `data_base64` only.
+        if images:
+            for idx, img_dict in enumerate(images):
+                if isinstance(img_dict, dict) and img_dict.get("file_path"):
+                    return json.dumps({
+                        "success": False,
+                        "output_path": None,
+                        "errors": [{
+                            "code": "FILE_PATH_NOT_ALLOWED",
+                            "message": (
+                                f"image[{idx}].file_path is not allowed via MCP; "
+                                "supply data_base64 instead."
+                            ),
+                        }],
+                        "warnings": [],
+                        "metadata": {},
+                    })
+        # C5 fix: validate output_path against allowlist before subprocess
+        valid_out, out_err = PathValidator.validate(output_path)
+        if not valid_out:
+            return json.dumps({
+                "success": False,
+                "output_path": None,
+                "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"output_path: {out_err}"}],
+                "warnings": [],
+                "metadata": {},
+            })
         if xliff_path and xliff_content:
             return json.dumps({
                 "success": False,
@@ -324,6 +352,34 @@ def apply_xliff(
     images: Optional[list[dict]] = None,
 ) -> str:
     """Apply XLIFF translation. In-process equivalent of the MCP tool."""
+    # C4 fix: reject image placements that carry `file_path` (arbitrary
+    # file read). MCP clients must provide `data_base64` only.
+    if images:
+        for idx, img_dict in enumerate(images):
+            if isinstance(img_dict, dict) and img_dict.get("file_path"):
+                return json.dumps({
+                    "success": False,
+                    "output_path": None,
+                    "errors": [{
+                        "code": "FILE_PATH_NOT_ALLOWED",
+                        "message": (
+                            f"image[{idx}].file_path is not allowed via MCP; "
+                            "supply data_base64 instead."
+                        ),
+                    }],
+                    "warnings": [],
+                    "metadata": {},
+                })
+    # C5 fix: validate output_path against allowlist before subprocess
+    valid_out, out_err = PathValidator.validate(output_path)
+    if not valid_out:
+        return json.dumps({
+            "success": False,
+            "output_path": None,
+            "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"output_path: {out_err}"}],
+            "warnings": [],
+            "metadata": {},
+        })
     if xliff_path and xliff_content:
         return json.dumps({
             "success": False,
