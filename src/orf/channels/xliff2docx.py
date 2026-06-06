@@ -406,56 +406,63 @@ class XLIFF2DOCXConverter(BaseConverter):
 
         if not trans_units:
             warnings.append("No trans-units found in XLIFF file")
+            final_xml = document_xml
+        else:
+            # 3. For each trans-unit, backfill target text. Log every 5% so
+            # interactive users see incremental progress.
+            # Phase A.1: parse once, mutate root in place, serialize once
+            # at the end — eliminates O(N×D) parse+serialize per trans-unit.
+            total = len(trans_units)
+            log_every = max(50, total // 20) if total else 1
+            root = etree.fromstring(document_xml.encode("utf-8"))
+            body = root.find("w:body", WORD_NS_MAP)
+            body_paragraphs = body.xpath("./w:p", namespaces=WORD_NS_MAP)
+            for idx, tu in enumerate(trans_units, 1):
+                tu_id = tu["id"]
+                target_text = tu.get("target", "")
+                inline_elements = tu.get("inline_elements", [])
 
-        # 3. For each trans-unit, backfill target text. Log every 5% so
-        # interactive users see incremental progress.
-        total = len(trans_units)
-        log_every = max(50, total // 20) if total else 1
-        for idx, tu in enumerate(trans_units, 1):
-            tu_id = tu["id"]
-            target_text = tu.get("target", "")
-            inline_elements = tu.get("inline_elements", [])
-
-            if not target_text:
-                continue
-
-            # Phase B.2: position-based lookup via resname="para_index_N".
-            # Robust against LLM rephrasing and whitespace drift.
-            if tu.get("para_index") is not None:
-                try:
-                    document_xml = self._backfill_by_position(
-                        document_xml,
-                        tu["para_index"],
-                        target_text,
-                    )
+                if not target_text:
                     continue
-                except Exception as e:
-                    logger.warning(
-                        f"Position-based backfill failed for unit {tu_id} "
-                        f"at index {tu['para_index']}: {e}; "
-                        "falling back to text matching"
+
+                # Phase B.2: position-based lookup via resname="para_index_N".
+                # Robust against LLM rephrasing and whitespace drift.
+                if tu.get("para_index") is not None:
+                    try:
+                        self._backfill_by_position(
+                            root, body_paragraphs,
+                            tu["para_index"],
+                            target_text,
+                        )
+                        continue
+                    except Exception as e:
+                        logger.warning(
+                            f"Position-based backfill failed for unit {tu_id} "
+                            f"at index {tu['para_index']}: {e}; "
+                            "falling back to text matching"
+                        )
+
+                try:
+                    self._backfill_translation(
+                        root, body_paragraphs,
+                        tu["source"],
+                        target_text,
+                        inline_elements,
                     )
+                except Exception as e:
+                    logger.warning(f"Failed to backfill trans-unit {tu_id}: {e}")
+                    warnings.append(f"Failed to backfill unit {tu_id}: {e}")
 
-            try:
-                document_xml = self._backfill_translation(
-                    document_xml,
-                    tu["source"],
-                    target_text,
-                    inline_elements,
-                )
-            except Exception as e:
-                logger.warning(f"Failed to backfill trans-unit {tu_id}: {e}")
-                warnings.append(f"Failed to backfill unit {tu_id}: {e}")
-
-            if idx % log_every == 0 or idx == total:
-                logger.info(
-                    f"ORF backfill progress: {idx}/{total} units "
-                    f"({idx/total*100:.0f}%)"
-                )
+                if idx % log_every == 0 or idx == total:
+                    logger.info(
+                        f"ORF backfill progress: {idx}/{total} units "
+                        f"({idx/total*100:.0f}%)"
+                    )
+            final_xml = etree.tostring(root, encoding="unicode", xml_declaration=False)
 
         # 4. Repack as DOCX
         try:
-            self.skeleton_loader.repack_docx(str(output_path), document_xml)
+            self.skeleton_loader.repack_docx(str(output_path), final_xml)
         except Exception as e:
             return ConversionResult(
                 output_path=output_path,
@@ -475,12 +482,15 @@ class XLIFF2DOCXConverter(BaseConverter):
 
     def _backfill_translation(
         self,
-        document_xml: str,
+        root: etree._Element,
+        body_paragraphs: list[etree._Element],
         source_text: str,
         target_text: str,
         inline_elements: list[InlineElement],
-    ) -> str:
-        r"""Backfill a single translation into document XML.
+    ) -> bool:
+        r"""Backfill a single translation into the parsed document root.
+
+        Mutates ``root`` in place. Returns True if a match was applied.
 
         POST_MORTEM ORF-2: matching is now layered:
           1. Try exact match on the OPP source as-is.
@@ -490,20 +500,9 @@ class XLIFF2DOCXConverter(BaseConverter):
              where the LLM rephrased (punctuation, missing/extra words).
           4. Last resort: apply the LLM target to the closest paragraph so
              we never leave the OPP source (often Chinese) in the output.
-
-        Args:
-            document_xml: The document.xml content.
-            source_text: Original source text (for finding location).
-            target_text: Translated target text.
-            inline_elements: Inline formatting elements.
-
-        Returns:
-            Modified document_xml string (always returns modified xml, even if no match).
         """
         if not source_text and not target_text:
-            return document_xml
-
-        root = etree.fromstring(document_xml.encode("utf-8"))
+            return False
 
         found = False
         source_stripped = re.sub(r'<[^>]+>', '', source_text) if source_text else ""
@@ -523,8 +522,7 @@ class XLIFF2DOCXConverter(BaseConverter):
                     t_elem.text = target_text
 
         if not found:
-            paragraphs = root.xpath("//w:p", namespaces=WORD_NS_MAP)
-            for p in paragraphs:
+            for p in body_paragraphs:
                 text_runs = [t.text for t in p.xpath(".//w:t", namespaces=WORD_NS_MAP) if t.text]
                 concat_text = "".join(text_runs)
                 if source_normalized in concat_text or source_stripped in concat_text:
@@ -537,8 +535,7 @@ class XLIFF2DOCXConverter(BaseConverter):
         if not found:
             self._fallback_backfill(root, target_text)
 
-        new_xml = etree.tostring(root, encoding="unicode", xml_declaration=False)
-        return new_xml
+        return found
 
     def _fuzzy_backfill(
         self,
@@ -598,11 +595,12 @@ class XLIFF2DOCXConverter(BaseConverter):
 
     def _backfill_by_position(
         self,
-        document_xml: str,
+        root: etree._Element,
+        body_paragraphs: list[etree._Element],
         para_index: int,
         target_text: str,
-    ) -> str:
-        """Phase B.2: apply target_text directamente to the w:p at the given index.
+    ) -> bool:
+        """Phase B.2: apply target_text to the w:p at the given index.
 
         Used when the OPP source has resname="para_index_N". This is
         a deterministic, position-based lookup that bypasses all the
@@ -613,23 +611,20 @@ class XLIFF2DOCXConverter(BaseConverter):
         We must use the same indexing here — `//w:p` would include
         nested w:p (tables, text boxes) and shift the index.
         """
-        root = etree.fromstring(document_xml.encode("utf-8"))
-        body = root.find("w:body", WORD_NS_MAP)
-        paragraphs = body.xpath("./w:p", namespaces=WORD_NS_MAP)
-        if not (0 <= para_index < len(paragraphs)):
+        if not (0 <= para_index < len(body_paragraphs)):
             logger.warning(
                 "resname para_index=%d out of range (have %d body-level paragraphs)",
-                para_index, len(paragraphs),
+                para_index, len(body_paragraphs),
             )
-            return document_xml
-        para = paragraphs[para_index]
+            return False
+        para = body_paragraphs[para_index]
         runs = para.xpath(".//w:t", namespaces=WORD_NS_MAP)
         if not runs:
-            return document_xml
+            return False
         runs[0].text = target_text
         for r in runs[1:]:
             r.text = ""
-        return etree.tostring(root, encoding="unicode", xml_declaration=False)
+        return True
 
     def _fallback_backfill(self, root: etree._Element, target_text: str) -> bool:
         """Last-resort fallback: log a warning and skip.
