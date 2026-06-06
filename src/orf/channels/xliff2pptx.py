@@ -273,70 +273,76 @@ class XLIFF2PPTXConverter(BaseConverter):
                     "inline_elements": unit["inline_elements"],
                 }
 
-        # Process each slide file
         for filename in modified:
             if filename.startswith("ppt/slides/slide") and filename.endswith(".xml"):
                 xml_content = modified[filename].decode("utf-8")
-                modified_xml = self._apply_translation_to_slide_xml(
-                    xml_content,
-                    trans_map,
-                )
-                modified[filename] = modified_xml.encode("utf-8")
+                root = etree.fromstring(xml_content.encode("utf-8"))
+                if self._apply_translation_to_slide_root(root, trans_map):
+                    modified[filename] = etree.tostring(
+                        root,
+                        encoding="utf-8",
+                        xml_declaration=True,
+                    )
 
         return modified
 
-    def _apply_translation_to_slide_xml(
+    def _apply_translation_to_slide_root(
         self,
-        xml_content: str,
+        root: etree._Element,
         trans_map: dict[str, Any],
-    ) -> str:
-        """Apply translations to a single slide XML content.
+    ) -> bool:
+        """Apply translations to a parsed slide root element (mutate in place).
+
+        The caller parses each slide once, passes the root here, and serializes
+        the root once at the end. Simple text replacement mutates ``t.text`` in
+        place; inline formatting goes through the string-based
+        ``PPTXInlineApplier`` and the resulting XML is re-parsed into the
+        same root.
 
         Args:
-            xml_content: The slide XML as string.
+            root: The parsed slide XML root element (will be mutated).
             trans_map: Mapping from source text to translation data.
 
         Returns:
-            Modified XML content.
+            True if any changes were made to the root.
         """
-        root = etree.fromstring(xml_content.encode("utf-8"))
+        changed = False
 
-        # Find all text runs (a:r elements)
         for r_element in root.iter(f"{A_PREFIX}r"):
-            # Get text content from this run
             t_elements = list(r_element.iter(f"{A_PREFIX}t"))
             if not t_elements:
                 continue
 
-            # Concatenate text from all t elements in this run
             run_text = ""
             for t in t_elements:
                 if t.text:
                     run_text += t.text
 
-            # Check if this run's text matches a translation source
             if run_text in trans_map:
                 trans_data = trans_map[run_text]
                 target_text = trans_data["target"]
                 inline_elements = trans_data["inline_elements"]
 
-                # Apply inline formatting
                 if inline_elements:
+                    xml_content = etree.tostring(root, encoding="unicode")
                     formatted_xml = self.pptx_applier.apply_formatting(
                         xml_content,
                         inline_elements,
                         target_text,
                     )
                     if formatted_xml != xml_content:
-                        return formatted_xml
+                        new_root = etree.fromstring(formatted_xml.encode("utf-8"))
+                        for child in list(root):
+                            root.remove(child)
+                        for child in list(new_root):
+                            root.append(child)
+                        changed = True
 
-                # Simple text replacement in t elements
-                if t_elements:
-                    for i, t in enumerate(t_elements):
-                        t.text = target_text if i == 0 else ""
-                    # Clear subsequent t elements' text
+                for i, t in enumerate(t_elements):
+                    t.text = target_text if i == 0 else ""
+                changed = True
 
-        return xml_content
+        return changed
 
     def _repack_pptx(
         self,
