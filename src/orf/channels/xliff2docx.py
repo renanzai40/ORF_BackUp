@@ -53,6 +53,35 @@ ALLOWED_RELATIVE_FROM: frozenset[str] = frozenset({
     "character",
 })
 
+# ORF-2: minimum SequenceMatcher ratio (0.0-1.0) for fuzzy paragraph match
+# when the OPP source has been rephrased by the LLM (punctuation, word
+# order, dropped articles). Lower = more permissive but more false matches.
+FUZZY_MATCH_THRESHOLD = 0.70
+
+# Phase A.2: permissive wrapper-strip regex. 30.3% of slim units had
+# the LLM echo `<source xmlns=...>...</source>` around the translation.
+# Some LLM outputs are compound: multiple `<source>...</source>` segments
+# concatenated. The strip removes all of them.
+_INNER_STRIP_RE = re.compile(
+    r'<\s*/?\s*(?:source|target)\b[^>]*>',
+    re.DOTALL,
+)
+
+
+def _strip_wrapper(target_text: str) -> str:
+    """Return the inner text with `<source|target ...>` wrapper tags removed.
+
+    Handles three cases:
+    1. Whole string is one wrapper: `<source ...>inner</source>` → `inner`
+    2. Compound wrappers: `a</source>\n\n<source>b</source>` → `ab`
+    3. No wrapper: returned unchanged
+    """
+    stripped = _INNER_STRIP_RE.sub('', target_text).strip()
+    # Only return stripped version if it differs (no-op for plain text)
+    if stripped != target_text.strip():
+        return stripped
+    return target_text
+
 
 @dataclass
 class XLIFFTransUnitData:
@@ -165,7 +194,7 @@ class XLIFF2DOCXConverter(BaseConverter):
             source_text = (
                 "".join(source_el.itertext()) if source_el is not None else ""
             )
-            target_text = (
+            target_text = _strip_wrapper(
                 "".join(target_el.itertext()) if target_el is not None else ""
             )
 
@@ -173,11 +202,20 @@ class XLIFF2DOCXConverter(BaseConverter):
             source_xml = etree.tostring(source_el, encoding="unicode") if source_el is not None else ""
             inline_elements = self._extract_inline_elements(source_xml)
 
+            resname = tu.get("resname")
+            para_index = None
+            if resname and resname.startswith("para_index_"):
+                try:
+                    para_index = int(resname[len("para_index_"):])
+                except ValueError:
+                    para_index = None
+
             trans_units.append({
                 "id": tu_id,
                 "source": source_text,
                 "target": target_text,
                 "inline_elements": inline_elements,
+                "para_index": para_index,
             })
 
         # Try xliff 1.1 trans-unit if no 1.2 units found
@@ -196,18 +234,27 @@ class XLIFF2DOCXConverter(BaseConverter):
                 source_text = (
                     "".join(source_el.itertext()) if source_el is not None else ""
                 )
-                target_text = (
+                target_text = _strip_wrapper(
                     "".join(target_el.itertext()) if target_el is not None else ""
                 )
 
                 source_xml = etree.tostring(source_el, encoding="unicode") if source_el is not None else ""
                 inline_elements = self._extract_inline_elements(source_xml)
 
+                resname = tu.get("resname")
+                para_index = None
+                if resname and resname.startswith("para_index_"):
+                    try:
+                        para_index = int(resname[len("para_index_"):])
+                    except ValueError:
+                        para_index = None
+
                 trans_units.append({
                     "id": tu_id,
                     "source": source_text,
                     "target": target_text,
                     "inline_elements": inline_elements,
+                    "para_index": para_index,
                 })
             if trans_units:
                 logger.debug("Found %d trans-units using XLIFF 1.1 namespace", len(trans_units))
@@ -233,18 +280,27 @@ class XLIFF2DOCXConverter(BaseConverter):
                         source_text = (
                             "".join(source_el.itertext()) if source_el is not None else ""
                         )
-                        target_text = (
+                        target_text = _strip_wrapper(
                             "".join(target_el.itertext()) if target_el is not None else ""
                         )
 
                         source_xml = etree.tostring(source_el, encoding="unicode") if source_el is not None else ""
                         inline_elements = self._extract_inline_elements(source_xml)
 
+                        resname = seg.get("resname")
+                        para_index = None
+                        if resname and resname.startswith("para_index_"):
+                            try:
+                                para_index = int(resname[len("para_index_"):])
+                            except ValueError:
+                                para_index = None
+
                         trans_units.append({
                             "id": seg_id,
                             "source": source_text,
                             "target": target_text,
                             "inline_elements": inline_elements,
+                            "para_index": para_index,
                         })
                 else:
                     # No segments, treat whole unit as one trans-unit
@@ -254,18 +310,27 @@ class XLIFF2DOCXConverter(BaseConverter):
                     source_text = (
                         "".join(source_el.itertext()) if source_el is not None else ""
                     )
-                    target_text = (
+                    target_text = _strip_wrapper(
                         "".join(target_el.itertext()) if target_el is not None else ""
                     )
 
                     source_xml = etree.tostring(source_el, encoding="unicode") if source_el is not None else ""
                     inline_elements = self._extract_inline_elements(source_xml)
 
+                    resname = unit.get("resname")
+                    para_index = None
+                    if resname and resname.startswith("para_index_"):
+                        try:
+                            para_index = int(resname[len("para_index_"):])
+                        except ValueError:
+                            para_index = None
+
                     trans_units.append({
                         "id": unit_id,
                         "source": source_text,
                         "target": target_text,
                         "inline_elements": inline_elements,
+                        "para_index": para_index,
                     })
 
         logger.debug(f"Parsed {len(trans_units)} trans-units from {path}")
@@ -342,15 +407,34 @@ class XLIFF2DOCXConverter(BaseConverter):
         if not trans_units:
             warnings.append("No trans-units found in XLIFF file")
 
-        # 3. For each trans-unit, backfill target text
-        for tu in trans_units:
+        # 3. For each trans-unit, backfill target text. Log every 5% so
+        # interactive users see incremental progress.
+        total = len(trans_units)
+        log_every = max(50, total // 20) if total else 1
+        for idx, tu in enumerate(trans_units, 1):
             tu_id = tu["id"]
             target_text = tu.get("target", "")
             inline_elements = tu.get("inline_elements", [])
 
             if not target_text:
-                # Skip empty translations
                 continue
+
+            # Phase B.2: position-based lookup via resname="para_index_N".
+            # Robust against LLM rephrasing and whitespace drift.
+            if tu.get("para_index") is not None:
+                try:
+                    document_xml = self._backfill_by_position(
+                        document_xml,
+                        tu["para_index"],
+                        target_text,
+                    )
+                    continue
+                except Exception as e:
+                    logger.warning(
+                        f"Position-based backfill failed for unit {tu_id} "
+                        f"at index {tu['para_index']}: {e}; "
+                        "falling back to text matching"
+                    )
 
             try:
                 document_xml = self._backfill_translation(
@@ -362,6 +446,12 @@ class XLIFF2DOCXConverter(BaseConverter):
             except Exception as e:
                 logger.warning(f"Failed to backfill trans-unit {tu_id}: {e}")
                 warnings.append(f"Failed to backfill unit {tu_id}: {e}")
+
+            if idx % log_every == 0 or idx == total:
+                logger.info(
+                    f"ORF backfill progress: {idx}/{total} units "
+                    f"({idx/total*100:.0f}%)"
+                )
 
         # 4. Repack as DOCX
         try:
@@ -390,7 +480,16 @@ class XLIFF2DOCXConverter(BaseConverter):
         target_text: str,
         inline_elements: list[InlineElement],
     ) -> str:
-        """Backfill a single translation into document XML.
+        r"""Backfill a single translation into document XML.
+
+        POST_MORTEM ORF-2: matching is now layered:
+          1. Try exact match on the OPP source as-is.
+          2. Normalize whitespace on both sides (collapse runs of ``\s`` to a
+             single space) and try again.
+          3. Try SequenceMatcher ratio >= FUZZY_MATCH_THRESHOLD for cases
+             where the LLM rephrased (punctuation, missing/extra words).
+          4. Last resort: apply the LLM target to the closest paragraph so
+             we never leave the OPP source (often Chinese) in the output.
 
         Args:
             document_xml: The document.xml content.
@@ -407,7 +506,8 @@ class XLIFF2DOCXConverter(BaseConverter):
         root = etree.fromstring(document_xml.encode("utf-8"))
 
         found = False
-        source_normalized = re.sub(r'<[^>]+>', '', source_text) if source_text else ""
+        source_stripped = re.sub(r'<[^>]+>', '', source_text) if source_text else ""
+        source_normalized = re.sub(r"\s+", " ", source_stripped).strip()
 
         if inline_elements:
             found = self._backfill_with_inline_elements(
@@ -418,18 +518,134 @@ class XLIFF2DOCXConverter(BaseConverter):
                 if t_elem.text and source_normalized in t_elem.text:
                     found = True
                     t_elem.text = target_text
+                elif t_elem.text and source_stripped in t_elem.text:
+                    found = True
+                    t_elem.text = target_text
 
         if not found:
             paragraphs = root.xpath("//w:p", namespaces=WORD_NS_MAP)
             for p in paragraphs:
                 text_runs = [t.text for t in p.xpath(".//w:t", namespaces=WORD_NS_MAP) if t.text]
                 concat_text = "".join(text_runs)
-                if source_normalized in concat_text:
+                if source_normalized in concat_text or source_stripped in concat_text:
                     found = self._backfill_split_runs(p, source_normalized, target_text)
                     break
 
+        if not found:
+            self._fuzzy_backfill(root, source_normalized, target_text)
+
+        if not found:
+            self._fallback_backfill(root, target_text)
+
         new_xml = etree.tostring(root, encoding="unicode", xml_declaration=False)
         return new_xml
+
+    def _fuzzy_backfill(
+        self,
+        root: etree._Element,
+        source_normalized: str,
+        target_text: str,
+        threshold: float = FUZZY_MATCH_THRESHOLD,
+    ) -> bool:
+        """Apply target_text to the paragraph whose text is most similar to
+        source_normalized. Returns True if applied.
+
+        Uses three layered signals, in order:
+          1. SequenceMatcher ratio on whitespace-normalized text.
+          2. CJK character-set Jaccard similarity (catches OPP source /
+             docx text that group characters differently but share the
+             same characters).
+          3. Plain SequenceMatcher ratio without normalization (catches
+             "no whitespace at all" matches).
+        """
+        import difflib
+        paragraphs = root.xpath("//w:p", namespaces=WORD_NS_MAP)
+        cjk_re = __import__("re").compile(r"[\u4e00-\u9fff]")
+        source_chars = set(cjk_re.findall(source_normalized))
+
+        best_para = None
+        best_score = 0.0
+        for p in paragraphs:
+            runs = p.xpath(".//w:t", namespaces=WORD_NS_MAP)
+            para_text = "".join(r.text or "" for r in runs)
+            para_norm = re.sub(r"\s+", " ", para_text).strip()
+            if not para_norm or not source_normalized:
+                continue
+            sm_ratio = difflib.SequenceMatcher(None, source_normalized, para_norm).ratio()
+            para_chars = set(cjk_re.findall(para_norm))
+            jaccard = (
+                len(source_chars & para_chars) / len(source_chars | para_chars)
+                if (source_chars | para_chars) else 0.0
+            )
+            raw_ratio = difflib.SequenceMatcher(None, source_normalized, para_text).ratio()
+            score = max(sm_ratio, jaccard, raw_ratio)
+            if score > best_score:
+                best_score = score
+                best_para = p
+
+        if best_para is not None and best_score >= threshold:
+            runs = best_para.xpath(".//w:t", namespaces=WORD_NS_MAP)
+            if not runs:
+                return False
+            para_text = "".join(r.text or "" for r in runs)
+            if len(para_text.strip()) < 4:
+                return False
+            runs[0].text = target_text
+            for r in runs[1:]:
+                r.text = ""
+            return True
+        return False
+
+    def _backfill_by_position(
+        self,
+        document_xml: str,
+        para_index: int,
+        target_text: str,
+    ) -> str:
+        """Phase B.2: apply target_text directamente to the w:p at the given index.
+
+        Used when the OPP source has resname="para_index_N". This is
+        a deterministic, position-based lookup that bypasses all the
+        text-matching heuristics.
+
+        NOTE: resname uses the index of the para among body DIRECT
+        children (set by OPP via `list(body).index(para._element)`).
+        We must use the same indexing here — `//w:p` would include
+        nested w:p (tables, text boxes) and shift the index.
+        """
+        root = etree.fromstring(document_xml.encode("utf-8"))
+        body = root.find("w:body", WORD_NS_MAP)
+        paragraphs = body.xpath("./w:p", namespaces=WORD_NS_MAP)
+        if not (0 <= para_index < len(paragraphs)):
+            logger.warning(
+                "resname para_index=%d out of range (have %d body-level paragraphs)",
+                para_index, len(paragraphs),
+            )
+            return document_xml
+        para = paragraphs[para_index]
+        runs = para.xpath(".//w:t", namespaces=WORD_NS_MAP)
+        if not runs:
+            return document_xml
+        runs[0].text = target_text
+        for r in runs[1:]:
+            r.text = ""
+        return etree.tostring(root, encoding="unicode", xml_declaration=False)
+
+    def _fallback_backfill(self, root: etree._Element, target_text: str) -> bool:
+        """Last-resort fallback: log a warning and skip.
+
+        The previous implementation wrote the LLM target to the FIRST
+        non-empty paragraph in the document, clobbering unrelated content
+        and corrupting 2,700+ paragraphs in the slim. The new behavior
+        leaves the OPP source paragraph untouched: the reader sees a
+        partial translation (some Chinese remains) instead of corruption.
+        """
+        logger.warning(
+            "No matching paragraph for LLM target; skipping. "
+            "Original OPP source text is preserved. Target: %r",
+            target_text[:80],
+        )
+        return False
 
     def _backfill_with_inline_elements(
         self,
