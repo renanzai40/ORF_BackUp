@@ -176,12 +176,6 @@ def _register_tools():
                 "metadata": {}
             })
 
-        xliff_to_use = xliff_path
-        if xliff_content:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.xliff', delete=False) as tmp:
-                tmp.write(xliff_content)
-                xliff_to_use = tmp.name
-
         xliff_temp_path = None
         xliff_to_use = xliff_path
         if xliff_content:
