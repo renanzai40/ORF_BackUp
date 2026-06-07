@@ -32,8 +32,16 @@ P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
 P_PREFIX = f"{{{P_NS}}}"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
-# XLIFF namespace
-XLIFF_NS = "urn:oasis:names:tc:xliff:document:2.0"
+# XLIFF namespaces (multi-version support)
+XLIFF_NS_1_2 = "urn:oasis:names:tc:xliff:document:1.2"
+XLIFF_NS_1_1 = "urn:oasis:names:tc:xliff:document:1.1"
+XLIFF_NS_2_0 = "urn:oasis:names:tc:xliff:document:2.0"
+XLIFF_NS_MAP_1_2 = {"xliff": XLIFF_NS_1_2}
+XLIFF_NS_MAP_1_1 = {"xliff": XLIFF_NS_1_1}
+XLIFF_NS_MAP_2_0 = {"xliff": XLIFF_NS_2_0}
+# Backwards-compatible default: 1.2 (matches xliff2docx sibling)
+XLIFF_NS = XLIFF_NS_1_2
+XLIFF_NS_MAP = XLIFF_NS_MAP_1_2
 
 
 class XLIFF2PPTXConverter(BaseConverter):
@@ -178,6 +186,10 @@ class XLIFF2PPTXConverter(BaseConverter):
     def _parse_xliff(self, xliff_path: Path) -> dict[str, list[dict[str, object]]]:
         """Parse XLIFF file and extract translation units.
 
+        Supports XLIFF 1.1, 1.2, and 2.0. The version is auto-detected from
+        the root element's namespace, with a 1.2 → 1.1 → 2.0 fallback chain
+        for malformed files where the namespace is undeclared.
+
         Args:
             xliff_path: Path to the XLIFF file.
 
@@ -196,21 +208,37 @@ class XLIFF2PPTXConverter(BaseConverter):
                 f"XML syntax error: {e}",
             )
 
-        # Handle XLIFF namespace
-        ns = {"xliff": XLIFF_NS}
         units: list[dict[str, object]] = []
 
-        # Find all trans-unit elements
-        for unit in root.xpath("//xliff:trans-unit", namespaces=ns):
+        units = self._parse_xliff_trans_units(root, XLIFF_NS_MAP_1_2)
+        if not units:
+            units = self._parse_xliff_trans_units(root, XLIFF_NS_MAP_1_1)
+        if not units:
+            units = self._parse_xliff_2_0_units(root)
+
+        return {"units": units}
+
+    def _parse_xliff_trans_units(
+        self, root: etree._Element, ns_map: dict[str, str]
+    ) -> list[dict[str, object]]:
+        """Parse XLIFF 1.x trans-unit elements using the given namespace map.
+
+        Args:
+            root: Parsed XML root element.
+            ns_map: Namespace map (e.g. XLIFF_NS_MAP_1_2 or _1_1).
+
+        Returns:
+            List of trans-unit dicts.
+        """
+        units: list[dict[str, object]] = []
+        for unit in root.xpath("//xliff:trans-unit", namespaces=ns_map):
             unit_id = unit.get("id")
-            # Get source and target text
-            source_el = unit.find("xliff:source", namespaces=ns)
-            target_el = unit.find("xliff:target", namespaces=ns)
+            source_el = unit.find("xliff:source", namespaces=ns_map)
+            target_el = unit.find("xliff:target", namespaces=ns_map)
 
             source_text = self._get_element_text(source_el) if source_el is not None else ""
             target_text = self._get_element_text(target_el) if target_el is not None else ""
 
-            # Parse inline elements from target
             inline_elements: list[InlineElement] = []
             if target_text:
                 inline_elements = self.inline_parser.parse_from_segment(target_text)
@@ -221,8 +249,76 @@ class XLIFF2PPTXConverter(BaseConverter):
                 "target": target_text,
                 "inline_elements": inline_elements,
             })
+        return units
 
-        return {"units": units}
+    def _parse_xliff_2_0_units(
+        self, root: etree._Element
+    ) -> list[dict[str, object]]:
+        """Parse XLIFF 2.0 <unit>/<segment> elements.
+
+        Each <segment> inside a <unit> becomes one translation record. If a
+        <unit> has no <segment>, the whole <unit> is treated as one record.
+
+        Args:
+            root: Parsed XML root element.
+
+        Returns:
+            List of unit dicts.
+        """
+        units: list[dict[str, object]] = []
+        ns_map = XLIFF_NS_MAP_2_0
+        for unit in root.xpath("//xliff:unit", namespaces=ns_map):
+            unit_id = unit.get("id")
+            segments = unit.findall("xliff:segment", namespaces=ns_map)
+            if segments:
+                for seg in segments:
+                    seg_id = seg.get("id") or unit_id
+                    source_el = seg.find("xliff:source", namespaces=ns_map)
+                    target_el = seg.find("xliff:target", namespaces=ns_map)
+                    source_text = (
+                        self._get_element_text(source_el) if source_el is not None else ""
+                    )
+                    target_text = (
+                        self._get_element_text(target_el) if target_el is not None else ""
+                    )
+                    inline_elements: list[InlineElement] = self._parse_inline(target_text)
+                    units.append({
+                        "id": seg_id,
+                        "source": source_text,
+                        "target": target_text,
+                        "inline_elements": inline_elements,
+                    })
+            else:
+                source_el = unit.find("xliff:source", namespaces=ns_map)
+                target_el = unit.find("xliff:target", namespaces=ns_map)
+                source_text = (
+                    self._get_element_text(source_el) if source_el is not None else ""
+                )
+                target_text = (
+                    self._get_element_text(target_el) if target_el is not None else ""
+                )
+                inline_elements = self._parse_inline(target_text)
+                units.append({
+                    "id": unit_id,
+                    "source": source_text,
+                    "target": target_text,
+                    "inline_elements": inline_elements,
+                })
+        return units
+
+    def _parse_inline(self, target_text: str) -> list[InlineElement]:
+        """Parse inline elements from a target string.
+
+        Args:
+            target_text: Translated target text.
+
+        Returns:
+            List of inline elements (empty if target_text is empty).
+        """
+        if not target_text:
+            return []
+        return self.inline_parser.parse_from_segment(target_text)
+
 
     def _get_element_text(self, element: etree._Element) -> str:
         """Get concatenated text content from an element.

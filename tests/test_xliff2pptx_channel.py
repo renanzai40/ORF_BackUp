@@ -51,17 +51,17 @@ def sample_pptx_skeleton(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def sample_xliff(tmp_path: Path) -> Path:
-    """Create a minimal mock XLIFF file."""
+    """Create a minimal mock XLIFF 2.0 file."""
     xliff_path = tmp_path / "translation.xlf"
     xliff_content = """<?xml version="1.0" encoding="UTF-8"?>
-<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0">
-    <file original="slide1" datatype="plaintext">
-        <body>
-            <trans-unit id="1">
+<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="zh">
+    <file id="f1" original="slide1">
+        <unit id="1">
+            <segment id="s1">
                 <source>Hello World</source>
                 <target>你好 世界</target>
-            </trans-unit>
-        </body>
+            </segment>
+        </unit>
     </file>
 </xliff>"""
     xliff_path.write_text(xliff_content, encoding="utf-8")
@@ -111,14 +111,14 @@ class TestXLIFF2PPTXConverter:
         # Create XLIFF with inline formatting markers
         xliff_path = tmp_path / "translation.xlf"
         xliff_content = """<?xml version="1.0" encoding="UTF-8"?>
-<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0">
-    <file original="slide1" datatype="plaintext">
-        <body>
-            <trans-unit id="1">
+<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="zh">
+    <file id="f1" original="slide1">
+        <unit id="1">
+            <segment id="s1">
                 <source>Hello World</source>
                 <target><bpt id="1">&lt;b&gt;</bpt>你好<ept id="1">&lt;/b&gt;</ept> 世界</target>
-            </trans-unit>
-        </body>
+            </segment>
+        </unit>
     </file>
 </xliff>"""
         xliff_path.write_text(xliff_content, encoding="utf-8")
@@ -161,9 +161,8 @@ class TestXLIFF2PPTXConverter:
         """Test conversion with XLIFF containing no trans-units."""
         empty_xliff = tmp_path / "empty.xlf"
         empty_xliff_content = """<?xml version="1.0" encoding="UTF-8"?>
-<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0">
-    <file original="slide1" datatype="plaintext">
-        <body/>
+<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="zh">
+    <file id="f1" original="slide1">
     </file>
 </xliff>"""
         empty_xliff.write_text(empty_xliff_content, encoding="utf-8")
