@@ -27,6 +27,9 @@ class PathValidator:
         if '..' in path.parts:
             return False, "Path traversal not allowed"
 
+        if path.suffix.lower() not in PathValidator.ALLOWED_EXTENSIONS:
+            return False, f"Extension '{path.suffix}' not in allowed set"
+
         # If base_dir provided, ensure path is within base_dir
         if base_dir:
             try:
