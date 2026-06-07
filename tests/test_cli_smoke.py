@@ -92,6 +92,9 @@ def run_opp_extract(docx: Path, out_dir: Path, target_format: str = "both") -> N
 
 @pytest.fixture(scope="module", autouse=True)
 def _check_real_fixtures():
+    # Graceful skip: real fixture DOCX files (HAIER/MERIDIAN) are not committed
+    # to keep the repo small. When absent, the whole module is skipped rather
+    # than failing — CI environments without fixtures still pass.
     for p in (HAIER_DOCX, MERIDIAN_DOCX):
         if not p.exists():
             pytest.skip(f"Real fixture missing: {p}")
