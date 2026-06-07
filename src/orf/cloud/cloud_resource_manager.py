@@ -123,13 +123,16 @@ class CloudResourceManager:
         try:
             from orf.cloud.s3_client import S3ResourceClient
             cls.register_provider("s3", S3ResourceClient)
-        except ImportError:
-            pass
+        except ImportError as exc:
+            logger.debug("S3 SDK not available; s3 provider not registered: %s", exc)
         try:
             from orf.cloud.azure_blob_client import AzureBlobResourceClient
             cls.register_provider("azure", AzureBlobResourceClient)
-        except ImportError:
-            pass
+        except ImportError as exc:
+            logger.debug(
+                "Azure Blob SDK not available; azure provider not registered: %s",
+                exc,
+            )
 
     def __init__(
         self,

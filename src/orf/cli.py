@@ -548,14 +548,14 @@ def convert_batch(
                     manifest_path = find_manifest(md_file)
                     if manifest_path:
                         manifest = parse_manifest(manifest_path)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Failed to parse manifest for %s: %s", md_file, exc)
 
                 frontmatter = None
                 try:
                     frontmatter = parse_frontmatter(md_file)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Failed to parse frontmatter for %s: %s", md_file, exc)
 
                 converter = converter_class(manifest=manifest, frontmatter=frontmatter)
                 output_file = output_path / f"{md_file.stem}.{target_format}"

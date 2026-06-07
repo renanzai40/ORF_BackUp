@@ -191,8 +191,12 @@ def _register_tools():
                 if xliff_temp_path:
                     try:
                         os.unlink(xliff_temp_path)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to remove temp xliff file %s: %s",
+                            xliff_temp_path,
+                            exc,
+                        )
                 return json.dumps({
                     "success": False,
                     "output_path": None,
@@ -256,14 +260,20 @@ def _register_tools():
         if temp_created:
             try:
                 os.unlink(temp_path)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "Failed to remove temp file %s: %s", temp_path, exc
+                )
 
         if xliff_temp_path:
             try:
                 os.unlink(xliff_temp_path)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "Failed to remove temp xliff file %s: %s",
+                    xliff_temp_path,
+                    exc,
+                )
 
         return json.dumps(result)
 
@@ -398,8 +408,12 @@ def apply_xliff(
             if xliff_temp_path:
                 try:
                     os.unlink(xliff_temp_path)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to remove temp xliff file %s: %s",
+                        xliff_temp_path,
+                        exc,
+                    )
             return json.dumps({
                 "success": False,
                 "output_path": None,
@@ -462,14 +476,20 @@ def apply_xliff(
     if temp_created:
         try:
             os.unlink(temp_path)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Failed to remove temp file %s: %s", temp_path, exc
+            )
 
     if xliff_temp_path:
         try:
             os.unlink(xliff_temp_path)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Failed to remove temp xliff file %s: %s",
+                xliff_temp_path,
+                exc,
+            )
 
     return json.dumps(result)
 

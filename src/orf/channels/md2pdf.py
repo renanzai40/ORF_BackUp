@@ -153,8 +153,8 @@ class MD2PDFConverter(BaseConverter):
             # Clean up intermediate HTML on success
             try:
                 html_path.unlink()
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.warning("Failed to remove intermediate HTML %s: %s", html_path, exc)
 
             return ConversionResult(
                 output_path=output_path,
