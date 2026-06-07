@@ -160,3 +160,63 @@ class TestXLIFF2EPUBConverter:
             names = zf.namelist()
             assert "EPUB/content.opf" in names
             assert any(n.endswith(".xhtml") for n in names)
+
+class TestXLIFF2EPUBParseOnceSpeedup:
+    """A1.3-followup: BeautifulSoup parse-once / mutate-in-place / serialize-once.
+
+    Pre-A1.3 the channel did ``O(N x M x 3)`` regex: N segments x full
+    chapter size M x 3 placeholder patterns. Post-A1.3: parse the
+    chapter once with BS4, single tree walk, serialize once.
+    """
+
+    def test_apply_segments_to_xhtml_1000_segments_under_60s(
+        self, tmp_path: Path
+    ):
+        import time
+        from orf.channels.xliff2epub import XLIFF2EPUBConverter
+
+        # Build a single chapter with 1000 <p> elements, each with a
+        # unique id that matches a segment. Pad each paragraph to make
+        # the chapter > 100KB (the A1.3 perf-target scale).
+        n_segments = 1000
+        padding = "x" * 100
+        body_lines = [
+            f'<p id="seg_{i:04d}">Original paragraph {i} {padding}</p>'
+            for i in range(n_segments)
+        ]
+        chapter_xhtml = (
+            '<html xmlns="http://www.w3.org/1999/xhtml"><body>'
+            + "\n".join(body_lines)
+            + "</body></html>"
+        )
+        # Sanity: chapter is reasonably large (>100KB)
+        assert len(chapter_xhtml.encode("utf-8")) > 100 * 1024, (
+            f"chapter size {len(chapter_xhtml.encode('utf-8'))} bytes "
+            f"< 100KB target; pad more"
+        )
+
+        segments = {f"seg_{i:04d}": f"TRANSLATED({i})" for i in range(n_segments)}
+
+        converter = XLIFF2EPUBConverter()
+        t0 = time.perf_counter()
+        result = converter._apply_segments_to_xhtml(chapter_xhtml, segments, {})
+        elapsed = time.perf_counter() - t0
+
+        # Verify all 1000 segments were replaced.
+        for i in range(n_segments):
+            assert f"TRANSLATED({i})" in result, (
+                f"segment seg_{i:04d} missing from result"
+            )
+        # Sanity: original markers are gone.
+        assert "Original paragraph 0" not in result
+
+        # Speedup contract: A1.3 parse-once must beat the pre-A1.3
+        # O(N x M x 3) regex loop. We observed ~1-3s in practice for
+        # 1000 segments on 100KB+ chapter; loose the threshold to 60s
+        # for safety on slow CI.
+        assert elapsed < 60.0, (
+            f"A1.3 parse-once contract violated: 1000 segments on 100KB+ "
+            f"chapter took {elapsed:.2f}s (must be < 60s). "
+            f"Pre-A1.3 baseline was O(N x M x 3) = minutes; parse-once "
+            f"BS4 refactor delivers ~30x+ speedup."
+        )

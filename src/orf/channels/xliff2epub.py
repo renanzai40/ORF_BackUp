@@ -306,40 +306,48 @@ class XLIFF2EPUBConverter(BaseConverter):
     ) -> str:
         """Apply translated segments to XHTML content.
 
-        Args:
-            xhtml_content: XHTML file content.
-            segments: Dict of segment IDs to translated text.
-            options: Additional options.
-
-        Returns:
-            Modified XHTML content.
+        A1.3-followup (BeautifulSoup variant): parse the chapter XHTML
+        once, mutate in place via a single BS4 pass that scans each
+        element for matching id/data-segment/name attributes, serialize
+        once. Replaces the O(N × M × 3) regex loop (segments × full
+        chapter × 3 patterns) with O(N + M) where M is the chapter size.
         """
-        # For basic backfill, we look for placeholder markers in the XHTML
-        # and replace them with translated content
+        if not segments:
+            return xhtml_content
 
-        result = xhtml_content
+        soup = BeautifulSoup(xhtml_content, "html.parser")
 
-        # Simple placeholder pattern: id="segment_id" or data-segment="id"
-        for seg_id, translated_text in segments.items():
-            # Try different placeholder patterns
-            patterns = [
-                rf'id="{re.escape(seg_id)}"',
-                rf'data-segment="{re.escape(seg_id)}"',
-                rf'name="{re.escape(seg_id)}"',
-            ]
+        target_ids = set(segments.keys())
 
-            for pattern in patterns:
-                # Find elements with this segment ID and replace content
-                # This is a simplified approach - full implementation would
-                # use proper XML parsing
-                result = re.sub(
-                    r'(<[^>]*' + pattern + r'[^>]*>)(.*?)(</[^>]+>)',
-                    lambda m: m.group(1) + self._sanitize_text(translated_text) + m.group(3),
-                    result,
-                    flags=re.DOTALL
-                )
+        for element in soup.find_all(True):
+            element_id = element.get("id")
+            if element_id and element_id in target_ids:
+                self._replace_element_text(element, segments[element_id])
+                target_ids.discard(element_id)
+                continue
+            data_seg = element.get("data-segment")
+            if data_seg and data_seg in target_ids:
+                self._replace_element_text(element, segments[data_seg])
+                target_ids.discard(data_seg)
+                continue
+            name_attr = element.get("name")
+            if name_attr and name_attr in target_ids:
+                self._replace_element_text(element, segments[name_attr])
+                target_ids.discard(name_attr)
 
-        return result
+            if not target_ids:
+                break  # All segments applied.
+
+        return str(soup)
+
+    def _replace_element_text(self, element, translated_text: str) -> None:
+        """Replace the text content of a BS4 element with the sanitized translation.
+
+        Mirrors the regex replacement's behavior: drop existing children
+        and insert the sanitized translation as the only text content.
+        """
+        element.clear()
+        element.append(self._sanitize_text(translated_text))
 
     def _sanitize_text(self, text: str) -> str:
         """Sanitize text for XML insertion.
