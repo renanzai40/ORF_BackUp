@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import re
 import zipfile
 from pathlib import Path
 from typing import Any, Optional
 
 from bs4 import BeautifulSoup
+from lxml import etree
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.mcp.schemas import ImagePlacement
@@ -26,6 +26,14 @@ logger = get_logger("channel.xliff2epub")
 # EPUB internal paths
 EPUB_CONTENT_PATHS = ["EPUB/", "OEBPS/"]  # Common EPUB content directories
 XHTML_EXTENSIONS = (".xhtml", ".html", ".htm")
+
+# XLIFF namespaces (mirror xliff2docx.py T1 pattern)
+XLIFF_NS_1_2 = "urn:oasis:names:tc:xliff:document:1.2"
+XLIFF_NS_1_1 = "urn:oasis:names:tc:xliff:document:1.1"
+XLIFF_NS_2_0 = "urn:oasis:names:tc:xliff:document:2.0"
+XLIFF_NS_MAP_1_2 = {"xliff": XLIFF_NS_1_2}
+XLIFF_NS_MAP_1_1 = {"xliff": XLIFF_NS_1_1}
+XLIFF_NS_MAP_2_0 = {"xliff": XLIFF_NS_2_0}
 
 
 class XLIFF2EPUBConverter(BaseConverter):
@@ -143,6 +151,12 @@ class XLIFF2EPUBConverter(BaseConverter):
     def _parse_xliff(self, xliff_path: Path) -> dict[str, str]:
         """Parse XLIFF file and extract target segments.
 
+        Uses lxml.etree rather than regex because regex silently breaks
+        on inline tags (``<g>``, ``<bx>``, ``<ex>``, ``<ph>``, ``<it>``),
+        CDATA sections, and multi-line ``<target>`` bodies.
+        ``target.itertext()`` flattens the tree, dropping markup while
+        preserving inter-element whitespace.
+
         Args:
             xliff_path: Path to XLIFF file.
 
@@ -152,56 +166,56 @@ class XLIFF2EPUBConverter(BaseConverter):
         Raises:
             XLIFFParseError: If XLIFF cannot be parsed.
         """
-        segments = {}
-
         try:
-            with open(xliff_path, "r", encoding="utf-8") as f:
+            with open(xliff_path, "rb") as f:
                 content = f.read()
         except Exception as e:
             raise XLIFFParseError(str(xliff_path), f"Cannot read file: {e}")
 
-        # Parse XLIFF using regex (simple approach)
-        # <trans-unit id="..."> ... <target>...</target> </trans-unit>
-        # Or <unit id="..."> ... <segment><target>...</target></segment> </unit>
+        try:
+            root = etree.fromstring(content)
+        except etree.XMLSyntaxError as e:
+            raise XLIFFParseError(str(xliff_path), f"XML parse error: {e}")
 
-        # Pattern for trans-unit with target
-        trans_unit_pattern = re.compile(
-            r'<trans-unit[^>]*\sid="([^"]+)"[^>]*>(.*?)</trans-unit>',
-            re.DOTALL | re.IGNORECASE
-        )
+        if root is None:
+            raise XLIFFParseError(str(xliff_path), "Failed to parse XML - no root element")
 
-        # Pattern for unit with segment/target (XLIFF 2.0 style)
-        unit_pattern = re.compile(
-            r'<unit[^>]*\sid="([^"]+)"[^>]*>(.*?)</unit>',
-            re.DOTALL | re.IGNORECASE
-        )
+        segments: dict[str, str] = {}
 
-        # Pattern for target element
-        target_pattern = re.compile(r'<target[^>]*>(.*?)</target>', re.DOTALL | re.IGNORECASE)
+        def _extract_target_text(target_el: etree._Element | None) -> str:
+            if target_el is None:
+                return ""
+            return "".join(target_el.itertext())
 
-        # Try XLIFF 2.0 style first (unit/segment)
-        for match in unit_pattern.finditer(content):
-            unit_id = match.group(1)
-            unit_content = match.group(2)
+        for tu in root.xpath("//xliff:trans-unit", namespaces=XLIFF_NS_MAP_1_2):
+            tu_id = tu.get("id")
+            if not tu_id:
+                continue
+            target_el = tu.find("xliff:target", namespaces=XLIFF_NS_MAP_1_2)
+            segments[tu_id] = _extract_target_text(target_el)
 
-            # Find segment target
-            seg_match = re.search(r'<segment[^>]*>(.*?)</segment>', unit_content, re.DOTALL | re.IGNORECASE)
-            if seg_match:
-                seg_content = seg_match.group(1)
-                target_match = target_pattern.search(seg_content)
-                if target_match:
-                    segments[unit_id] = target_match.group(1)
+        if not segments:
+            for tu in root.xpath("//xliff:trans-unit", namespaces=XLIFF_NS_MAP_1_1):
+                tu_id = tu.get("id")
+                if not tu_id:
+                    continue
+                target_el = tu.find("xliff:target", namespaces=XLIFF_NS_MAP_1_1)
+                segments[tu_id] = _extract_target_text(target_el)
 
-        # Also try XLIFF 1.2 style (trans-unit/target)
-        for match in trans_unit_pattern.finditer(content):
-            unit_id = match.group(1)
-            trans_content = match.group(2)
-
-            target_match = target_pattern.search(trans_content)
-            if target_match:
-                # Avoid overwriting XLIFF 2.0 segments if any
-                if unit_id not in segments:
-                    segments[unit_id] = target_match.group(1)
+        if not segments:
+            for unit in root.xpath("//xliff:unit", namespaces=XLIFF_NS_MAP_2_0):
+                unit_id = unit.get("id")
+                if not unit_id:
+                    continue
+                seg_elements = unit.findall("xliff:segment", namespaces=XLIFF_NS_MAP_2_0)
+                if seg_elements:
+                    for seg in seg_elements:
+                        seg_id = seg.get("id", unit_id)
+                        target_el = seg.find("xliff:target", namespaces=XLIFF_NS_MAP_2_0)
+                        segments[seg_id] = _extract_target_text(target_el)
+                else:
+                    target_el = unit.find("xliff:target", namespaces=XLIFF_NS_MAP_2_0)
+                    segments[unit_id] = _extract_target_text(target_el)
 
         if not segments:
             logger.warning(f"No segments found in XLIFF: {xliff_path}")
