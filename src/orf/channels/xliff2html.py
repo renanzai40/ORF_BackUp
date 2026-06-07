@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Any
 
 from bs4 import BeautifulSoup
+from lxml import etree, html as lxml_html
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.mcp.schemas import ImagePlacement
@@ -19,6 +20,11 @@ from orf.logging import get_logger
 
 logger = get_logger("channel.xliff2html")
 
+# Sentinel substituted into the synthetic XLIFF fragment so the translated
+# text can be inserted at the right position after the inline-tag applier
+# runs. NULL bytes guarantee no real translation will collide.
+_INLINE_TRANSLATION_SENTINEL = "\x00TRANSLATED_TEXT\x00"
+
 
 class XLIFF2HTMLConverter(BaseConverter):
     """XLIFF to HTML backfill converter with inline formatting preservation.
@@ -26,8 +32,19 @@ class XLIFF2HTMLConverter(BaseConverter):
     Converts XLIFF translation files back to HTML by:
     1. Loading the original HTML template
     2. Parsing the XLIFF file for translations
-    3. Applying inline formatting (bold, italic, underline, strike)
-    4. Saving the result as HTML
+    3. Locating the target node via the ``data-trans-unit-id`` attribute and
+       injecting the translated text via lxml DOM manipulation
+    4. Optionally applying inline formatting (bold, italic, underline, strike)
+       to the translated text
+    5. Saving the result as HTML
+
+    Translation contract:
+        Translators mark translatable nodes with ``data-trans-unit-id="<id>"``
+        matching the ``id`` attribute of the corresponding ``<trans-unit>`` in
+        the XLIFF file. The converter finds each marked node and replaces its
+        text content with the translated target, preserving the tag and any
+        child elements. Literal ``[<unit_id>]`` substring placeholders are no
+        longer required (and are silently ignored if present).
 
     Inline formatting mapping:
         - bold -> <strong>
@@ -237,13 +254,26 @@ class XLIFF2HTMLConverter(BaseConverter):
         xliff_content: str,
         **options: Any,
     ) -> str:
-        """Apply translations and inline formatting to HTML content.
+        """Apply translations (and optionally inline formatting) via lxml DOM.
+
+        The HTML template is parsed with the lxml HTML parser. For each
+        translation unit, the target node is located by its
+        ``data-trans-unit-id="<unit_id>"`` attribute and its text content is
+        replaced with the translated text. When ``preserve_inline`` is true,
+        the inline-formatting pipeline is applied to the *translated text*
+        before injection so that ``<strong>`` / ``<em>`` / ``<u>`` / ``<s>``
+        wraps the correct content.
+
+        Literal ``[unit_id]`` placeholders in the template are no longer
+        required; the DOM-driven path locates targets by attribute and
+        replaces node text directly. Any literal brackets that happen to
+        appear in the source are left untouched.
 
         Args:
             html_content: The original HTML template content
             translations: Dictionary of translation units
             xliff_content: The full XLIFF content for inline tag processing
-            **options: Additional options like preserve_inline
+            **options: Additional options like ``preserve_inline``
 
         Returns:
             HTML content with translations and formatting applied
@@ -253,29 +283,136 @@ class XLIFF2HTMLConverter(BaseConverter):
         """
         preserve_inline = options.get("preserve_inline", True)
 
-        if not preserve_inline:
-            # Simply replace placeholder markers with translations
-            result = html_content
+        try:
+            root = lxml_html.fromstring(html_content)
+        except (etree.ParserError, etree.XMLSyntaxError, ValueError) as e:
+            raise InlineFormattingError(f"Failed to parse HTML template: {e}")
+
+        # Each payload is either a plain string (set as node.text) or a list
+        # of lxml elements parsed from inline-formatted HTML (appended as
+        # children). Inline-formatted payloads are needed because lxml's
+        # ``.text`` setter HTML-escapes its argument — so a formatted string
+        # like ``"<strong>翻译</strong>"`` would render as escaped text.
+        if preserve_inline:
+            translations_to_inject: dict[str, Any] = {}
             for unit_id, translated_text in translations.items():
-                # Replace markers like [trans-unit-id] or data-id attributes
-                result = result.replace(f"[{unit_id}]", translated_text)
-                result = re.sub(
-                    rf'data-trans-unit-id="{re.escape(unit_id)}"[^>]*>',
-                    f'>{translated_text}',
-                    result
+                inline_wrapped = self._wrap_translation_with_xliff_inline(
+                    xliff_content, unit_id
                 )
-            return result
+                if inline_wrapped is not None:
+                    formatted = self.html_applier.convert_xliff_to_html(
+                        inline_wrapped
+                    )
+                    formatted = formatted.replace(
+                        _INLINE_TRANSLATION_SENTINEL, translated_text
+                    )
+                    translations_to_inject[unit_id] = self._parse_html_fragment(
+                        formatted
+                    )
+                else:
+                    translations_to_inject[unit_id] = translated_text
+        else:
+            translations_to_inject = dict(translations)
 
-        # Apply inline formatting conversion using EPUBHTMLInlineApplier
-        # This converts <bx type="bold"/> to <strong> and <ex id="..."/> to </strong>
-        formatted_content = self.html_applier.convert_xliff_to_html(xliff_content)
+        self._inject_translations_into_dom(root, translations_to_inject)
 
-        # Replace placeholders with translated text
-        result = formatted_content
-        for unit_id, translated_text in translations.items():
-            result = result.replace(f"[{unit_id}]", translated_text)
-
+        result = lxml_html.tostring(root, encoding="unicode", method="html")
+        # lxml's stub marks the tostring return as `str | bytes`; with
+        # encoding="unicode" it is always str at runtime.
+        assert isinstance(result, str)
         return result
+
+    def _parse_html_fragment(self, fragment: str) -> list[Any]:
+        """Parse an HTML fragment string into a list of lxml child elements.
+
+        Used to turn the inline-formatter's HTML output (e.g.
+        ``"<strong>粗体</strong>"``) into a list of elements that the DOM
+        injector can append to a target node without HTML-escaping.
+        """
+        wrapper = lxml_html.fragment_fromstring(fragment, create_parent=True)
+        return list(wrapper)
+
+    def _wrap_translation_with_xliff_inline(
+        self,
+        xliff_content: str,
+        unit_id: str,
+    ) -> Optional[str]:
+        """If the unit's target has inline ``<bx>``/``<ex>`` tags, return a
+        synthetic ``<trans-unit>`` fragment whose source text is replaced
+        with the ``_INLINE_TRANSLATION_SENTINEL`` placeholder, so the
+        existing XLIFF→HTML pipeline produces e.g. ``<strong>翻译</strong>``.
+
+        Returns ``None`` when the unit is missing from ``xliff_content`` OR
+        has no inline tags (the caller uses the plain translated text).
+        """
+        unit_pattern = re.compile(
+            rf'<trans-unit[^>]+id="{re.escape(unit_id)}"[^>]*>(.*?)</trans-unit>',
+            re.DOTALL | re.IGNORECASE,
+        )
+        match = unit_pattern.search(xliff_content)
+        if not match:
+            return None
+
+        unit_body = match.group(1)
+        target_match = re.search(
+            r'<target[^>]*>(.*?)</target>', unit_body, re.DOTALL | re.IGNORECASE
+        )
+        source_match = re.search(
+            r'<source[^>]*>(.*?)</source>', unit_body, re.DOTALL | re.IGNORECASE
+        )
+        body_match = target_match or source_match
+        if not body_match:
+            return None
+
+        body_text = body_match.group(1)
+        if not re.search(r'<(bx|ex)\b', body_text, re.IGNORECASE):
+            return None
+
+        # Inline tags present: split into [text, tag, text, tag, ...] and
+        # swap each text segment for the sentinel, preserving the
+        # tag positions so the applier produces correctly-wrapped HTML.
+        segments = re.split(r'(<[^>]+>)', body_text)
+        for i, seg in enumerate(segments):
+            if seg and not seg.startswith('<'):
+                segments[i] = _INLINE_TRANSLATION_SENTINEL
+        new_body = ''.join(segments)
+
+        return (
+            f'<trans-unit id="{unit_id}">'
+            f'<source>{new_body}</source>'
+            f'<target>{new_body}</target>'
+            f'</trans-unit>'
+        )
+
+    def _inject_translations_into_dom(
+        self,
+        root: Any,
+        translations: dict[str, Any],
+    ) -> None:
+        """Replace the text/children of every ``data-trans-unit-id`` node.
+
+        Each value in ``translations`` is either a plain ``str`` (set as the
+        node's ``.text``) or a list of lxml elements parsed from
+        inline-formatted HTML (appended as children of the target node).
+        Sibling elements and attributes are preserved verbatim. Any literal
+        ``[unit_id]`` substring in the template is left untouched — it is
+        no longer part of the contract.
+        """
+        if not translations:
+            return
+
+        for node in root.xpath('//*[@data-trans-unit-id]'):
+            unit_id = node.get("data-trans-unit-id")
+            if unit_id is None or unit_id not in translations:
+                continue
+            for child in list(node):
+                node.remove(child)
+            payload = translations[unit_id]
+            if isinstance(payload, str):
+                node.text = payload
+            else:
+                for element in payload:
+                    node.append(element)
 
     def inject_images(
         self,

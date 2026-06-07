@@ -10,13 +10,18 @@ from orf.converters.base import ConversionResult
 
 @pytest.fixture
 def sample_html_template(tmp_path: Path) -> Path:
+    # The OPP contract: each translatable node carries
+    # data-trans-unit-id="<id>" matching the <trans-unit> id in the XLIFF.
+    # Literal ``[<unit_id>]`` substring placeholders are NOT part of the
+    # contract and are left in place if they happen to appear in source text.
     content = """<!DOCTYPE html>
 <html>
 <head><title>Test Document</title></head>
 <body>
 <h1 data-trans-unit-id="heading1">Original Heading</h1>
 <p data-trans-unit-id="para1">Original paragraph content.</p>
-<p>[trans-unit-1] and [trans-unit-2] placeholders</p>
+<p data-trans-unit-id="trans-unit-1">placeholder one</p>
+<p data-trans-unit-id="trans-unit-2">placeholder two</p>
 </body>
 </html>"""
     html_file = tmp_path / "template.html"
