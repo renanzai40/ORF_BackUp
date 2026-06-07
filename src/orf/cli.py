@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
+import shutil
 import sys
 import json
 from pathlib import Path
@@ -23,6 +26,113 @@ from orf.error_handlers.conversion_error import FormatDetectionError
 from orf.logging import setup_logger, get_logger
 
 logger = get_logger("cli")
+
+
+# ========== A6: Content-addressed cache (~/.omni_cache/orf/) ==========
+# Re-runs of the same input+config skip the expensive conversion (pandoc,
+# openpyxl, etc.) and just copy the cached <sha256>.<ext> to the output
+# path. The cache root can be overridden with the OMNI_CACHE_DIR env var
+# (used by tests). Mode 0o700 protects any sensitive content.
+# CACHE_DIR_NAME is the per-module subdirectory under OMNI_CACHE_DIR.
+CACHE_DIR_NAME = "orf"
+_cache_logger = get_logger("cli.cache")
+
+
+def _cache_root() -> Path:
+    """Return the ORF cache root, creating it (mode 0o700) on first access.
+
+    The env var is read at call-time (not at import-time) so tests can
+    override it via monkeypatch.setenv() before any call.
+    """
+    root = Path(
+        os.environ.get("OMNI_CACHE_DIR", str(Path.home() / ".omni_cache"))
+    ) / CACHE_DIR_NAME
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return root
+
+
+def _cache_key_apply_md(
+    input_path: Path,
+    target_format: str,
+    manifest_path: Optional[Path],
+    template: Optional[str],
+    images_json: Optional[str],
+) -> str:
+    """sha256(input_bytes + target_format + manifest_bytes + template_bytes + images_json_bytes).
+
+    Each "config" element that can change the conversion output is hashed
+    in. Any change to input, target_format, manifest content, template
+    content, or images.json content yields a different cache key and
+    forces a fresh conversion.
+    """
+    h = hashlib.sha256()
+    h.update(input_path.read_bytes())
+    h.update(target_format.encode("utf-8"))
+    if manifest_path is not None and manifest_path.exists():
+        h.update(manifest_path.read_bytes())
+    if template:
+        tp = Path(template)
+        if tp.exists():
+            h.update(tp.read_bytes())
+    if images_json:
+        ip = Path(images_json)
+        if ip.exists():
+            h.update(ip.read_bytes())
+    return h.hexdigest()
+
+
+def _cache_key_apply_xliff(
+    input_path: Path,
+    xliff_path: Path,
+    fmt: str,
+    images_json: Optional[str],
+) -> str:
+    """sha256(input_bytes + xliff_bytes + format + images_json_bytes)."""
+    h = hashlib.sha256()
+    h.update(input_path.read_bytes())
+    h.update(xliff_path.read_bytes())
+    h.update(fmt.encode("utf-8"))
+    if images_json:
+        ip = Path(images_json)
+        if ip.exists():
+            h.update(ip.read_bytes())
+    return h.hexdigest()
+
+
+def _check_cache(cache_key: str, output_path: Path, ext: str, no_cache: bool = False) -> bool:
+    """If cached, copy to ``output_path`` and return True. Honors ``--no-cache``."""
+    if no_cache:
+        return False
+    cache_file = _cache_root() / f"{cache_key}{ext}"
+    if cache_file.exists():
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(cache_file, output_path)
+        _cache_logger.info(f"Cache hit: {cache_file} -> {output_path}")
+        return True
+    return False
+
+
+def _write_cache(cache_key: str, output_path: Path, ext: str, no_cache: bool = False) -> None:
+    """Copy ``output_path`` into the cache for next run. Honors ``--no-cache``."""
+    if no_cache:
+        return
+    if not output_path.exists():
+        return
+    cache_file = _cache_root() / f"{cache_key}{ext}"
+    cache_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    shutil.copy(output_path, cache_file)
+    _cache_logger.debug(f"Cache miss: wrote {cache_file}")
+
+
+def _clear_orf_cache() -> int:
+    """Remove all cached ORF files. Returns the number of files removed."""
+    root = _cache_root()
+    if not root.exists():
+        return 0
+    count = sum(1 for _ in root.iterdir())
+    shutil.rmtree(root)
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return count
 
 
 def _error_item_to_dict(e: Any) -> dict[str, Any]:
@@ -120,6 +230,8 @@ def _maybe_install_fake_pandoc() -> None:
 @click.option("--embed-images", is_flag=True, help="EPUB 嵌入图片")
 @click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
 @click.option("--images-json", "images_json", type=click.Path(exists=True), help="JSON file with image placement data from OPP (NOTE: image injection not supported for MD pipeline; use XLIFF pipeline for precise image placement)")
+@click.option("--no-cache", "no_cache", is_flag=True, help="Skip the .omni_cache/ cache check (force a fresh conversion)")
+@click.option("--clear-cache", "clear_cache", is_flag=True, help="Remove all cached ORF outputs and exit")
 def apply_md(
     input_md: str,
     target_format: str,
@@ -132,6 +244,8 @@ def apply_md(
     embed_images: bool,
     output_json: bool,
     images_json: str | None,
+    no_cache: bool,
+    clear_cache: bool,
 ) -> None:
     """将 MD 文件转换为目标格式
 
@@ -173,9 +287,16 @@ def apply_md(
     else:
         output_path = Path(output)
 
+    if clear_cache:
+        n = _clear_orf_cache()
+        logger.info(f"Cleared {n} cached file(s) from {_cache_root()}")
+        click.echo(f"Cleared {n} cached file(s) from {_cache_root()}")
+        return
+
     logger.info(f"Converting {input_path} -> {output_path} ({target_format})")
 
     manifest = None
+    manifest_path: Optional[Path] = None
     try:
         manifest_path = find_manifest(input_path)
         if manifest_path:
@@ -183,6 +304,21 @@ def apply_md(
             manifest = parse_manifest(manifest_path)
     except ManifestParseError as e:
         logger.warning(f"Failed to parse manifest: {e}")
+
+    cache_key = _cache_key_apply_md(input_path, target_format, manifest_path, template, images_json)
+    if _check_cache(cache_key, output_path, f".{target_format}", no_cache=no_cache):
+        logger.info(f"Cache hit for {input_path.name} -> {output_path}")
+        if output_json:
+            click.echo(_safe_json_dumps({
+                'success': True,
+                'output_path': str(output_path),
+                'errors': [],
+                'warnings': [],
+                'metadata': {'cache_hit': True},
+            }))
+        else:
+            click.echo(f"Created {output_path} (cached)")
+        return
 
     frontmatter = None
     try:
@@ -324,6 +460,7 @@ def apply_md(
             logger.error(f"Image injection failed: {e}")
 
     if result.success:
+        _write_cache(cache_key, output_path, f".{target_format}", no_cache=no_cache)
         logger.info(f"Conversion successful: {result.output_path}")
         if output_json:
             click.echo(_safe_json_dumps({
@@ -459,7 +596,9 @@ def convert_batch(
 )
 @click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
 @click.option("--images-json", "images_json", type=click.Path(exists=True), help="JSON file with image placement data from OPP")
-def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], output: str, format: str, output_json: bool, images_json: str) -> None:
+@click.option("--no-cache", "no_cache", is_flag=True, help="Skip the .omni_cache/ cache check (force a fresh conversion)")
+@click.option("--clear-cache", "clear_cache", is_flag=True, help="Remove all cached ORF outputs and exit")
+def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], output: str, format: str, output_json: bool, images_json: str, no_cache: bool, clear_cache: bool) -> None:
     """Apply XLIFF translation to original document.
 
     INPUT_FILE: Original document (DOCX/PPTX/EPUB/HTML)
@@ -478,6 +617,27 @@ def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], outpu
         with tempfile.NamedTemporaryFile(mode='w', suffix='.xliff', delete=False) as tmp:
             tmp.write(xliff_content)
             xliff_path = Path(tmp.name)
+
+    if clear_cache:
+        n = _clear_orf_cache()
+        logger.info(f"Cleared {n} cached file(s) from {_cache_root()}")
+        click.echo(f"Cleared {n} cached file(s) from {_cache_root()}")
+        return
+
+    cache_key = _cache_key_apply_xliff(input_path, xliff_path, format, images_json)
+    if _check_cache(cache_key, output_path, f".{format}", no_cache=no_cache):
+        logger.info(f"Cache hit for {input_path.name} -> {output_path}")
+        if output_json:
+            click.echo(_safe_json_dumps({
+                'success': True,
+                'output_path': str(output_path),
+                'errors': [],
+                'warnings': [],
+                'metadata': {'cache_hit': True},
+            }))
+        else:
+            click.echo(f"Created {output_path} (cached)")
+        return
 
     images = None
     if images_json:
@@ -553,6 +713,7 @@ def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], outpu
             logger.error(f"Image injection failed: {e}")
 
     if result.success:
+        _write_cache(cache_key, output_path, f".{format}", no_cache=no_cache)
         logger.info(f"Conversion successful: {result.output_path}")
         if output_json:
             click.echo(_safe_json_dumps({
