@@ -61,11 +61,44 @@ class TestRunCLICommand:
             }),
             stderr="Error message"
         )
-        
+
         result = _run_cli_command(["apply-md", "bad.md", "--target-format", "docx"])
-        
+
         assert result["success"] is False
         assert len(result["errors"]) > 0
+
+    @patch("subprocess.run")
+    @patch.dict("os.environ", {"OMNI_TEST_FAKE_PANDOC": "1"}, clear=False)
+    def test_fake_pandoc_env_not_leaked_to_subprocess(self, mock_run):
+        """OMNI_TEST_FAKE_PANDOC must NOT be inherited by the CLI subprocess.
+
+        ULTRAREADY-VERIFY (2026-06-07): the MCP server used to invoke the
+        CLI without an ``env=`` argument, so a test harness that started
+        the MCP server with ``OMNI_TEST_FAKE_PANDOC=1`` would silently
+        route every MCP conversion to a stub-DOCX. This test pins the
+        contract that the seam is scrubbed before subprocess invocation.
+        """
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"success": True, "output_path": "/tmp/out.docx"})
+        )
+
+        result = _run_cli_command(["apply-md", "input.md", "--target-format", "docx"])
+
+        assert mock_run.called, "subprocess.run was not invoked"
+        # Inspect the env kwarg that was passed to subprocess.run.
+        kwargs = mock_run.call_args.kwargs
+        assert "env" in kwargs, (
+            "subprocess.run was called without env=; "
+            "the FAKE_PANDOC seam will leak across the MCP boundary."
+        )
+        assert "OMNI_TEST_FAKE_PANDOC" not in kwargs["env"], (
+            f"OMNI_TEST_FAKE_PANDOC leaked into subprocess env: {kwargs['env']!r}"
+        )
+        # Sanity: real env vars (PATH) are still present.
+        assert "PATH" in kwargs["env"]
+        # And the call still produced a real result.
+        assert result["success"] is True
 
 
 class TestApplyMdTool:

@@ -205,57 +205,67 @@ class LayoutAnalyzer:
 
     def _call_vision_api(self, images: List[Path]) -> List[Dict[str, Any]]:
         """Call vision API to detect overflow in rendered images.
-        
+
+        ULTRAREADY-VERIFY (2026-06-07): the previous behavior returned
+        fabricated mock data when no API key was configured or the
+        client init failed. That silently poisoned any future integration.
+        This method now raises RuntimeError instead — production code
+        must fail loud.
+
         Args:
             images: List of image paths to analyze.
-            
+
         Returns:
             List of detection results with overflow information.
+
+        Raises:
+            RuntimeError: if no API key is configured, the vision
+                client cannot be initialized, or the API call fails.
         """
         if not self._api_key:
-            logger.warning("No API key configured, returning mock data")
-            return self._mock_vision_results(images)
-            
+            raise RuntimeError(
+                "vision API key required (ULTRAREADY-VERIFY: no mock "
+                "fallback in production)"
+            )
+
         logger.info(f"Calling vision API for {len(images)} images")
-        
-        try:
-            import base64
-            client = self._get_vision_client()
-            if client is None:
-                return self._mock_vision_results(images)
-            
-            results = []
-            for img_path in images:
-                with open(img_path, "rb") as f:
-                    img_data = base64.b64encode(f.read()).decode()
-                
-                response = client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[{
-                        "role": "user",
-                        "content": [
-                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_data}"}},
-                            {"type": "text", "text": "Analyze this document page for text overflow issues. "
-                             "Look for text that extends beyond containers, cut-off content, "
-                             "or layout problems. Return JSON with elements that have overflow: "
-                             "[{\"element_id\": \"...\", \"overflow_percentage\": ..., \"text\": \"...\"}]"}
-                        ]
-                    }],
-                    max_tokens=2048
-                )
-                
-                import json
-                content = response.choices[0].message.content
-                if content.startswith("```"):
-                    content = content.split("\n", 1)[1]
-                if content.endswith("```"):
-                    content = content[:-3]
-                results.extend(json.loads(content))
-                
-        except Exception as e:
-            logger.error(f"Vision API call failed: {e}")
-            return self._mock_vision_results(images)
-            
+
+        import base64
+        client = self._get_vision_client()
+        if client is None:
+            raise RuntimeError(
+                "vision client init failed (ULTRAREADY-VERIFY: no mock "
+                "fallback in production)"
+            )
+
+        results = []
+        for img_path in images:
+            with open(img_path, "rb") as f:
+                img_data = base64.b64encode(f.read()).decode()
+
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_data}"}},
+                        {"type": "text", "text": "Analyze this document page for text overflow issues. "
+                         "Look for text that extends beyond containers, cut-off content, "
+                         "or layout problems. Return JSON with elements that have overflow: "
+                         "[{\"element_id\": \"...\", \"overflow_percentage\": ..., \"text\": \"...\"}]"}
+                    ]
+                }],
+                max_tokens=2048
+            )
+
+            import json
+            content = response.choices[0].message.content
+            if content.startswith("```"):
+                content = content.split("\n", 1)[1]
+            if content.endswith("```"):
+                content = content[:-3]
+            results.extend(json.loads(content))
+
         return results
 
     def _mock_vision_results(self, images: List[Path]) -> List[Dict[str, Any]]:
@@ -321,56 +331,64 @@ class LayoutAnalyzer:
 
     def fix_overflow(self, issue: OverflowIssue) -> Optional[OverflowFix]:
         """Generate correction suggestions for an overflow issue using LLM.
-        
+
+        ULTRAREADY-VERIFY (2026-06-07): the previous behavior returned a
+        fabricated mock fix when no API key was configured or the
+        client init failed. Production code must fail loud.
+
         Args:
             issue: The overflow issue to fix.
-            
+
         Returns:
             OverflowFix with suggested shorter text, or None if cannot fix.
+
+        Raises:
+            RuntimeError: if no API key is configured, the vision
+                client cannot be initialized, or the LLM call fails.
         """
         logger.info(f"Generating fix for issue: {issue.element_id}")
-        
+
         if not self._api_key:
-            logger.warning("No API key, returning mock fix suggestion")
-            return self._mock_fix_suggestion(issue)
-            
-        try:
-            client = self._get_vision_client()
-            if client is None:
-                return self._mock_fix_suggestion(issue)
-            
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{
-                    "role": "user",
-                    "content": f"""Suggest a shorter version of this text that conveys 
-                    the same meaning but fits better in a document layout.
-                    Original text: {issue.original_text}
-                    Current overflow: {issue.overflow_percentage}%
-                    
-                    Return JSON: {{"suggested_text": "...", "reduction_percentage": ...}}
-                    """
-                }],
-                max_tokens=1024
+            raise RuntimeError(
+                "vision API key required (ULTRAREADY-VERIFY: no mock "
+                "fallback in production)"
             )
-            
-            import json
-            content = response.choices[0].message.content
-            if content.startswith("```"):
-                content = content.split("\n", 1)[1]
-            if content.endswith("```"):
-                content = content[:-3]
-            result = json.loads(content)
-            
-            return OverflowFix(
-                issue=issue,
-                suggested_text=result.get("suggested_text", issue.original_text),
-                reduction_percentage=result.get("reduction_percentage", 0)
+
+        client = self._get_vision_client()
+        if client is None:
+            raise RuntimeError(
+                "vision client init failed (ULTRAREADY-VERIFY: no mock "
+                "fallback in production)"
             )
-            
-        except Exception as e:
-            logger.error(f"LLM fix generation failed: {e}")
-            return self._mock_fix_suggestion(issue)
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{
+                "role": "user",
+                "content": f"""Suggest a shorter version of this text that conveys
+                the same meaning but fits better in a document layout.
+                Original text: {issue.original_text}
+                Current overflow: {issue.overflow_percentage}%
+
+                Return JSON: {{"suggested_text": "...", "reduction_percentage": ...}}
+                """
+            }],
+            max_tokens=1024
+        )
+
+        import json
+        content = response.choices[0].message.content
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1]
+        if content.endswith("```"):
+            content = content[:-3]
+        result = json.loads(content)
+
+        return OverflowFix(
+            issue=issue,
+            suggested_text=result.get("suggested_text", issue.original_text),
+            reduction_percentage=result.get("reduction_percentage", 0)
+        )
 
     def _mock_fix_suggestion(self, issue: OverflowIssue) -> Optional[OverflowFix]:
         """Generate mock fix suggestion when API is not available.

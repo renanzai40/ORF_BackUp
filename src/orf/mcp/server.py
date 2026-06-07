@@ -17,6 +17,20 @@ except ImportError:
     FastMCP = None
 
 
+# ULTRAREADY-VERIFY (2026-06-07): env vars that must NEVER be inherited
+# by the CLI subprocess. These are test-only seams — if a test harness
+# started the MCP server with one of them set, every MCP conversion
+# would silently produce fake output. The list is centralized here so
+# adding a new seam in the future means updating one constant + one test.
+_MCP_SCRUB_ENV_KEYS = frozenset({
+    "OMNI_TEST_FAKE_PANDOC",
+    "OMNI_TEST_FAKE_LLM",
+    "OMNI_TEST_FAKE",
+    "OMNI_TEST_MOCK",
+    "OMNI_TEST_STUB",
+})
+
+
 from orf.mcp.security import PathValidator
 from orf.logging import get_logger
 
@@ -28,10 +42,21 @@ _mcp: Optional["FastMCP"] = None
 
 def _run_cli_command(args: list[str]) -> dict:
     """Run ORF CLI command and return parsed JSON result."""
+    # ULTRAREADY-VERIFY (2026-06-07): scrub test-only env vars before
+    # invoking the CLI subprocess. Without this, a test harness that
+    # started the MCP server with OMNI_TEST_FAKE_PANDOC=1 would silently
+    # route every MCP conversion to a stub-DOCX (the FAKE_PANDOC seam
+    # in orf/cli.py:191-212 monkey-patches subprocess.run for the
+    # lifetime of the CLI process).
+    scrubbed_env = {
+        k: v for k, v in os.environ.items()
+        if k not in _MCP_SCRUB_ENV_KEYS
+    }
     result = subprocess.run(
         [sys.executable, "-m", "orf.cli"] + args + ["--json"],
         capture_output=True,
-        text=True
+        text=True,
+        env=scrubbed_env,
     )
 
     # Bug 4 Fix: Handle empty stdout

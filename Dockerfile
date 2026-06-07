@@ -16,6 +16,18 @@ RUN uv sync --frozen --all-extras --no-dev
 # --- Runtime stage ---
 FROM python:3.12-slim AS runtime
 
+# ULTRAREADY-VERIFY (2026-06-07): install the runtime deps ORF actually
+# invokes. Without these, every `orf apply-md ... --target-format docx`
+# call fails at runtime with "pandoc: command not found", and the
+# `opp` OCR path (referenced by the OPP/ORF pipeline) returns 127.
+# apt-get clean keeps the layer small.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        pandoc \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy the installed virtualenv and source from the builder

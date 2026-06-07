@@ -148,8 +148,14 @@ class TestLayoutAnalyzer:
         # pandoc was attempted
         assert mock_run.called
 
-    def test_fix_overflow_returns_mock_when_no_api_key(self):
-        """Test fix_overflow returns mock when no API key."""
+    def test_fix_overflow_raises_when_no_api_key(self):
+        """Test fix_overflow raises hard error when no API key is configured.
+
+        ULTRAREADY-VERIFY (2026-06-07): the previous behavior returned a
+        fabricated OverflowFix (silently truncating text by 2 words and
+        lying about reduction_percentage). That silently poisoned any
+        future integration. Production code must fail loud.
+        """
         analyzer = LayoutAnalyzer()
         issue = OverflowIssue(
             file_path="/test/doc.md",
@@ -158,13 +164,12 @@ class TestLayoutAnalyzer:
             overflow_percentage=15.0,
             severity=Severity.MEDIUM
         )
-        
-        fix = analyzer.fix_overflow(issue)
-        assert fix is not None
-        assert fix.suggested_text != issue.original_text
 
-    def test_fix_overflow_preserves_short_text(self):
-        """Test that fix_overflow preserves very short text."""
+        with pytest.raises(RuntimeError, match="vision API key required"):
+            analyzer.fix_overflow(issue)
+
+    def test_fix_overflow_raises_for_short_text_when_no_api_key(self):
+        """Even short text must fail loud when no API key is configured."""
         analyzer = LayoutAnalyzer()
         issue = OverflowIssue(
             file_path="/test/doc.md",
@@ -173,10 +178,23 @@ class TestLayoutAnalyzer:
             overflow_percentage=5.0,
             severity=Severity.LOW
         )
-        
-        fix = analyzer.fix_overflow(issue)
-        assert fix is not None
-        assert fix.suggested_text == "Hi"
+
+        with pytest.raises(RuntimeError, match="vision API key required"):
+            analyzer.fix_overflow(issue)
+
+    def test_call_vision_api_raises_when_no_api_key(self):
+        """_call_vision_api must raise hard error when no API key is configured.
+
+        ULTRAREADY-VERIFY (2026-06-07): pins the contract that the
+        mock-vision-results fallback is removed in production. The two
+        api_key=None branches in layout_analyzer.py (analyze +
+        fix_overflow) must raise RuntimeError, not return fabricated
+        data.
+        """
+        from orf.ai.layout_analyzer import LayoutAnalyzer
+        analyzer = LayoutAnalyzer()
+        with pytest.raises(RuntimeError, match="vision API key required"):
+            analyzer._call_vision_api([Path("/tmp/fake.png")])
 
 
 class TestLayoutAnalyzerIntegration:
@@ -186,18 +204,24 @@ class TestLayoutAnalyzerIntegration:
     @patch.object(LayoutAnalyzer, '_get_vision_client')
     def test_analyze_with_mocked_vision(self, mock_get_client, mock_render, sample_document: Path, tmp_path: Path):
         """Test analyze with mocked vision client."""
-        mock_render.return_value = [tmp_path / "page1.png"]
-        
+        # ULTRAREADY-VERIFY: the rendered image path must actually exist
+        # on disk because _call_vision_api now reads the bytes (no mock
+        # fallback to hide the FileNotFoundError). Previously this test
+        # worked only because the mock returned fake data on exception.
+        page1 = tmp_path / "page1.png"
+        page1.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        mock_render.return_value = [page1]
+
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = '[{"element_id": "p_001", "overflow_percentage": 15.5, "text": "Test text"}]'
         mock_client.chat.completions.create.return_value = mock_response
         mock_get_client.return_value = mock_client
-        
+
         analyzer = LayoutAnalyzer(api_key="fake-key")
         result = analyzer.analyze(sample_document)
-        
+
         assert len(result) == 1
         assert result[0].element_id == "p_001"
         assert result[0].overflow_percentage == 15.5

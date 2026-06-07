@@ -136,31 +136,34 @@ class HITLApproval:
     
     async def request_approval(self, request: ApprovalRequest) -> ApprovalResult:
         """Request human approval for an operation.
-        
-        In a real implementation, this would:
-        1. Send notification to human reviewer
-        2. Wait for response with timeout
-        3. Return approval decision
-        
-        For this implementation, we provide a synchronous interface
-        that can be extended with actual notification systems.
-        
+
+        ULTRAREADY-VERIFY (2026-06-07): the previous behavior was a
+        STUB that auto-approved LOW risk operations without human
+        review. That silently bypassed the HITL safety net for
+        anything not classified as HIGH/UNACCEPTABLE/LIMITED. This
+        method now raises NotImplementedError until a real
+        notification system (email / Slack / HITL dashboard) is
+        wired in.
+
         Args:
             request: The approval request
-            
+
         Returns:
-            ApprovalResult with decision
+            ApprovalResult with decision (NEVER returns under current
+            implementation; raises to prevent silent auto-approval).
+
+        Raises:
+            NotImplementedError: always — wire a real notification
+                system before removing this guard.
         """
-        # This is a stub - actual implementation would integrate
-        # with notification systems (email, Slack, etc.)
-        
-        # For now, auto-approve LOW risk operations
-        if request.risk_level == RiskLevel.LOW:
-            return ApprovalResult(approved=True, reason="Auto-approved: low risk")
-        
-        # Return pending status - actual approval would be handled
-        # by external system that calls resolve_approval
-        return ApprovalResult(approved=False, reason="Pending human review")
+        raise NotImplementedError(
+            "HITLApproval.request_approval is a stub that previously "
+            "auto-approved LOW-risk operations without human review. "
+            "It now fails loud until a real notification system "
+            "(email / Slack / dashboard) is wired in. See "
+            "src/orf/workflow/hitl_approval.py for the integration "
+            "contract."
+        )
     
     def resolve_approval(self, request_id: str, approved: bool, approver: Optional[str] = None) -> ApprovalResult:
         """Resolve a pending approval.
