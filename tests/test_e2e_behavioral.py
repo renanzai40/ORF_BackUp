@@ -13,8 +13,8 @@ These tests are NOT mocked - they verify actual output state.
 import pytest
 import tempfile
 import zipfile
-import xml.etree.ElementTree as ET
 from pathlib import Path
+from lxml import etree
 
 
 # Minimal DOCX skeleton (word/document.xml)
@@ -92,8 +92,18 @@ def extract_document_xml(docx_path: Path) -> str:
         return zf.read("word/document.xml").decode("utf-8")
 
 
+def read_docx_xml(path: Path) -> str:
+    """Read word/document.xml from a DOCX file as a UTF-8 string.
+
+    Precondition helper for assertion-style behavioral tests against the
+    public XLIFF2DOCXConverter.convert() API. Spec T7 Step 1.
+    """
+    with zipfile.ZipFile(path) as z:
+        return z.read("word/document.xml").decode("utf-8")
+
+
 class TestXLIFF2DOCXBackfill:
-    """Test xliff2docx backfill functionality."""
+    """Test xliff2docx backfill functionality via the public convert() API."""
 
     @pytest.fixture
     def temp_dir(self):
@@ -102,104 +112,100 @@ class TestXLIFF2DOCXBackfill:
         yield Path(tmpdir)
         shutil.rmtree(tmpdir, ignore_errors=True)
 
-    def test_backfill_translation_replaces_source_with_target(self, minimal_docx, temp_dir):
-        """Test that _backfill_translation replaces source text with target text.
+    @pytest.fixture
+    def sample_xliff(self, temp_dir) -> Path:
+        """XLIFF with <source>+<target> translations of the minimal DOCX body."""
+        path = temp_dir / "translations.xlf"
+        path.write_text(XLIFF_WITH_TRANSLATIONS, encoding="utf-8")
+        return path
 
-        This is the core behavioral test - verify translations are actually written.
+    @pytest.fixture
+    def opp_source_only_xliff(self, temp_dir) -> Path:
+        """OPP-style XLIFF: <source> only, no <target>. Must not crash convert()."""
+        path = temp_dir / "opp_source_only.xlf"
+        path.write_text(OPP_STYLE_XLIFF_SOURCE_ONLY, encoding="utf-8")
+        return path
+
+    def test_backfill_translation_replaces_source_with_target(
+        self, minimal_docx, sample_xliff, temp_dir
+    ):
+        """Public convert() must replace 'Hello world' with '你好世界' in output DOCX.
+
+        Strong assertion: target present AND source absent.
         """
         from orf.channels.xliff2docx import XLIFF2DOCXConverter
 
         converter = XLIFF2DOCXConverter()
+        output = temp_dir / "out.docx"
+        result = converter.convert(str(minimal_docx), str(sample_xliff), str(output))
 
-        # Backfill: replace "Hello world" with "你好世界"
-        result_xml = converter._backfill_translation(
-            document_xml=MINIMAL_DOCX_DOCUMENT,
-            source_text="Hello world",
-            target_text="你好世界",
-            inline_elements=None,
-        )
+        assert result.success, f"convert() failed: {result.errors}"
+        content = read_docx_xml(output)
+        assert "你好世界" in content, "Target translation not found in output DOCX"
+        assert "Hello world" not in content, "Source text still present (not replaced)"
 
-        # Verify target text is in the result
-        assert "你好世界" in result_xml, "Target translation not found in output"
-        # Verify source text is NOT in the result (replaced)
-        assert "Hello world" not in result_xml, "Source text still present (not replaced)"
+    def test_backfill_uses_word_namespace(self, minimal_docx, sample_xliff, temp_dir):
+        """Output DOCX must preserve xmlns:w so downstream xpath('//w:t') works (Bug #4).
 
-    def test_backfill_uses_word_namespace(self, temp_dir):
-        """Test that xpath queries use registered word namespace.
-
-        Bug #4: xpath("//w:t") requires namespace registration.
-        If namespace is not registered, xpath returns empty and nothing is replaced.
+        Strong assertion: namespace prefix declared on root element.
         """
         from orf.channels.xliff2docx import XLIFF2DOCXConverter
 
         converter = XLIFF2DOCXConverter()
+        output = temp_dir / "out_ns.docx"
+        result = converter.convert(str(minimal_docx), str(sample_xliff), str(output))
 
-        # If namespace is NOT registered, this would raise or return empty
-        result_xml = converter._backfill_translation(
-            document_xml=MINIMAL_DOCX_DOCUMENT,
-            source_text="Hello world",
-            target_text="CHINESE_TEXT",
-            inline_elements=None,
-        )
+        assert result.success, f"convert() failed: {result.errors}"
+        content = read_docx_xml(output)
+        assert 'xmlns:w=' in content, \
+            "Word namespace not preserved in output - xpath('//w:t') will return empty"
 
-        # If Bug #4 exists: result would still have "Hello world"
-        # If Bug #4 is fixed: result would have "CHINESE_TEXT"
-        assert "CHINESE_TEXT" in result_xml, \
-            "Namespace not registered - xpath returned empty, translation not applied"
-        assert "Hello world" not in result_xml, \
-            "Source still present - namespace bug caused no replacement"
+    def test_backfill_xml_declaration_unicode_encoding(
+        self, minimal_docx, sample_xliff, temp_dir
+    ):
+        """Output document.xml must be a well-formed XML doc with translation (Bug #5).
 
-    def test_backfill_xml_declaration_unicode_encoding(self, temp_dir):
-        """Test that xml_declaration=False works with encoding="unicode".
-
-        Bug #5: xml_declaration=True with encoding="unicode" causes ValueError.
+        Strong assertion: parses with lxml AND contains target text in w:t elements.
         """
         from orf.channels.xliff2docx import XLIFF2DOCXConverter
 
         converter = XLIFF2DOCXConverter()
+        output = temp_dir / "out_decl.docx"
+        result = converter.convert(str(minimal_docx), str(sample_xliff), str(output))
 
-        # This should NOT raise ValueError
-        result_xml = converter._backfill_translation(
-            document_xml=MINIMAL_DOCX_DOCUMENT,
-            source_text="Hello world",
-            target_text="TRANSLATED",
-            inline_elements=None,
-        )
+        assert result.success, f"convert() failed: {result.errors}"
+        content = read_docx_xml(output)
+        root = etree.fromstring(content.encode("utf-8"))
+        assert root is not None
+        ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+        texts = [t.text for t in root.iter(f"{ns}t") if t.text]
+        assert "你好世界" in texts, \
+            "Translated text not found in parsed w:t elements"
 
-        # Verify result is valid XML string (not bytes)
-        assert isinstance(result_xml, str), "Result should be string, not bytes"
+    def test_full_pipeline_source_only_xliff(
+        self, minimal_docx, opp_source_only_xliff, temp_dir
+    ):
+        """OPP source-only XLIFF: output must contain source, not injected target.
 
-        # Verify no XML declaration issues
-        # If Bug #5 exists: would get ValueError or malformed XML
-        assert result_xml.startswith("<w:document"), \
-            f"XML declaration issue - unexpected start: {result_xml[:50]}"
-
-    def test_full_pipeline_source_only_xliff(self, minimal_docx, temp_dir):
-        """Test full pipeline with OPP-style source-only XLIFF.
-
-        OPP generates XLIFF with only <source> (no <target>).
-        OR should handle this gracefully.
+        Strong assertion: source preserved AND no spurious target injected.
         """
         from orf.channels.xliff2docx import XLIFF2DOCXConverter
 
         converter = XLIFF2DOCXConverter()
-
-        # OPP-style XLIFF has no target - backfill should not crash
-        # It will find nothing to replace, which is expected
-        result_xml = converter._backfill_translation(
-            document_xml=MINIMAL_DOCX_DOCUMENT,
-            source_text="NonExistent text",
-            target_text="Should not appear",
-            inline_elements=None,
+        output = temp_dir / "out_opp.docx"
+        result = converter.convert(
+            str(minimal_docx), str(opp_source_only_xliff), str(output)
         )
 
-        # Should return modified XML (or original if no match)
-        assert isinstance(result_xml, str)
-        assert "<w:document" in result_xml or result_xml == MINIMAL_DOCX_DOCUMENT
+        assert result.success, f"convert() failed: {result.errors}"
+        content = read_docx_xml(output)
+        assert "Hello world" in content, "Source text missing from output"
+        assert "你好世界" not in content, \
+            "Target text appeared in output despite source-only XLIFF"
 
 
 class TestXLIFF2DOCXWithTranslations:
-    """Test full XLIFF→DOCX pipeline with actual translations."""
+    """Test full XLIFF→DOCX pipeline with actual translations via convert()."""
 
     @pytest.fixture
     def temp_dir(self):
@@ -210,55 +216,69 @@ class TestXLIFF2DOCXWithTranslations:
 
     @pytest.fixture
     def docx_with_translations(self, temp_dir) -> Path:
-        """Create DOCX with multiple paragraphs."""
+        """Create DOCX with 3 distinct paragraphs for multi-unit backfill."""
         doc_xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:body>
-    <w:p>
-      <w:r>
-        <w:t>Para 1: Hello</w:t>
-      </w:r>
-    </w:p>
-    <w:p>
-      <w:r>
-        <w:t>Para 2: World</w:t>
-      </w:r>
-    </w:p>
+    <w:p><w:r><w:t>Hello</w:t></w:r></w:p>
+    <w:p><w:r><w:t>World</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Greetings</w:t></w:r></w:p>
   </w:body>
 </w:document>"""
         path = temp_dir / "multi.docx"
         create_minimal_docx(path, doc_xml)
         return path
 
-    def test_backfill_multiple_units(self, docx_with_translations, temp_dir):
-        """Test backfilling multiple trans-units."""
+    @pytest.fixture
+    def three_unit_xliff(self, temp_dir) -> Path:
+        """XLIFF with 3 trans-units, each translating a distinct source paragraph."""
+        xliff = """<?xml version="1.0" encoding="utf-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file original="multi.docx" source-language="en" target-language="fr" datatype="wordprocessingml">
+    <body>
+      <trans-unit id="1">
+        <source>Hello</source>
+        <target>Bonjour</target>
+      </trans-unit>
+      <trans-unit id="2">
+        <source>World</source>
+        <target>Salut</target>
+      </trans-unit>
+      <trans-unit id="3">
+        <source>Greetings</source>
+        <target>Coucou</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>"""
+        path = temp_dir / "three_units.xlf"
+        path.write_text(xliff, encoding="utf-8")
+        return path
+
+    def test_backfill_multiple_units(
+        self, docx_with_translations, three_unit_xliff, temp_dir
+    ):
+        """All 3 trans-units must be applied to the output DOCX in one convert() call.
+
+        Strong assertion: every target string appears in output.
+        """
         from orf.channels.xliff2docx import XLIFF2DOCXConverter
 
         converter = XLIFF2DOCXConverter()
-
-        # Apply first translation
-        result1 = converter._backfill_translation(
-            document_xml=MINIMAL_DOCX_DOCUMENT,
-            source_text="Hello world",
-            target_text="你好世界",
-            inline_elements=None,
+        output = temp_dir / "out_multi.docx"
+        result = converter.convert(
+            str(docx_with_translations), str(three_unit_xliff), str(output)
         )
 
-        # Apply second translation
-        result2 = converter._backfill_translation(
-            document_xml=result1,
-            source_text="Second paragraph",
-            target_text="第二段",
-            inline_elements=None,
-        )
-
-        # Both translations should be present
-        assert "你好世界" in result2
-        assert "第二段" in result2
+        assert result.success, f"convert() failed: {result.errors}"
+        content = read_docx_xml(output)
+        assert "Bonjour" in content, "Unit 1 target missing from output"
+        assert "Salut" in content, "Unit 2 target missing from output"
+        assert "Coucou" in content, "Unit 3 target missing from output"
 
 
 class TestORFXLIFFContract:
-    """Test that ORF output satisfies downstream requirements."""
+    """Test that ORF output satisfies downstream requirements via convert()."""
 
     @pytest.fixture
     def temp_dir(self):
@@ -267,55 +287,47 @@ class TestORFXLIFFContract:
         yield Path(tmpdir)
         shutil.rmtree(tmpdir, ignore_errors=True)
 
-    def test_output_docx_is_valid_zip(self, minimal_docx, temp_dir):
-        """Verify output is a valid DOCX (ZIP archive)."""
+    @pytest.fixture
+    def sample_xliff(self, temp_dir) -> Path:
+        path = temp_dir / "translations.xlf"
+        path.write_text(XLIFF_WITH_TRANSLATIONS, encoding="utf-8")
+        return path
+
+    def test_output_docx_is_valid_zip(self, minimal_docx, sample_xliff, temp_dir):
+        """convert() must produce a valid DOCX (ZIP archive) containing word/document.xml.
+
+        Strong assertion: zipfile.is_zipfile() AND required parts present.
+        """
         from orf.channels.xliff2docx import XLIFF2DOCXConverter
 
         converter = XLIFF2DOCXConverter()
+        output = temp_dir / "out_zip.docx"
+        result = converter.convert(str(minimal_docx), str(sample_xliff), str(output))
 
-        # Apply translation
-        result_xml = converter._backfill_translation(
-            document_xml=MINIMAL_DOCX_DOCUMENT,
-            source_text="Hello world",
-            target_text="TRANSLATED",
-            inline_elements=None,
-        )
-
-        # Create output DOCX
-        output_path = temp_dir / "output.docx"
-        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr("word/document.xml", result_xml)
-            zf.writestr("[Content_Types].xml", """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>""")
-
-        # Verify it's a valid ZIP
-        with zipfile.ZipFile(output_path, "r") as zf:
+        assert result.success, f"convert() failed: {result.errors}"
+        assert zipfile.is_zipfile(output), "Output is not a valid ZIP archive"
+        with zipfile.ZipFile(output, "r") as zf:
             names = zf.namelist()
-            assert "word/document.xml" in names
+            assert "word/document.xml" in names, "Output ZIP missing word/document.xml"
 
-    def test_translated_docx_content_is_valid_xml(self, minimal_docx, temp_dir):
-        """Verify translated DOCX contains valid XML in document.xml."""
+    def test_translated_docx_content_is_valid_xml(self, minimal_docx, sample_xliff, temp_dir):
+        """Output word/document.xml must parse as well-formed XML with translation present.
+
+        Strong assertion: etree.fromstring does not raise AND target in w:t.
+        """
         from orf.channels.xliff2docx import XLIFF2DOCXConverter
 
         converter = XLIFF2DOCXConverter()
+        output = temp_dir / "out_valid.docx"
+        result = converter.convert(str(minimal_docx), str(sample_xliff), str(output))
 
-        result_xml = converter._backfill_translation(
-            document_xml=MINIMAL_DOCX_DOCUMENT,
-            source_text="Hello world",
-            target_text="VALID_XML_TEST",
-            inline_elements=None,
-        )
-
-        # Result should be parseable XML
-        root = ET.fromstring(result_xml)
+        assert result.success, f"convert() failed: {result.errors}"
+        content = read_docx_xml(output)
+        root = etree.fromstring(content.encode("utf-8"))
         assert root is not None
-
-        # Should have the translated text
-        texts = [t.text for t in root.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t")]
-        assert "VALID_XML_TEST" in texts
+        ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+        texts = [t.text for t in root.iter(f"{ns}t") if t.text]
+        assert "你好世界" in texts, "Translation not found in parsed w:t elements"
 
 
 class TestORFInjectImagesAtParagraphIndex:
