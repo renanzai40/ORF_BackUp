@@ -513,19 +513,28 @@ class XLIFF2DOCXConverter(BaseConverter):
                 root, source_normalized, target_text, inline_elements
             )
         else:
+            # ULTRAREADY-FIX (2026-06-08): require EXACT match on normalized
+            # text, not substring. The previous `source_normalized in
+            # t_elem.text` check overwrote any <w:t> that merely contained
+            # the source as a substring — destroying the body paragraph that
+            # happens to include a text box whose content matches a later
+            # non_body unit (e.g. body[8] = 周云杰 quote paragraph with
+            # nested text box containing "×116 ×54" gets overwritten when
+            # non_body_15 = "×116 ×54" is processed). Exact match on
+            # normalized text prevents this destructive overwrite.
             for t_elem in root.xpath("//w:t", namespaces=WORD_NS_MAP):
-                if t_elem.text and source_normalized in t_elem.text:
-                    found = True
-                    t_elem.text = target_text
-                elif t_elem.text and source_stripped in t_elem.text:
-                    found = True
-                    t_elem.text = target_text
+                if t_elem.text:
+                    t_norm = re.sub(r"\s+", " ", t_elem.text).strip()
+                    if t_norm == source_normalized or t_norm == source_stripped:
+                        found = True
+                        t_elem.text = target_text
 
         if not found:
             for p in body_paragraphs:
                 text_runs = [t.text for t in p.xpath(".//w:t", namespaces=WORD_NS_MAP) if t.text]
                 concat_text = "".join(text_runs)
-                if source_normalized in concat_text or source_stripped in concat_text:
+                concat_norm = re.sub(r"\s+", " ", concat_text).strip()
+                if concat_norm == source_normalized or concat_norm == source_stripped:
                     found = self._backfill_split_runs(p, source_normalized, target_text)
                     break
 
