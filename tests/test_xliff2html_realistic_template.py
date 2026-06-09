@@ -19,6 +19,7 @@ import pytest
 from lxml import etree, html as lxml_html
 
 from orf.channels.xliff2html import XLIFF2HTMLConverter
+from orf.converters.options import ConverterOptions
 
 
 # --- Fixtures --------------------------------------------------------------
@@ -81,7 +82,7 @@ def _run_conversion(
         realistic_template,
         realistic_xliff,
         output,
-        preserve_inline=preserve_inline,
+        options=ConverterOptions(preserve_inline=preserve_inline),
     )
     assert result.success is True, f"conversion failed: {result.errors}"
     assert output.exists()

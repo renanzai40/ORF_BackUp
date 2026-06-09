@@ -8,6 +8,7 @@ from typing import Any
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.logging import get_logger
+from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.md2pdf")
 
@@ -32,7 +33,7 @@ class MD2PDFConverter(BaseConverter):
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)
@@ -44,19 +45,21 @@ class MD2PDFConverter(BaseConverter):
                 errors=[f"Invalid input file: {input_path}"],
             )
 
-        engine = options.get("engine", "pandoc").lower()
+        opts = options or ConverterOptions()
+        engine = opts.engine.lower()
         if engine == "weasyprint":
-            return self._convert_weasyprint(input_path, output_path, **options)
+            return self._convert_weasyprint(input_path, output_path, options)
         else:
-            return self._convert_pandoc(input_path, output_path, **options)
+            return self._convert_pandoc(input_path, output_path, options)
 
     def _convert_pandoc(
         self,
         input_path: Path,
         output_path: Path,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         """Convert MD → PDF using Pandoc with pdflatex."""
+        opts = options or ConverterOptions()
         cmd = [
             "pandoc",
             str(input_path),
@@ -65,7 +68,7 @@ class MD2PDFConverter(BaseConverter):
         ]
 
         # Use xelatex engine for Chinese font support
-        if options.get("chinese_font"):
+        if opts.chinese_font:
             cmd.extend(["--pdf-engine=xelatex", "-V", "mainfont=SimSun"])
         else:
             cmd.extend(["--pdf-engine=pdflatex"])
@@ -109,7 +112,7 @@ class MD2PDFConverter(BaseConverter):
         self,
         input_path: Path,
         output_path: Path,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         """Convert MD → HTML → PDF using WeasyPrint."""
         # Check WeasyPrint availability using importlib (avoids ruff false positive)
@@ -133,7 +136,7 @@ class MD2PDFConverter(BaseConverter):
 
         # Step 1: MD → HTML via MD2HTMLConverter
         md2html = MD2HTMLConverter()
-        html_result = md2html.convert(input_path, html_path, **options)
+        html_result = md2html.convert(input_path, html_path, options)
 
         if not html_result.success:
             logger.error(f"MD → HTML conversion failed: {html_result.errors}")

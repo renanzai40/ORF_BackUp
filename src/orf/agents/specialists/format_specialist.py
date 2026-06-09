@@ -5,6 +5,7 @@ from typing import Optional
 
 from orf.agents.specialists.base import BaseSpecialist
 from orf.converters.base import ConversionResult, ErrorDetail
+from orf.converters.options import ConverterOptions
 from orf.channels.md2docx import MD2DOCXConverter
 from orf.channels.md2odt import MD2ODTConverter
 from orf.channels.md2epub import MD2EPUBConverter
@@ -48,7 +49,7 @@ class FormatSpecialist(BaseSpecialist):
                     )]
                 )
 
-            return converter.convert(input_path, output_path, **options)
+            return converter.convert(input_path, output_path, ConverterOptions(**options))
 
         except Exception as e:
             return ConversionResult(

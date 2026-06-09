@@ -10,6 +10,7 @@ from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
 from orf.logging import get_logger
+from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.md2odt")
 
@@ -38,10 +39,11 @@ class MD2ODTConverter(BaseConverter):
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)
+        opts = options or ConverterOptions()
 
         if not self.validate_input(input_path):
             return ConversionResult(
@@ -57,7 +59,7 @@ class MD2ODTConverter(BaseConverter):
             "--to", "odt",
         ]
 
-        template = options.get("template") or self.reference_odt
+        template = opts.template or self.reference_odt
         if template:
             cmd.extend(["--reference-doc", str(template)])
 

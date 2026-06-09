@@ -20,6 +20,7 @@ from orf.mcp.schemas import ImagePlacement
 from orf.skeleton.inline_formatting import XLIFFInlineParser, EPUBHTMLInlineApplier
 from orf.error_handlers.conversion_error import XLIFFParseError, InlineFormattingError
 from orf.logging import get_logger
+from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.xliff2epub")
 
@@ -57,25 +58,26 @@ class XLIFF2EPUBConverter(BaseConverter):
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() in (".epub", ".zip")
 
-    def convert(  # type: ignore[override]
+    def convert(
         self,
-        epub_skeleton: Path | str,
+        input_path: Path | str,
         xliff_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         """Apply XLIFF translations to EPUB skeleton.
 
         Args:
-            epub_skeleton: Path to EPUB skeleton file.
-            xliff_path: Path to translated XLIFF file.
+            input_path: Path to EPUB skeleton file.
+            xliff_path: Path to the XLIFF translation file.
             output_path: Path to write the output EPUB.
-            **options: Additional options (preserve_styles, etc.)
+            options: Converter options (preserve_styles, etc.).
 
         Returns:
             ConversionResult with output path and status.
         """
-        epub_skeleton = Path(epub_skeleton)
+        epub_skeleton = Path(input_path)
+        opts = options or ConverterOptions()
         xliff_path = Path(xliff_path)
         output_path = Path(output_path)
 
@@ -243,7 +245,7 @@ class XLIFF2EPUBConverter(BaseConverter):
         self,
         epub_files: dict[str, bytes],
         xliff_segments: dict[str, str],
-        options: dict[str, object],
+        options: ConverterOptions | None = None,
     ) -> dict[str, bytes]:
         """Apply XLIFF translations to EPUB XHTML files.
 
@@ -316,7 +318,7 @@ class XLIFF2EPUBConverter(BaseConverter):
         self,
         xhtml_content: str,
         segments: dict[str, str],
-        options: dict[str, object],
+        options: ConverterOptions | None = None,
     ) -> str:
         """Apply translated segments to XHTML content.
 

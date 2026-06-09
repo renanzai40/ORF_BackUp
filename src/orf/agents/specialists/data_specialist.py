@@ -5,6 +5,7 @@ from typing import Optional
 
 from orf.agents.specialists.base import BaseSpecialist
 from orf.converters.base import ConversionResult, ErrorDetail
+from orf.converters.options import ConverterOptions
 from orf.channels.md2xlsx import MD2XLSXConverter
 from orf.channels.md2csv import MD2CSVConverter
 from orf.channels.md2json import MD2JSONConverter
@@ -48,7 +49,7 @@ class DataSpecialist(BaseSpecialist):
                     )]
                 )
 
-            return converter.convert(input_path, output_path, **options)
+            return converter.convert(input_path, output_path, ConverterOptions(**options))
 
         except ImportError as e:
             return ConversionResult(

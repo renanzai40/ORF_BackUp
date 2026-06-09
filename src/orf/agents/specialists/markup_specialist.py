@@ -5,6 +5,7 @@ from typing import Optional
 
 from orf.agents.specialists.base import BaseSpecialist
 from orf.converters.base import ConversionResult, ErrorDetail
+from orf.converters.options import ConverterOptions
 from orf.channels.md2html import MD2HTMLConverter
 from orf.channels.md2xml import MD2XMLConverter
 
@@ -45,7 +46,7 @@ class MarkupSpecialist(BaseSpecialist):
                     )]
                 )
 
-            return converter.convert(input_path, output_path, **options)
+            return converter.convert(input_path, output_path, ConverterOptions(**options))
 
         except Exception as e:
             return ConversionResult(

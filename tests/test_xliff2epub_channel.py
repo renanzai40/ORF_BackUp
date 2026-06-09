@@ -6,6 +6,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 from orf.channels.xliff2epub import XLIFF2EPUBConverter
+from orf.converters.options import ConverterOptions
 from orf.converters.base import ConversionResult
 
 
@@ -111,7 +112,7 @@ class TestXLIFF2EPUBConverter:
         output = tmp_path / "output.epub"
         converter = XLIFF2EPUBConverter()
         result = converter.convert(
-            sample_epub_skeleton, sample_xliff, output, preserve_styles=True
+            sample_epub_skeleton, sample_xliff, output, options=ConverterOptions(preserve_styles=True)
         )
         assert result.success is True
 

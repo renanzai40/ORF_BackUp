@@ -5,6 +5,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 from orf.channels.xliff2html import XLIFF2HTMLConverter
+from orf.converters.options import ConverterOptions
 from orf.converters.base import ConversionResult
 
 
@@ -124,7 +125,7 @@ class TestXLIFF2HTMLConverter:
     def test_convert_without_inline_formatting(self, sample_html_template: Path, sample_xliff: Path, tmp_path: Path):
         output = tmp_path / "output.html"
         converter = XLIFF2HTMLConverter()
-        result = converter.convert(sample_html_template, sample_xliff, output, preserve_inline=False)
+        result = converter.convert(sample_html_template, sample_xliff, output, options=ConverterOptions(preserve_inline=False))
         assert result.success is True
         assert output.exists()
 
@@ -220,7 +221,7 @@ class TestXLIFF2HTMLConverter:
         """Test that inline formatting is applied via EPUBHTMLInlineApplier."""
         output = tmp_path / "output.html"
         converter = XLIFF2HTMLConverter()
-        result = converter.convert(sample_html_template, sample_xliff, output, preserve_inline=True)
+        result = converter.convert(sample_html_template, sample_xliff, output, options=ConverterOptions(preserve_inline=True))
         assert result.success is True
         assert result.metadata["source_format"] == "XLIFF"
         assert result.metadata["target_format"] == "HTML"
@@ -231,7 +232,7 @@ class TestXLIFF2HTMLConverter:
         """Test apply translations with preserve_inline=False."""
         output = tmp_path / "output.html"
         converter = XLIFF2HTMLConverter()
-        result = converter.convert(sample_html_template, sample_xliff, output, preserve_inline=False)
+        result = converter.convert(sample_html_template, sample_xliff, output, options=ConverterOptions(preserve_inline=False))
         assert result.success is True
         content = output.read_text(encoding="utf-8")
         assert "翻译标题" in content

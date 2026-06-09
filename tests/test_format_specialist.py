@@ -185,7 +185,7 @@ class TestFormatSpecialistOutputPathDefault:
             # capture the output path actually passed to the underlying converter
             captured = {}
 
-            def fake_convert(inp, out, **opts):
+            def fake_convert(inp, out, opts=None, **kw):
                 captured["inp"] = inp
                 captured["out"] = out
                 return _ok(out)

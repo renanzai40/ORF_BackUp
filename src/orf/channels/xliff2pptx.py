@@ -22,6 +22,7 @@ from orf.skeleton.inline_formatting import (
     XLIFFInlineParser,
 )
 from orf.skeleton.skeleton_loader import SkeletonLoader
+from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.xliff2pptx")
 
@@ -84,25 +85,26 @@ class XLIFF2PPTXConverter(BaseConverter):
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() == ".pptx"
 
-    def convert(  # type: ignore[override]
+    def convert(
         self,
-        pptx_skeleton: Path | str,
+        input_path: Path | str,
         xliff_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         """Convert XLIFF translation back to PPTX with inline formatting.
 
         Args:
-            pptx_skeleton: Path to the PPTX skeleton file (ZIP archive).
-            xliff_path: Path to the translated XLIFF file.
+            input_path: Path to the PPTX skeleton file (ZIP archive).
+            xliff_path: Path to the XLIFF translation file.
             output_path: Path for the output PPTX file.
-            **options: Additional options (slide_mapping, etc.)
+            options: Converter options (slide_mapping, etc.).
 
         Returns:
             ConversionResult with success status and output path.
         """
-        pptx_skeleton = Path(pptx_skeleton)
+        pptx_skeleton = Path(input_path)
+        opts = options or ConverterOptions()
         xliff_path = Path(xliff_path)
         output_path = Path(output_path)
 
@@ -344,7 +346,7 @@ class XLIFF2PPTXConverter(BaseConverter):
         self,
         slide_files: dict[str, bytes],
         xliff_data: dict[str, list[dict[str, object]]],
-        options: dict[str, object],
+        options: ConverterOptions | None = None,
     ) -> dict[str, bytes]:
         """Apply translation units to PPTX slide XML files.
 
@@ -594,7 +596,8 @@ class XLIFF2PPTXConverter(BaseConverter):
             img_obj = Image.open(BytesIO(img_bytes))
             w, h = img_obj.size
             return (w, h)
-        except Exception:
+        except (OSError, ValueError):
+            logger.exception("Failed to get image dimensions, using default 914400x685800")
             return (914400, 685800)
 
     def _add_image_to_pptx(

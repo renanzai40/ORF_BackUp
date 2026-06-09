@@ -10,6 +10,7 @@ from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
 from orf.logging import get_logger
+from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.md2epub")
 
@@ -36,10 +37,11 @@ class MD2EPUBConverter(BaseConverter):
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)
+        opts = options or ConverterOptions()
 
         if not self.validate_input(input_path):
             return ConversionResult(
@@ -55,15 +57,15 @@ class MD2EPUBConverter(BaseConverter):
             "--to", "epub",
         ]
 
-        if options.get("title"):
-            cmd.extend(["--metadata", f"title={options['title']}"])
-        if options.get("author"):
-            cmd.extend(["--metadata", f"author={options['author']}"])
-        if options.get("lang"):
-            cmd.extend(["--metadata", f"lang={options['lang']}"])
-        if options.get("toc"):
+        if opts.title:
+            cmd.extend(["--metadata", f"title={opts.title}"])
+        if opts.author:
+            cmd.extend(["--metadata", f"author={opts.author}"])
+        if opts.lang:
+            cmd.extend(["--metadata", f"lang={opts.lang}"])
+        if opts.toc:
             cmd.append("--toc")
-        if options.get("embed_images"):
+        if opts.embed_images:
             cmd.append("--self-contained")
 
         try:

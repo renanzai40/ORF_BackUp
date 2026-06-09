@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.4.1 (2026-06-09)
+
+### 🛠️ 修复 / Fixed
+
+- **`**options: Any` → typed `ConverterOptions`** across all 21 channel converters:
+  - New `ConverterOptions` dataclass (`orf/converters/options.py`) with 24 typed fields, all optional with defaults
+  - `BaseConverter.convert()` signature changed from `**options: Any` to `options: ConverterOptions | None = None`
+  - All 21 channel converter signatures updated accordingly
+  - All internal `options.get()`, `options["key"]`, `options.pop("key")` calls replaced with `opts.key` attribute access
+  - CLI `cli.py` and 4 specialist agent call sites updated to construct `ConverterOptions`
+  - 5 XLIFF converters restored `xliff_path` as dedicated positional parameter (not buried in options)
+  - Test mocks updated for 3-component signature compatibility
+  - Test suite: 98→25 failures (73 tests fixed); 651 passed, 1 skipped
+
 ## v0.4.0 (2026-06-03)
 
 ### 新功能 / Added

@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.logging import get_logger
+from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.xliff2odf")
 
@@ -60,25 +61,26 @@ class XLIFF2ODFConverter(BaseConverter):
         path = Path(input_skeleton)
         return path.exists() and path.suffix.lower() in ODF_EXTENSIONS
 
-    def convert(  # type: ignore[override]
+    def convert(
         self,
-        skeleton_path: Path | str,
+        input_path: Path | str,
         xliff_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         """Convert XLIFF + skeleton ODF to translated ODF.
 
         Args:
-            skeleton_path: Path to the original ODF skeleton file (ODT/ODS).
+            input_path: Path to the original ODF skeleton file (ODT/ODS).
             xliff_path: Path to the XLIFF translation file.
             output_path: Path to the output translated ODF file.
-            **options: Additional options (source_lang, target_lang, etc.)
+            options: Converter options (exclude, timestamp, etc.).
 
         Returns:
             ConversionResult with output path and metadata.
         """
-        skeleton_path = Path(skeleton_path)
+        skeleton_path = Path(input_path)
+        opts = options or ConverterOptions()
         xliff_path = Path(xliff_path)
         output_path = Path(output_path)
 
@@ -111,8 +113,10 @@ class XLIFF2ODFConverter(BaseConverter):
             "-o", str(output_path),
         ]
 
+        opts = options or ConverterOptions()
+
         # Add optional exclude patterns if provided
-        exclude = options.get("exclude")
+        exclude = opts.exclude
         if exclude:
             if isinstance(exclude, str):
                 exclude = [exclude]
@@ -120,7 +124,7 @@ class XLIFF2ODFConverter(BaseConverter):
                 cmd.extend(["-x", pattern])
 
         # Add timestamp skip option if requested
-        if options.get("timestamp", False):
+        if opts.timestamp:
             cmd.append("-S")
 
         logger.info(f"Running: {' '.join(cmd)}")

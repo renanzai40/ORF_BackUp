@@ -22,6 +22,7 @@ from orf.skeleton.inline_formatting import (
     XLIFFInlineParser,
 )
 from orf.skeleton.skeleton_loader import SkeletonLoader
+from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.xliff2docx")
 
@@ -204,11 +205,18 @@ class XLIFF2DOCXConverter(BaseConverter):
 
             resname = tu.get("resname")
             para_index = None
-            if resname and resname.startswith("para_index_"):
-                try:
-                    para_index = int(resname[len("para_index_"):])
-                except ValueError:
-                    para_index = None
+            non_body_index = None
+            if resname:
+                if resname.startswith("para_index_"):
+                    try:
+                        para_index = int(resname[len("para_index_"):])
+                    except ValueError:
+                        para_index = None
+                elif resname.startswith("non_body_"):
+                    try:
+                        non_body_index = int(resname[len("non_body_"):])
+                    except ValueError:
+                        non_body_index = None
 
             trans_units.append({
                 "id": tu_id,
@@ -216,6 +224,7 @@ class XLIFF2DOCXConverter(BaseConverter):
                 "target": target_text,
                 "inline_elements": inline_elements,
                 "para_index": para_index,
+                "non_body_index": non_body_index,
             })
 
         # Try xliff 1.1 trans-unit if no 1.2 units found
@@ -243,11 +252,18 @@ class XLIFF2DOCXConverter(BaseConverter):
 
                 resname = tu.get("resname")
                 para_index = None
-                if resname and resname.startswith("para_index_"):
-                    try:
-                        para_index = int(resname[len("para_index_"):])
-                    except ValueError:
-                        para_index = None
+                non_body_index = None
+                if resname:
+                    if resname.startswith("para_index_"):
+                        try:
+                            para_index = int(resname[len("para_index_"):])
+                        except ValueError:
+                            para_index = None
+                    elif resname.startswith("non_body_"):
+                        try:
+                            non_body_index = int(resname[len("non_body_"):])
+                        except ValueError:
+                            non_body_index = None
 
                 trans_units.append({
                     "id": tu_id,
@@ -255,6 +271,7 @@ class XLIFF2DOCXConverter(BaseConverter):
                     "target": target_text,
                     "inline_elements": inline_elements,
                     "para_index": para_index,
+                    "non_body_index": non_body_index,
                 })
             if trans_units:
                 logger.debug("Found %d trans-units using XLIFF 1.1 namespace", len(trans_units))
@@ -289,11 +306,18 @@ class XLIFF2DOCXConverter(BaseConverter):
 
                         resname = seg.get("resname")
                         para_index = None
-                        if resname and resname.startswith("para_index_"):
-                            try:
-                                para_index = int(resname[len("para_index_"):])
-                            except ValueError:
-                                para_index = None
+                        non_body_index = None
+                        if resname:
+                            if resname.startswith("para_index_"):
+                                try:
+                                    para_index = int(resname[len("para_index_"):])
+                                except ValueError:
+                                    para_index = None
+                            elif resname.startswith("non_body_"):
+                                try:
+                                    non_body_index = int(resname[len("non_body_"):])
+                                except ValueError:
+                                    non_body_index = None
 
                         trans_units.append({
                             "id": seg_id,
@@ -301,6 +325,7 @@ class XLIFF2DOCXConverter(BaseConverter):
                             "target": target_text,
                             "inline_elements": inline_elements,
                             "para_index": para_index,
+                            "non_body_index": non_body_index,
                         })
                 else:
                     # No segments, treat whole unit as one trans-unit
@@ -319,11 +344,18 @@ class XLIFF2DOCXConverter(BaseConverter):
 
                     resname = unit.get("resname")
                     para_index = None
-                    if resname and resname.startswith("para_index_"):
-                        try:
-                            para_index = int(resname[len("para_index_"):])
-                        except ValueError:
-                            para_index = None
+                    non_body_index = None
+                    if resname:
+                        if resname.startswith("para_index_"):
+                            try:
+                                para_index = int(resname[len("para_index_"):])
+                            except ValueError:
+                                para_index = None
+                        elif resname.startswith("non_body_"):
+                            try:
+                                non_body_index = int(resname[len("non_body_"):])
+                            except ValueError:
+                                non_body_index = None
 
                     trans_units.append({
                         "id": unit_id,
@@ -331,6 +363,7 @@ class XLIFF2DOCXConverter(BaseConverter):
                         "target": target_text,
                         "inline_elements": inline_elements,
                         "para_index": para_index,
+                        "non_body_index": non_body_index,
                     })
 
         logger.debug(f"Parsed {len(trans_units)} trans-units from {path}")
@@ -358,25 +391,26 @@ class XLIFF2DOCXConverter(BaseConverter):
             logger.warning(f"Failed to parse inline elements: {e}")
             return []
 
-    def convert(  # type: ignore[override]
+    def convert(
         self,
-        input_skeleton: Path | str,
+        input_path: Path | str,
         xliff_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         """Convert XLIFF + skeleton to DOCX.
 
         Args:
-            input_skeleton: Path to skeleton DOCX file.
-            xliff_path: Path to XLIFF translation file.
+            input_path: Path to skeleton DOCX file.
+            xliff_path: Path to the XLIFF translation file.
             output_path: Path to output DOCX file.
-            **options: Additional options (segment_mapping, etc.)
+            options: Converter options (segment_mapping, etc.).
 
         Returns:
             ConversionResult with output path and metadata.
         """
-        input_skeleton = Path(input_skeleton)
+        input_skeleton = Path(input_path)
+        opts = options or ConverterOptions()
         xliff_path = Path(xliff_path)
         output_path = Path(output_path)
 
@@ -417,6 +451,15 @@ class XLIFF2DOCXConverter(BaseConverter):
             root = etree.fromstring(document_xml.encode("utf-8"))
             body = root.find("w:body", WORD_NS_MAP)
             body_paragraphs = body.xpath("./w:p", namespaces=WORD_NS_MAP)
+
+            # Phase B.3 setup: count body-level trans-units so we can map
+            # non_body_N (overall result.paragraphs index from OPP) to the
+            # correct position in the non-body paragraph list.
+            body_unit_count = sum(
+                1 for tu in trans_units if tu.get("para_index") is not None
+            )
+            non_body_paragraphs = self._collect_non_body_paragraphs(root)
+
             for idx, tu in enumerate(trans_units, 1):
                 tu_id = tu["id"]
                 target_text = tu.get("target", "")
@@ -439,6 +482,28 @@ class XLIFF2DOCXConverter(BaseConverter):
                         logger.warning(
                             f"Position-based backfill failed for unit {tu_id} "
                             f"at index {tu['para_index']}: {e}; "
+                            "falling back to text matching"
+                        )
+
+                # Phase B.3: non_body_N position-based lookup for table-cell
+                # and textbox content. OPP assigns non_body_N as the overall
+                # result.paragraphs index; we derive the non-body-specific
+                # offset by subtracting the count of body-level trans-units.
+                non_body_idx = tu.get("non_body_index")
+                if non_body_idx is not None:
+                    non_body_para_idx = non_body_idx - body_unit_count
+                    if 0 <= non_body_para_idx < len(non_body_paragraphs):
+                        self._backfill_by_non_body_position(
+                            non_body_paragraphs,
+                            non_body_para_idx,
+                            target_text,
+                        )
+                        continue
+                    else:
+                        logger.warning(
+                            f"non_body index {non_body_idx} out of range for "
+                            f"unit {tu_id} (body_units={body_unit_count}, "
+                            f"non_body_paras={len(non_body_paragraphs)}); "
                             "falling back to text matching"
                         )
 
@@ -627,6 +692,71 @@ class XLIFF2DOCXConverter(BaseConverter):
             )
             return False
         para = body_paragraphs[para_index]
+        runs = para.xpath(".//w:t", namespaces=WORD_NS_MAP)
+        if not runs:
+            return False
+        runs[0].text = target_text
+        for r in runs[1:]:
+            r.text = ""
+        return True
+
+    def _collect_non_body_paragraphs(
+        self, root: etree._Element
+    ) -> list[etree._Element]:
+        """Collect non-body w:p elements in OPP extraction order.
+
+        OPP extracts non-body content in order: table cell paragraphs
+        (body//w:tc//w:p in document order), then textbox paragraphs
+        (body//w:txbxContent//w:p deduplicated by text content).
+
+        Returns:
+            List of w:p elements from non-body containers.
+        """
+        paragraphs: list[etree._Element] = []
+        W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        w_tag = f"{{{W_NS}}}"
+        seen_texts: set[str] = set()
+
+        # Table cell paragraphs — in document order matching OPP's
+        # _walk_table_paragraphs which iterates body_elem.iter(tc_tag).
+        for tc in root.iter(f"{w_tag}tc"):
+            for p in tc.iter(f"{w_tag}p"):
+                paragraphs.append(p)
+
+        # Textbox paragraphs — deduplicated by text content matching
+        # OPP's _walk_textbox_paragraphs.
+        for txbx in root.iter(f"{w_tag}txbxContent"):
+            for p in txbx.iter(f"{w_tag}p"):
+                text = "".join(
+                    t.text or "" for t in p.iter(f"{w_tag}t")
+                ).strip()
+                if text and text not in seen_texts:
+                    seen_texts.add(text)
+                    paragraphs.append(p)
+
+        return paragraphs
+
+    def _backfill_by_non_body_position(
+        self,
+        non_body_paragraphs: list[etree._Element],
+        non_body_para_idx: int,
+        target_text: str,
+    ) -> bool:
+        """Phase B.3: apply target_text to the non-body w:p at the given index.
+
+        Used when the OPP source has resname="non_body_N" (table cell or
+        textbox content). The index is computed as
+        ``non_body_N - body_unit_count`` to map from OPP's overall
+        result.paragraphs index to the non-body-only list position.
+        """
+        if not (0 <= non_body_para_idx < len(non_body_paragraphs)):
+            logger.warning(
+                "non_body paragraph index %d out of range "
+                "(have %d non-body paragraphs)",
+                non_body_para_idx, len(non_body_paragraphs),
+            )
+            return False
+        para = non_body_paragraphs[non_body_para_idx]
         runs = para.xpath(".//w:t", namespaces=WORD_NS_MAP)
         if not runs:
             return False
@@ -1207,7 +1337,8 @@ class XLIFF2DOCXConverter(BaseConverter):
             img_obj = Image.open(BytesIO(img_bytes))
             w, h = img_obj.size
             return (w, h)
-        except Exception:
+        except (OSError, ValueError):
+            logger.exception("Failed to get image dimensions, using default 200000x150000")
             return (200000, 150000)
 
     def _add_image_to_zip(

@@ -198,7 +198,7 @@ class TestDataSpecialistOutputPathDefault:
             instance = MagicMock()
             captured = {}
 
-            def fake_convert(inp, out, **opts):
+            def fake_convert(inp, out, opts=None, **kw):
                 captured["inp"] = inp
                 captured["out"] = out
                 return _ok(out)

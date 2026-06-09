@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
+from orf.converters.options import ConverterOptions
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
 
@@ -88,14 +89,14 @@ class BaseConverter(ABC):
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         """执行格式转换
 
         Args:
             input_path: 输入文件路径（MD 文件）
             output_path: 输出文件路径
-            **options: 格式特定选项
+            options: 格式特定选项（:class:`ConverterOptions`）
 
         Returns:
             ConversionResult

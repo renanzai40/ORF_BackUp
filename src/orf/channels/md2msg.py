@@ -13,6 +13,7 @@ from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
 from orf.logging import get_logger
+from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.md2msg")
 
@@ -83,7 +84,7 @@ class MD2MSGConverter(BaseConverter):
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)

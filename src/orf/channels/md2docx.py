@@ -16,6 +16,7 @@ from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
 from orf.logging import get_logger
+from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.md2docx")
 
@@ -47,10 +48,11 @@ class MD2DOCXConverter(BaseConverter):
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)
+        opts = options or ConverterOptions()
 
         if not self.validate_input(input_path):
             return ConversionResult(
@@ -62,8 +64,8 @@ class MD2DOCXConverter(BaseConverter):
         temp_dir = None
         md_path = input_path
 
-        if options.get("separate_images") and options.get("images_dir"):
-            images_dir = Path(options["images_dir"])
+        if opts.separate_images and opts.images_dir:
+            images_dir = Path(opts.images_dir)
             md_path, _ = self._extract_images_separately(
                 input_path, output_path, images_dir
             )
@@ -81,7 +83,7 @@ class MD2DOCXConverter(BaseConverter):
             "--to", "docx",
         ]
 
-        template = options.get("template") or self.reference_docx
+        template = opts.template or self.reference_docx
         if template:
             cmd.extend(["--reference-doc", str(template)])
 
@@ -153,7 +155,8 @@ class MD2DOCXConverter(BaseConverter):
             base64_data = match.group(4)
             try:
                 img_bytes = base64.b64decode(base64_data)
-            except Exception:
+            except (ValueError, TypeError):
+                logger.exception("Failed to decode base64 image data, returning raw match")
                 return match.group(0)
             img_hash = hashlib.md5(img_bytes).hexdigest()[:12]
             ext = "png" if mime_ext == "png" else mime_ext

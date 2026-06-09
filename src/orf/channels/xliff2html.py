@@ -17,6 +17,7 @@ from orf.parsers.frontmatter import FrontmatterMetadata
 from orf.skeleton.inline_formatting import XLIFFInlineParser, EPUBHTMLInlineApplier
 from orf.error_handlers.conversion_error import XLIFFParseError, InlineFormattingError
 from orf.logging import get_logger
+from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.xliff2html")
 
@@ -85,25 +86,26 @@ class XLIFF2HTMLConverter(BaseConverter):
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() in (".html", ".htm")
 
-    def convert(  # type: ignore[override]
+    def convert(
         self,
-        html_template: Path | str,
+        input_path: Path | str,
         xliff_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         """Convert XLIFF translation to HTML with inline formatting preserved.
 
         Args:
-            html_template: Path to the original HTML template file
+            input_path: Path to the original HTML template file
             xliff_path: Path to the XLIFF translation file
             output_path: Path for the output HTML file
-            **options: Additional options (preserve_inline, encoding)
+            options: Converter options (preserve_inline, etc.)
 
         Returns:
             ConversionResult with success status and any warnings/errors
         """
-        html_template = Path(html_template)
+        html_template = Path(input_path)
+        opts = options or ConverterOptions()
         xliff_path = Path(xliff_path)
         output_path = Path(output_path)
 
@@ -117,7 +119,7 @@ class XLIFF2HTMLConverter(BaseConverter):
 
         try:
             html_content = html_template.read_text(
-                encoding=options.get("encoding", "utf-8")
+                encoding=opts.encoding
             )
         except Exception as e:
             return ConversionResult(
@@ -136,7 +138,7 @@ class XLIFF2HTMLConverter(BaseConverter):
 
         try:
             xliff_content = xliff_path.read_text(
-                encoding=options.get("encoding", "utf-8")
+                encoding=opts.encoding
             )
         except Exception as e:
             return ConversionResult(
@@ -160,7 +162,7 @@ class XLIFF2HTMLConverter(BaseConverter):
         warnings_list: list[str] = []
         try:
             result_content = self._apply_translations_and_formatting(
-                html_content, translations, xliff_content, **options
+                html_content, translations, xliff_content, options
             )
         except InlineFormattingError as e:
             warnings_list.append(str(e))
@@ -252,7 +254,7 @@ class XLIFF2HTMLConverter(BaseConverter):
         html_content: str,
         translations: dict[str, str],
         xliff_content: str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> str:
         """Apply translations (and optionally inline formatting) via lxml DOM.
 
@@ -281,7 +283,8 @@ class XLIFF2HTMLConverter(BaseConverter):
         Raises:
             InlineFormattingError: If inline formatting cannot be applied
         """
-        preserve_inline = options.get("preserve_inline", True)
+        opts = options or ConverterOptions()
+        preserve_inline = opts.preserve_inline
 
         try:
             root = lxml_html.fromstring(html_content)
@@ -315,6 +318,16 @@ class XLIFF2HTMLConverter(BaseConverter):
             translations_to_inject = dict(translations)
 
         self._inject_translations_into_dom(root, translations_to_inject)
+
+        # If no data-trans-unit-id nodes matched the translations, fall back
+        # to text-matching on DOM text nodes (supports HTML that lacks the
+        # attribute — e.g. smoke-test input, hand-crafted HTML templates).
+        matched_count = sum(
+            1 for node in root.xpath("//*[@data-trans-unit-id]")
+            if node.get("data-trans-unit-id") in translations
+        )
+        if matched_count == 0 and translations:
+            self._backfill_by_text_match(root, translations, xliff_content)
 
         result = lxml_html.tostring(root, encoding="unicode", method="html")
         # lxml's stub marks the tostring return as `str | bytes`; with
@@ -413,6 +426,59 @@ class XLIFF2HTMLConverter(BaseConverter):
             else:
                 for element in payload:
                     node.append(element)
+
+    def _backfill_by_text_match(
+        self,
+        root: Any,
+        translations: dict[str, str],
+        xliff_content: str,
+    ) -> int:
+        """Fallback: match XLIFF source text against DOM text nodes and replace.
+
+        Used when the HTML template lacks ``data-trans-unit-id`` attributes
+        (hand-crafted HTML, smoke-test fixtures).  The primary attribute-based
+        path runs first; this method only triggers when zero nodes matched.
+
+        Returns the number of text nodes that were replaced.
+        """
+        trans_unit_pattern = re.compile(
+            r'<trans-unit[^>]+id="([^"]+)"[^>]*>(.*?)</trans-unit>',
+            re.DOTALL | re.IGNORECASE,
+        )
+        source_pattern = re.compile(
+            r"<source[^>]*>(.*?)</source>", re.DOTALL | re.IGNORECASE
+        )
+
+        source_to_target: dict[str, str] = {}
+        for match in trans_unit_pattern.finditer(xliff_content):
+            unit_id = match.group(1)
+            if unit_id not in translations:
+                continue
+            unit_content = match.group(2)
+            src_match = source_pattern.search(unit_content)
+            if src_match:
+                src_text = self._strip_xliff_inline_tags(src_match.group(1))
+                source_to_target[src_text] = translations[unit_id]
+
+        if not source_to_target:
+            return 0
+
+        replaced = 0
+        for element in root.iter():
+            if element.text and element.text.strip() in source_to_target:
+                element.text = source_to_target[element.text.strip()]
+                replaced += 1
+            for child in element:
+                if child.tail and child.tail.strip() in source_to_target:
+                    child.tail = source_to_target[child.tail.strip()]
+                    replaced += 1
+
+        if replaced:
+            logger.debug(
+                "Text-matched %d translation(s) (no data-trans-unit-id attributes found)",
+                replaced,
+            )
+        return replaced
 
     def inject_images(
         self,

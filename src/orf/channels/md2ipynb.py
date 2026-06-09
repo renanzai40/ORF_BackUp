@@ -13,6 +13,7 @@ from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
 from orf.logging import get_logger
+from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.md2ipynb")
 
@@ -76,10 +77,11 @@ class MD2IPYNBConverter(BaseConverter):
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)
+        opts = options or ConverterOptions()
 
         if not self.validate_input(input_path):
             return ConversionResult(
@@ -88,7 +90,7 @@ class MD2IPYNBConverter(BaseConverter):
                 errors=[f"Invalid input file: {input_path}"],
             )
 
-        kernel_name = options.get("kernel", "python3")
+        kernel_name = opts.kernel
 
         try:
             content = input_path.read_text(encoding="utf-8")

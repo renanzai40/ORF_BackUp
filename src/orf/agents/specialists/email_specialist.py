@@ -5,6 +5,7 @@ from typing import Optional
 
 from orf.agents.specialists.base import BaseSpecialist
 from orf.converters.base import ConversionResult, ErrorDetail
+from orf.converters.options import ConverterOptions
 from orf.channels.md2eml import MD2EMLConverter
 from orf.channels.md2msg import MD2MSGConverter
 
@@ -45,7 +46,7 @@ class EmailSpecialist(BaseSpecialist):
                     )]
                 )
 
-            return converter.convert(input_path, output_path, **options)
+            return converter.convert(input_path, output_path, ConverterOptions(**options))
 
         except ImportError as e:
             return ConversionResult(

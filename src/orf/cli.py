@@ -16,6 +16,7 @@ from orf.channels.md2docx import MD2DOCXConverter
 from orf.channels.md2odt import MD2ODTConverter
 from orf.channels.md2epub import MD2EPUBConverter
 from orf.converters.base import BaseConverter
+from orf.converters.options import ConverterOptions
 from orf.parsers.manifest import parse_manifest, find_manifest, ManifestParseError
 from orf.parsers.frontmatter import (
     parse_frontmatter,
@@ -204,7 +205,8 @@ def _maybe_install_fake_pandoc() -> None:
     def _patched_run(*args, **kwargs):
         try:
             cmd = args[0] if args else kwargs.get("args") or kwargs.get("cmd")
-        except Exception:
+        except (IndexError, KeyError, TypeError):
+            logger.exception("Failed to extract command from patched subprocess call")
             cmd = None
         if cmd and isinstance(cmd, (list, tuple)) and len(cmd) > 0 and "pandoc" in str(cmd[0]):
             return _fake_runner(*args, **kwargs)
@@ -413,7 +415,7 @@ def apply_md(
         file=sys.stderr if output_json else None,
     ) as bar:
         bar.update(1)
-        result = converter.convert(input_path, output_path, **options)
+        result = converter.convert(input_path, output_path, ConverterOptions(**options))
 
     images = None
     if images_json:
@@ -683,7 +685,7 @@ def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], outpu
             f"       Use --format <format> to specify"
         )
 
-    result = converter.convert(input_path, xliff_path, output_path)
+    result = converter.convert(input_path, output_path, ConverterOptions(xliff_path=str(xliff_path)))
 
     if result.success and images:
         import tempfile

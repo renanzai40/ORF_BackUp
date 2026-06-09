@@ -11,6 +11,7 @@ from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
 from orf.logging import get_logger
+from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.md2csv")
 
@@ -65,10 +66,11 @@ class MD2CSVConverter(BaseConverter):
         self,
         input_path: Path | str,
         output_path: Path | str,
-        **options: Any,
+        options: ConverterOptions | None = None,
     ) -> ConversionResult:
         input_path = Path(input_path)
         output_path = Path(output_path)
+        opts = options or ConverterOptions()
 
         if not self.validate_input(input_path):
             return ConversionResult(
@@ -77,7 +79,7 @@ class MD2CSVConverter(BaseConverter):
                 errors=[f"Invalid input file: {input_path}"],
             )
 
-        delimiter = options.get("delimiter", ",")
+        delimiter = opts.delimiter
 
         try:
             content = input_path.read_text(encoding="utf-8")

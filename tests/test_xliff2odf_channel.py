@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from orf.channels.xliff2odf import XLIFF2ODFConverter, ODF_EXTENSIONS
+from orf.converters.options import ConverterOptions
 from orf.converters.base import ConversionResult
 
 
@@ -224,7 +225,7 @@ class TestXLIFF2ODFConverter:
         converter = XLIFF2ODFConverter()
         result = converter.convert(
             sample_skeleton_odt, sample_xliff, output,
-            exclude=["*.xml"]
+            options=ConverterOptions(exclude=["*.xml"]),
         )
 
         assert result.success is True
@@ -247,7 +248,7 @@ class TestXLIFF2ODFConverter:
         converter = XLIFF2ODFConverter()
         result = converter.convert(
             sample_skeleton_odt, sample_xliff, output,
-            timestamp=True
+            options=ConverterOptions(timestamp=True),
         )
 
         assert result.success is True
@@ -287,7 +288,7 @@ class TestXLIFF2ODFConverter:
         converter = XLIFF2ODFConverter()
         result = converter.convert(
             sample_skeleton_odt, sample_xliff, output,
-            exclude=["*.xml", "*.rdf"]
+            options=ConverterOptions(exclude=["*.xml", "*.rdf"]),
         )
 
         assert result.success is True
