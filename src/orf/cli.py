@@ -685,7 +685,7 @@ def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], outpu
             f"       Use --format <format> to specify"
         )
 
-    result = converter.convert(input_path, output_path, ConverterOptions(xliff_path=str(xliff_path)))
+    result = converter.convert(input_path, xliff_path, output_path)
 
     if result.success and images:
         import tempfile
