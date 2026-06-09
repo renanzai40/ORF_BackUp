@@ -231,6 +231,7 @@ def _maybe_install_fake_pandoc() -> None:
 @click.option("--lang", type=str, default="zh", help="EPUB 语言")
 @click.option("--embed-images", is_flag=True, help="EPUB 嵌入图片")
 @click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
+@click.option("--text-only", "text_only", is_flag=True, help="产生纯文本输出，跳过所有图片引用和占位符")
 @click.option("--images-json", "images_json", type=click.Path(exists=True), help="JSON file with image placement data from OPP (NOTE: image injection not supported for MD pipeline; use XLIFF pipeline for precise image placement)")
 @click.option("--no-cache", "no_cache", is_flag=True, help="Skip the .omni_cache/ cache check (force a fresh conversion)")
 @click.option("--clear-cache", "clear_cache", is_flag=True, help="Remove all cached ORF outputs and exit")
@@ -245,6 +246,7 @@ def apply_md(
     lang: str,
     embed_images: bool,
     output_json: bool,
+    text_only: bool,
     images_json: str | None,
     no_cache: bool,
     clear_cache: bool,
@@ -406,6 +408,8 @@ def apply_md(
         options["lang"] = lang
     if embed_images:
         options["embed_images"] = True
+    if text_only:
+        options["text_only"] = True
 
     with click.progressbar(
         length=1,

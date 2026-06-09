@@ -83,6 +83,7 @@ class ConverterOptions:
     # docx layout
     separate_images: bool = False
     images_dir: str | None = None
+    text_only: bool = False
 
     # tabular
     delimiter: str = ","

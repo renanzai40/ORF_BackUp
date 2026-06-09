@@ -22,6 +22,7 @@ logger = get_logger("channel.md2docx")
 
 IMAGE_PATTERN = re.compile(r'!\[([^\]]*)\]\((data:image/([^;]+);base64,([^)]+))\)')
 IMAGE_REF_PATTERN = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
+OLIMG_PATTERN = re.compile(r'OLIMG\d+')
 
 
 class MD2DOCXConverter(BaseConverter):
@@ -76,6 +77,21 @@ class MD2DOCXConverter(BaseConverter):
                 md_path, temp_dir = self._preprocess_md_images(input_path)
                 logger.info(f"Extracted {len(base64_images)} base64 images to temp directory")
 
+        # text-only mode: strip all image references and OLIMG placeholders
+        # so pandoc produces a clean text-only DOCX.
+        if opts.text_only:
+            raw = md_path.read_text(encoding="utf-8")
+            stripped = OLIMG_PATTERN.sub("", raw)
+            stripped = IMAGE_REF_PATTERN.sub("", stripped)
+            if stripped != raw:
+                text_only_path = md_path.parent / f"{md_path.stem}_textonly{md_path.suffix}"
+                text_only_path.write_text(stripped.strip(), encoding="utf-8")
+                md_path = text_only_path
+                logger.info(
+                    "Text-only mode: stripped %d chars of image references",
+                    len(raw) - len(stripped),
+                )
+
         cmd = [
             "pandoc",
             str(md_path),
@@ -100,7 +116,10 @@ class MD2DOCXConverter(BaseConverter):
 
             logger.debug(f"Pandoc output: {result.stdout}")
             if result.stderr:
-                logger.warning(f"Pandoc stderr: {result.stderr}")
+                if opts.text_only:
+                    logger.debug(f"Pandoc stderr: {result.stderr}")
+                else:
+                    logger.warning(f"Pandoc stderr: {result.stderr}")
 
             return ConversionResult(
                 output_path=output_path,
