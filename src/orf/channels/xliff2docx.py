@@ -452,13 +452,24 @@ class XLIFF2DOCXConverter(BaseConverter):
             body = root.find("w:body", WORD_NS_MAP)
             body_paragraphs = body.xpath("./w:p", namespaces=WORD_NS_MAP)
 
-            # Phase B.3 setup: count body-level trans-units so we can map
-            # non_body_N (overall result.paragraphs index from OPP) to the
-            # correct position in the non-body paragraph list.
-            body_unit_count = sum(
-                1 for tu in trans_units if tu.get("para_index") is not None
-            )
-            non_body_paragraphs = self._collect_non_body_paragraphs(root)
+            # Phase B.3 setup: build a flat paragraph list matching OPP's
+            # extraction order (body paragraphs first, then table cells,
+            # then textboxes deduplicated). OPP assigns non_body_N as the
+            # GLOBAL index in result.paragraphs (not a non-body-only index).
+            # We mirror that flat list here so non_body_idx maps directly.
+            #
+            # OPP's extract_paragraphs order:
+            #   1. doc.paragraphs     — body-level <w:p> (non-empty only)
+            #   2. table cells        — body//w:tc//w:p
+            #   3. textboxes          — body//w:txbxContent//w:p (deduped)
+            all_paragraphs = self._collect_all_paragraphs(root)
+            # Also keep body_paragraphs for _backfill_translation text matching.
+            body_paragraphs = body.xpath("./w:p", namespaces=WORD_NS_MAP)
+
+            # Build a mapping from original Chinese text → target text for
+            # textbox paragraphs, so we can also translate their Fallback-branch
+            # counterparts (which are skipped by the text-based dedup).
+            chinese_to_target: dict[str, str] = {}
 
             for idx, tu in enumerate(trans_units, 1):
                 tu_id = tu["id"]
@@ -485,26 +496,33 @@ class XLIFF2DOCXConverter(BaseConverter):
                             "falling back to text matching"
                         )
 
-                # Phase B.3: non_body_N position-based lookup for table-cell
-                # and textbox content. OPP assigns non_body_N as the overall
-                # result.paragraphs index; we derive the non-body-specific
-                # offset by subtracting the count of body-level trans-units.
+                # Phase B.3: non_body_N position-based lookup. OPP assigns
+                # non_body_N as the GLOBAL index in result.paragraphs (flat
+                # list: body → table cells → textboxes deduped). We mirror
+                # that flat list in all_paragraphs and index directly.
                 non_body_idx = tu.get("non_body_index")
                 if non_body_idx is not None:
-                    non_body_para_idx = non_body_idx - body_unit_count
-                    if 0 <= non_body_para_idx < len(non_body_paragraphs):
+                    if 0 <= non_body_idx < len(all_paragraphs):
+                        # Store original Chinese text before backfill modifies it,
+                        # so Fallback-branch textbox paragraphs can be translated too.
+                        if non_body_idx >= 9:
+                            para_txbx = all_paragraphs[non_body_idx]
+                            orig_zh = "".join(
+                                t.text or "" for t in para_txbx.iter(f"{{{W_NS}}}t")
+                            ).strip()
+                            if orig_zh and orig_zh not in chinese_to_target:
+                                chinese_to_target[orig_zh] = target_text
                         self._backfill_by_non_body_position(
-                            non_body_paragraphs,
-                            non_body_para_idx,
+                            all_paragraphs,
+                            non_body_idx,
                             target_text,
                         )
                         continue
                     else:
                         logger.warning(
                             f"non_body index {non_body_idx} out of range for "
-                            f"unit {tu_id} (body_units={body_unit_count}, "
-                            f"non_body_paras={len(non_body_paragraphs)}); "
-                            "falling back to text matching"
+                            f"unit {tu_id} (have {len(all_paragraphs)} total "
+                            f"paragraphs); falling back to text matching"
                         )
 
                 try:
@@ -523,6 +541,12 @@ class XLIFF2DOCXConverter(BaseConverter):
                         f"ORF backfill progress: {idx}/{total} units "
                         f"({idx/total*100:.0f}%)"
                     )
+            if chinese_to_target:
+                logger.info(
+                    "Backfilling %d Fallback-branch textbox paragraphs",
+                    len(chinese_to_target),
+                )
+                self._backfill_fallback_textboxes(root, chinese_to_target)
             final_xml = etree.tostring(root, encoding="unicode", xml_declaration=False)
 
         # 4. Repack as DOCX
@@ -604,7 +628,7 @@ class XLIFF2DOCXConverter(BaseConverter):
                     break
 
         if not found:
-            self._fuzzy_backfill(root, source_normalized, target_text)
+            found = self._fuzzy_backfill(root, source_normalized, target_text)
 
         if not found:
             self._fallback_backfill(root, target_text)
@@ -700,31 +724,50 @@ class XLIFF2DOCXConverter(BaseConverter):
             r.text = ""
         return True
 
-    def _collect_non_body_paragraphs(
+    def _collect_all_paragraphs(
         self, root: etree._Element
     ) -> list[etree._Element]:
-        """Collect non-body w:p elements in OPP extraction order.
+        """Collect ALL w:p elements mirroring OPP's result.paragraphs order.
 
-        OPP extracts non-body content in order: table cell paragraphs
-        (body//w:tc//w:p in document order), then textbox paragraphs
-        (body//w:txbxContent//w:p deduplicated by text content).
+        OPP's extract_paragraphs builds result.paragraphs in this exact order:
+          1. Body-level <w:p> (via doc.paragraphs, non-empty only)
+          2. Table cell <w:p> (via body//w:tc//w:p)
+          3. Textbox <w:p> (via body//w:txbxContent//w:p, deduplicated by text)
+
+        non_body_N in the XLIFF resname is the GLOBAL index into this flat
+        list, NOT an index into non-body-only paragraphs. By mirroring the
+        same order here, we can use non_body_idx as a direct index.
 
         Returns:
-            List of w:p elements from non-body containers.
+            List of w:p elements in OPP extraction order.
         """
         paragraphs: list[etree._Element] = []
         W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
         w_tag = f"{{{W_NS}}}"
         seen_texts: set[str] = set()
+        body = root.find("w:body", WORD_NS_MAP)
 
-        # Table cell paragraphs — in document order matching OPP's
-        # _walk_table_paragraphs which iterates body_elem.iter(tc_tag).
+        # 1. Body-level <w:p> — non-empty only, matching OPP's
+        #    doc.paragraphs filtering (``if not full_text: continue``).
+        for p in body.xpath("./w:p", namespaces=WORD_NS_MAP):
+            text = "".join(
+                t.text or ""
+                for t in p.iter(f"{w_tag}t")
+                if not any(
+                    anc.tag == f"{w_tag}txbxContent"
+                    for anc in t.iterancestors()
+                )
+            ).strip()
+            if text:
+                paragraphs.append(p)
+
+        # 2. Table cell paragraphs — matching OPP's _walk_table_paragraphs.
         for tc in root.iter(f"{w_tag}tc"):
             for p in tc.iter(f"{w_tag}p"):
                 paragraphs.append(p)
 
-        # Textbox paragraphs — deduplicated by text content matching
-        # OPP's _walk_textbox_paragraphs.
+        # 3. Textbox paragraphs — deduplicated by text content, matching
+        #    OPP's _walk_textbox_paragraphs (skips mc:AlternateContent dupes).
         for txbx in root.iter(f"{w_tag}txbxContent"):
             for p in txbx.iter(f"{w_tag}p"):
                 text = "".join(
@@ -738,32 +781,77 @@ class XLIFF2DOCXConverter(BaseConverter):
 
     def _backfill_by_non_body_position(
         self,
-        non_body_paragraphs: list[etree._Element],
-        non_body_para_idx: int,
+        paragraphs: list[etree._Element],
+        para_idx: int,
         target_text: str,
     ) -> bool:
-        """Phase B.3: apply target_text to the non-body w:p at the given index.
+        """Phase B.3: apply target_text to the w:p at the given flat-list index.
 
-        Used when the OPP source has resname="non_body_N" (table cell or
-        textbox content). The index is computed as
-        ``non_body_N - body_unit_count`` to map from OPP's overall
-        result.paragraphs index to the non-body-only list position.
+        Used when the OPP source has resname="non_body_N". The index is the
+        GLOBAL position in OPP's flat result.paragraphs list (body paragraphs
+        first, then table cells, then textboxes deduplicated).
         """
-        if not (0 <= non_body_para_idx < len(non_body_paragraphs)):
+        if not (0 <= para_idx < len(paragraphs)):
             logger.warning(
                 "non_body paragraph index %d out of range "
-                "(have %d non-body paragraphs)",
-                non_body_para_idx, len(non_body_paragraphs),
+                "(have %d total paragraphs)",
+                para_idx, len(paragraphs),
             )
             return False
-        para = non_body_paragraphs[non_body_para_idx]
-        runs = para.xpath(".//w:t", namespaces=WORD_NS_MAP)
+        para = paragraphs[para_idx]
+        runs = para.xpath("./w:r/w:t", namespaces=WORD_NS_MAP)
         if not runs:
             return False
         runs[0].text = target_text
         for r in runs[1:]:
             r.text = ""
         return True
+
+    def _backfill_fallback_textboxes(
+        self,
+        root: etree._Element,
+        chinese_to_target: dict[str, str],
+    ) -> None:
+        """Apply translations to <mc:Fallback> textbox paragraphs.
+
+        Choice-branch textbox paragraphs are collected and translated by
+        _backfill_by_non_body_position, but their Fallback-branch counterparts
+        (with identical original text) are skipped by the text-based dedup in
+        _collect_all_paragraphs. This method finds Fallback textbox paragraphs
+        and applies the same translation from the pre-built mapping.
+
+        Args:
+            root: The document XML root.
+            chinese_to_target: Mapping from original Chinese text (joined & stripped)
+                               to the target English text applied to the Choice branch.
+        """
+        W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        w_tag = f"{{{W_NS}}}"
+        WORD_NS_MAP_LOCAL = {"w": W_NS}
+
+        for txbx in root.iter(f"{w_tag}txbxContent"):
+            parent = txbx.getparent()
+            in_fallback = False
+            while parent is not None:
+                if parent.tag.endswith("Fallback"):
+                    in_fallback = True
+                    break
+                parent = parent.getparent()
+            if not in_fallback:
+                continue
+
+            for p in txbx.iter(f"{w_tag}p"):
+                text = "".join(t.text or "" for t in p.iter(f"{w_tag}t")).strip()
+                if not text:
+                    continue
+                target_text = chinese_to_target.get(text)
+                if target_text is None:
+                    continue
+                runs = p.xpath("./w:r/w:t", namespaces=WORD_NS_MAP_LOCAL)
+                if runs:
+                    runs[0].text = target_text
+                    for r in runs[1:]:
+                        r.text = ""
 
     def _fallback_backfill(self, root: etree._Element, target_text: str) -> bool:
         """Last-resort fallback: log a warning and skip.

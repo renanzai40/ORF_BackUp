@@ -81,6 +81,7 @@ class MD2DOCXConverter(BaseConverter):
             str(md_path),
             "-o", str(output_path),
             "--to", "docx",
+            "--from", "markdown-smart",
         ]
 
         template = opts.template or self.reference_docx
