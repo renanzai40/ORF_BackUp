@@ -1454,6 +1454,20 @@ class XLIFF2DOCXConverter(BaseConverter):
                 break
 
         if existing_rid:
+            # existing_rid is like "word/media/image8.png"
+            # Look up the REAL relationship ID from document.xml.rels
+            rels_file = files.get("word/_rels/document.xml.rels")
+            if rels_file:
+                try:
+                    rels_root = etree.fromstring(rels_file)
+                    media_filename = existing_rid.replace("word/media/", "")
+                    for rel in rels_root:
+                        target = rel.get("Target", "")
+                        if target.replace("\\", "/").endswith(media_filename):
+                            return rel.get("Id")
+                except Exception:
+                    pass
+            # Fallback: return the old fake rid (better than crashing)
             return existing_rid.replace("word/media/", "rId")
 
         media_name = f"word/media/{dedup_name}"
