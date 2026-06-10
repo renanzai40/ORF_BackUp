@@ -17,6 +17,9 @@ except ImportError:
     FastMCP = None
 
 
+from orf.mcp.security import PathValidator
+from orf.logging import get_logger
+
 # ULTRAREADY-VERIFY (2026-06-07): env vars that must NEVER be inherited
 # by the CLI subprocess. These are test-only seams — if a test harness
 # started the MCP server with one of them set, every MCP conversion
@@ -29,10 +32,6 @@ _MCP_SCRUB_ENV_KEYS = frozenset({
     "OMNI_TEST_MOCK",
     "OMNI_TEST_STUB",
 })
-
-
-from orf.mcp.security import PathValidator
-from orf.logging import get_logger
 
 logger = get_logger("mcp.server")
 

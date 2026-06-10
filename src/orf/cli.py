@@ -411,14 +411,13 @@ def apply_md(
     if text_only:
         options["text_only"] = True
 
-    with click.progressbar(
+    with click.progressbar(  # type: ignore[var-annotated]
         length=1,
         label=f"Converting to {target_format}",
         show_pos=True,
         show_percent=True,
         file=sys.stderr if output_json else None,
-    ) as bar:
-        bar.update(1)
+    ):
         result = converter.convert(input_path, output_path, ConverterOptions(**options))
 
     images = None

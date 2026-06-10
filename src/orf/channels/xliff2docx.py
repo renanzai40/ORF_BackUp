@@ -391,7 +391,7 @@ class XLIFF2DOCXConverter(BaseConverter):
             logger.warning(f"Failed to parse inline elements: {e}")
             return []
 
-    def convert(
+    def convert(  # type: ignore[override]
         self,
         input_path: Path | str,
         xliff_path: Path | str,
@@ -410,7 +410,6 @@ class XLIFF2DOCXConverter(BaseConverter):
             ConversionResult with output path and metadata.
         """
         input_skeleton = Path(input_path)
-        opts = options or ConverterOptions()
         xliff_path = Path(xliff_path)
         output_path = Path(output_path)
 

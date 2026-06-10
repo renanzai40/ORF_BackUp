@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Any
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.logging import get_logger

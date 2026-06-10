@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest

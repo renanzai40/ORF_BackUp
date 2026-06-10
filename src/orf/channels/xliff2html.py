@@ -86,7 +86,7 @@ class XLIFF2HTMLConverter(BaseConverter):
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() in (".html", ".htm")
 
-    def convert(
+    def convert(  # type: ignore[override]
         self,
         input_path: Path | str,
         xliff_path: Path | str,
@@ -289,7 +289,7 @@ class XLIFF2HTMLConverter(BaseConverter):
         try:
             root = lxml_html.fromstring(html_content)
         except (etree.ParserError, etree.XMLSyntaxError, ValueError) as e:
-            raise InlineFormattingError(f"Failed to parse HTML template: {e}")
+            raise InlineFormattingError(tag="html_template", context_str=f"Failed to parse HTML template: {e}")
 
         # Each payload is either a plain string (set as node.text) or a list
         # of lxml elements parsed from inline-formatted HTML (appended as

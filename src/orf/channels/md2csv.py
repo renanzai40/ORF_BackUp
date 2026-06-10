@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import re
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest

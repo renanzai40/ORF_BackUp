@@ -58,7 +58,7 @@ class XLIFF2EPUBConverter(BaseConverter):
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() in (".epub", ".zip")
 
-    def convert(
+    def convert(  # type: ignore[override]
         self,
         input_path: Path | str,
         xliff_path: Path | str,
@@ -77,7 +77,6 @@ class XLIFF2EPUBConverter(BaseConverter):
             ConversionResult with output path and status.
         """
         epub_skeleton = Path(input_path)
-        opts = options or ConverterOptions()
         xliff_path = Path(xliff_path)
         output_path = Path(output_path)
 
