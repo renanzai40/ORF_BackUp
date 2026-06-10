@@ -6,7 +6,7 @@ from pathlib import Path
 class PathValidator:
     """Validate paths to prevent directory traversal."""
 
-    ALLOWED_EXTENSIONS = {'.md', '.docx', '.pptx', '.xliff', '.xml', '.html', '.odt', '.epub'}
+    ALLOWED_EXTENSIONS = {'.md', '.docx', '.pptx', '.xliff', '.xlf', '.xml', '.html', '.odt', '.epub'}
 
     @staticmethod
     def validate(input_path: str, base_dir: Path | None = None) -> tuple[bool, str]:

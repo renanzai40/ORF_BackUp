@@ -83,8 +83,9 @@ class TestMD2PDFConverter:
         mock_weasyprint_instance = MagicMock()
         mock_weasyprint_html.return_value = mock_weasyprint_instance
 
+        from orf.converters.options import ConverterOptions
         converter = MD2PDFConverter()
-        result = converter.convert(sample_md, output, engine="weasyprint")
+        result = converter.convert(sample_md, output, ConverterOptions(engine="weasyprint"))
 
         assert result.success is True
         assert result.output_path == output
@@ -124,8 +125,9 @@ class TestMD2PDFConverter:
         # Patch importlib.util.find_spec to simulate weasyprint not installed
         with patch("importlib.util.find_spec") as mock_find_spec:
             mock_find_spec.return_value = None  # simulate weasyprint not installed
+            from orf.converters.options import ConverterOptions
             converter = MD2PDFConverter()
-            result = converter.convert(sample_md, output, engine="weasyprint")
+            result = converter.convert(sample_md, output, ConverterOptions(engine="weasyprint"))
 
             assert result.success is False
             assert "not installed" in result.errors[0].message

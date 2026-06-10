@@ -51,11 +51,13 @@ class TestMD2EPUBConverter:
 
     @patch("subprocess.run")
     def test_convert_with_toc(self, mock_run, sample_md: Path, tmp_path: Path):
+        from orf.converters.options import ConverterOptions
+
         output = tmp_path / "output.epub"
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
 
         converter = MD2EPUBConverter()
-        result = converter.convert(sample_md, output, toc=True)
+        result = converter.convert(sample_md, output, ConverterOptions(toc=True))
 
         assert result.success is True
         call_args = mock_run.call_args[0][0]

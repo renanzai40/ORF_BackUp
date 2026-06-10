@@ -225,7 +225,8 @@ class TestMD2IPYNBConverter:
         output = tmp_path / "kernel_py2.ipynb"
 
         converter = md2ipynb.MD2IPYNBConverter()
-        converter.convert(nb_python2_md, output, kernel="python2")
+        from orf.converters.options import ConverterOptions
+        converter.convert(nb_python2_md, output, ConverterOptions(kernel="python2"))
 
         nb = _nbformat_writes[0][0]
         assert nb.metadata["kernelspec"]["name"] == "python2"

@@ -104,10 +104,11 @@ class TestMD2CSVConverter:
 
     def test_convert_delimiter_comma(self, simple_table_md: Path, tmp_path: Path):
         from orf.channels.md2csv import MD2CSVConverter
+        from orf.converters.options import ConverterOptions
 
         output = tmp_path / "output.csv"
         converter = MD2CSVConverter()
-        result = converter.convert(simple_table_md, output, delimiter=",")
+        result = converter.convert(simple_table_md, output, ConverterOptions(delimiter=","))
 
         content = output.read_text(encoding="utf-8")
         assert "," in content
@@ -115,10 +116,11 @@ class TestMD2CSVConverter:
 
     def test_convert_delimiter_semicolon(self, simple_table_md: Path, tmp_path: Path):
         from orf.channels.md2csv import MD2CSVConverter
+        from orf.converters.options import ConverterOptions
 
         output = tmp_path / "output.csv"
         converter = MD2CSVConverter()
-        result = converter.convert(simple_table_md, output, delimiter=";")
+        result = converter.convert(simple_table_md, output, ConverterOptions(delimiter=";"))
 
         content = output.read_text(encoding="utf-8")
         assert ";" in content

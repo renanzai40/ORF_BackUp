@@ -85,7 +85,7 @@ def _make_fake_md_convert_side_effect(call_counter, output_bytes: bytes):
     call it on a cache HIT. This fake gives us that signal without invoking the
     real pandoc/format-detection code paths.
     """
-    def side_effect(input_path, output_path, **kwargs):
+    def side_effect(input_path, output_path, *args, **kwargs):
         call_counter["n"] += 1
         out = Path(output_path)
         out.parent.mkdir(parents=True, exist_ok=True)

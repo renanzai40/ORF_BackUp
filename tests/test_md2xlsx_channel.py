@@ -160,8 +160,9 @@ class TestMD2XLSXConverter:
     ):
         output = tmp_path / "named.xlsx"
 
+        from orf.converters.options import ConverterOptions
         converter = MD2XLSXConverter()
-        converter.convert(xlsx_simple_md, output, sheet_name="Data")
+        converter.convert(xlsx_simple_md, output, ConverterOptions(sheet_name="Data"))
 
         wb = load_workbook(output)
         assert "Data" in wb.sheetnames

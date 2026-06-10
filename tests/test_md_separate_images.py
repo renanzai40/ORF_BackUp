@@ -103,13 +103,13 @@ class TestMDSeparateImages:
             captured_md = Path(cmd[1]).read_text(encoding="utf-8")
             return _fake_pandoc_success(output_docx, cmd, **kwargs)
 
+        from orf.converters.options import ConverterOptions
         with patch("subprocess.run", side_effect=capture_pandoc):
             converter = MD2DOCXConverter()
             converter.convert(
                 input_path=md_path,
                 output_path=output_docx,
-                separate_images=True,
-                images_dir=images_dir,
+                options=ConverterOptions(separate_images=True, images_dir=images_dir),
             )
 
         assert captured_md is not None
@@ -158,8 +158,7 @@ End.
             result = converter.convert(
                 input_path=md_path,
                 output_path=output_docx,
-                separate_images=True,
-                images_dir=images_dir,
+                options=ConverterOptions(separate_images=True, images_dir=images_dir),
             )
 
         assert result.success
