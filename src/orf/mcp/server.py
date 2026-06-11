@@ -33,10 +33,20 @@ _MCP_SCRUB_ENV_KEYS = frozenset({
     "OMNI_TEST_STUB",
 })
 
+from orf.mcp.security import PathValidator, ValidationResult
+from orf.mcp.config import MCPConfig, load_config
+from orf.logging import get_logger
 logger = get_logger("mcp.server")
 
 # Global server instance
 _mcp: Optional["FastMCP"] = None
+
+# Config & validator
+_orf_config: MCPConfig = load_config()
+_path_validator = PathValidator(
+    allowed_directories=_orf_config.allowed_directories or [Path.cwd()],
+    max_file_size_bytes=_orf_config.max_file_size_mb * 1024 * 1024,
+)
 
 
 def _run_cli_command(args: list[str]) -> dict:
@@ -106,6 +116,34 @@ def _run_cli_command(args: list[str]) -> dict:
         }
 
 
+def _safe_unlink(path: str) -> bool:
+    """Resolve+revalidate path before unlink; refuse to follow symlinks."""
+    try:
+        resolved = Path(path).resolve()
+    except (ValueError, OSError):
+        return False
+    if Path(path).is_symlink():
+        return False
+    result = _path_validator.validate_path(str(resolved), allow_missing=True)
+    if not result.success:
+        return False
+    try:
+        os.unlink(resolved)
+        return True
+    except OSError:
+        return False
+
+
+def _safe_temp_output(suffix: str, parent: Optional[Path] = None) -> str:
+    """Create a tempfile inside parent dir (must be in an allowed dir)."""
+    if parent is None:
+        parent = Path.cwd()
+    parent_resolved = parent.resolve()
+    fd, name = tempfile.mkstemp(suffix=suffix, prefix="orf_mcp_", dir=str(parent_resolved))
+    os.close(fd)
+    return name
+
+
 def get_server() -> "FastMCP":
     """Get or create the MCP server instance."""
     global _mcp
@@ -122,24 +160,67 @@ def _register_tools():
     server = _mcp
 
     @server.tool()
-    def apply_md(input_md: str, target_format: str, output_path: Optional[str] = None) -> str:
-        """Convert MD to target format."""
-        # Validate path
-        valid, error = PathValidator.validate(input_md)
-        if not valid:
+    def apply_md(
+        input_md: str,
+        target_format: str,
+        output_path: Optional[str] = None,
+        images: Optional[list[dict]] = None,
+        separate_images: bool = True,
+    ) -> str:
+        """Convert MD to target format.
+
+        Images (from OPP ``images.json``) are extracted during conversion into
+        ``images.zip + images.json`` alongside the output DOCX when
+        ``separate_images=True`` (default). When ``separate_images=False``,
+        images embedded as base64 data URIs in the markdown are decoded and
+        placed inline in the output document by Pandoc.
+        """
+        # Validate input path
+        result = _path_validator.validate_path(input_md)
+        if not result.success:
             return json.dumps({
                 "success": False,
                 "output_path": None,
-                "errors": [{"code": "PATH_NOT_ALLOWED", "message": error, "recovery_strategy": None}],
+                "errors": [{"code": "PATH_NOT_ALLOWED", "message": result.error, "recovery_strategy": None}],
                 "warnings": [],
                 "metadata": {}
             })
 
+        # Validate output path if provided
+        if output_path:
+            result_out = _path_validator.validate_path(output_path, allow_missing=True)
+            if not result_out.success:
+                return json.dumps({
+                    "success": False,
+                    "output_path": None,
+                    "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"output_path: {result_out.error}", "recovery_strategy": None}],
+                    "warnings": [],
+                    "metadata": {}
+                })
+
         args = ["apply-md", input_md, "--target-format", target_format]
         if output_path:
             args.extend(["--output", output_path])
+        if not separate_images:
+            args.append("--no-separate-images")
 
-        return json.dumps(_run_cli_command(args))
+        # Write images data to a temp JSON file and pass via --images-json.
+        images_json_path: str | None = None
+        if images:
+            try:
+                fd, images_json_path = tempfile.mkstemp(suffix=".json", prefix="orf_mcp_images_")
+                os.close(fd)
+                with open(images_json_path, "w") as f:
+                    json.dump({"images": images}, f)
+                args.extend(["--images-json", images_json_path])
+            except Exception as e:
+                logger.warning("Failed to write images temp file: %s", e)
+
+        try:
+            return json.dumps(_run_cli_command(args))
+        finally:
+            if images_json_path:
+                _safe_unlink(images_json_path)
 
     @server.tool()
     def apply_xliff(
@@ -182,12 +263,12 @@ def _register_tools():
                         "metadata": {},
                     })
         # C5 fix: validate output_path against allowlist before subprocess
-        valid_out, out_err = PathValidator.validate(output_path)
-        if not valid_out:
+        result_out = _path_validator.validate_path(output_path, allow_missing=True)
+        if not result_out.success:
             return json.dumps({
                 "success": False,
                 "output_path": None,
-                "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"output_path: {out_err}"}],
+                "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"output_path: {result_out.error}"}],
                 "warnings": [],
                 "metadata": {},
             })
@@ -210,21 +291,14 @@ def _register_tools():
             xliff_to_use = xliff_temp_path
 
         for p in [input_file, xliff_to_use]:
-            valid, error = PathValidator.validate(p)
-            if not valid:
+            result_p = _path_validator.validate_path(p)
+            if not result_p.success:
                 if xliff_temp_path:
-                    try:
-                        os.unlink(xliff_temp_path)
-                    except Exception as exc:
-                        logger.warning(
-                            "Failed to remove temp xliff file %s: %s",
-                            xliff_temp_path,
-                            exc,
-                        )
+                    _safe_unlink(xliff_temp_path)
                 return json.dumps({
                     "success": False,
                     "output_path": None,
-                    "errors": [{"code": "PATH_NOT_ALLOWED", "message": error}],
+                    "errors": [{"code": "PATH_NOT_ALLOWED", "message": result_p.error}],
                     "warnings": [],
                     "metadata": {}
                 })
@@ -282,35 +356,23 @@ def _register_tools():
         result = _run_cli_command(args)
 
         if temp_created:
-            try:
-                os.unlink(temp_path)
-            except Exception as exc:
-                logger.warning(
-                    "Failed to remove temp file %s: %s", temp_path, exc
-                )
+            _safe_unlink(temp_path)
 
         if xliff_temp_path:
-            try:
-                os.unlink(xliff_temp_path)
-            except Exception as exc:
-                logger.warning(
-                    "Failed to remove temp xliff file %s: %s",
-                    xliff_temp_path,
-                    exc,
-                )
+            _safe_unlink(xliff_temp_path)
 
         return json.dumps(result)
 
     @server.tool()
     def batch_convert(input_dir: str, target_format: str, pattern: str = "*.md") -> str:
         """Batch convert MD files."""
-        valid, error = PathValidator.validate(input_dir)
-        if not valid:
+        result_dir = _path_validator.validate_path(input_dir, allow_missing=True)
+        if not result_dir.success:
             return json.dumps({
                 "success_count": 0,
                 "fail_count": 0,
                 "total": 0,
-                "errors": [{"code": "PATH_NOT_ALLOWED", "message": error, "recovery_strategy": None}]
+                "errors": [{"code": "PATH_NOT_ALLOWED", "message": result_dir.error, "recovery_strategy": None}]
             })
 
         args = ["convert-batch", input_dir, "--target-format", target_format, "--pattern", pattern]
@@ -319,8 +381,8 @@ def _register_tools():
     @server.tool()
     def detect_format(file_path: str) -> str:
         """Detect document format."""
-        valid, error = PathValidator.validate(file_path)
-        if not valid:
+        result_df = _path_validator.validate_path(file_path)
+        if not result_df.success:
             return json.dumps({"format": "UNKNOWN", "confidence": 0.0})
 
         args = ["info", file_path]
@@ -330,8 +392,8 @@ def _register_tools():
     @server.tool()
     def info(file_path: str) -> str:
         """Get document information."""
-        valid, error = PathValidator.validate(file_path)
-        if not valid:
+        result_info = _path_validator.validate_path(file_path)
+        if not result_info.success:
             return json.dumps({
                 "format": "UNKNOWN",
                 "size_mb": 0.0,
@@ -352,23 +414,57 @@ def _register_tools():
 # importers rely on.
 
 
-def apply_md(input_md: str, target_format: str, output_path: Optional[str] = None) -> str:
+def apply_md(
+    input_md: str,
+    target_format: str,
+    output_path: Optional[str] = None,
+    images: Optional[list[dict]] = None,
+    separate_images: bool = True,
+) -> str:
     """Convert MD to target format. In-process equivalent of the MCP tool."""
-    valid, error = PathValidator.validate(input_md)
-    if not valid:
+    result = _path_validator.validate_path(input_md)
+    if not result.success:
         return json.dumps({
             "success": False,
             "output_path": None,
-            "errors": [{"code": "PATH_NOT_ALLOWED", "message": error, "recovery_strategy": None}],
+            "errors": [{"code": "PATH_NOT_ALLOWED", "message": result.error, "recovery_strategy": None}],
             "warnings": [],
             "metadata": {}
         })
 
+    if output_path:
+        result_out = _path_validator.validate_path(output_path, allow_missing=True)
+        if not result_out.success:
+            return json.dumps({
+                "success": False,
+                "output_path": None,
+                "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"output_path: {result_out.error}", "recovery_strategy": None}],
+                "warnings": [],
+                "metadata": {}
+            })
+
     args = ["apply-md", input_md, "--target-format", target_format]
     if output_path:
         args.extend(["--output", output_path])
+    if not separate_images:
+        args.append("--no-separate-images")
 
-    return json.dumps(_run_cli_command(args))
+    images_json_path: str | None = None
+    if images:
+        try:
+            fd, images_json_path = tempfile.mkstemp(suffix=".json", prefix="orf_mcp_images_")
+            os.close(fd)
+            with open(images_json_path, "w") as f:
+                json.dump({"images": images}, f)
+            args.extend(["--images-json", images_json_path])
+        except Exception as e:
+            logger.warning("Failed to write images temp file: %s", e)
+
+    try:
+        return json.dumps(_run_cli_command(args))
+    finally:
+        if images_json_path:
+            _safe_unlink(images_json_path)
 
 
 def apply_xliff(
@@ -399,12 +495,12 @@ def apply_xliff(
                     "metadata": {},
                 })
     # C5 fix: validate output_path against allowlist before subprocess
-    valid_out, out_err = PathValidator.validate(output_path)
-    if not valid_out:
+    result_out = _path_validator.validate_path(output_path, allow_missing=True)
+    if not result_out.success:
         return json.dumps({
             "success": False,
             "output_path": None,
-            "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"output_path: {out_err}"}],
+            "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"output_path: {result_out.error}"}],
             "warnings": [],
             "metadata": {},
         })
@@ -427,21 +523,14 @@ def apply_xliff(
         xliff_to_use = xliff_temp_path
 
     for p in [input_file, xliff_to_use]:
-        valid, error = PathValidator.validate(p)
-        if not valid:
+        result_p = _path_validator.validate_path(p)
+        if not result_p.success:
             if xliff_temp_path:
-                try:
-                    os.unlink(xliff_temp_path)
-                except Exception as exc:
-                    logger.warning(
-                        "Failed to remove temp xliff file %s: %s",
-                        xliff_temp_path,
-                        exc,
-                    )
+                _safe_unlink(xliff_temp_path)
             return json.dumps({
                 "success": False,
                 "output_path": None,
-                "errors": [{"code": "PATH_NOT_ALLOWED", "message": error}],
+                "errors": [{"code": "PATH_NOT_ALLOWED", "message": result_p.error}],
                 "warnings": [],
                 "metadata": {}
             })
@@ -498,22 +587,10 @@ def apply_xliff(
     result = _run_cli_command(args)
 
     if temp_created:
-        try:
-            os.unlink(temp_path)
-        except Exception as exc:
-            logger.warning(
-                "Failed to remove temp file %s: %s", temp_path, exc
-            )
+        _safe_unlink(temp_path)
 
     if xliff_temp_path:
-        try:
-            os.unlink(xliff_temp_path)
-        except Exception as exc:
-            logger.warning(
-                "Failed to remove temp xliff file %s: %s",
-                xliff_temp_path,
-                exc,
-            )
+        _safe_unlink(xliff_temp_path)
 
     return json.dumps(result)
 
