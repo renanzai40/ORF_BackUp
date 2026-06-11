@@ -9,10 +9,12 @@ import re
 import shutil
 import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any, Optional
 
 from orf.converters.base import BaseConverter, ConversionResult
+from orf.converters.chunked_md_converter import ChunkedMDConverter
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
 from orf.logging import get_logger
@@ -33,9 +35,11 @@ class MD2DOCXConverter(BaseConverter):
         manifest: Optional[Manifest] = None,
         frontmatter: Optional[FrontmatterMetadata] = None,
         reference_docx: Optional[Path | str] = None,
+        chunk_size: int = 65536,
     ) -> None:
         super().__init__(manifest, frontmatter)
         self.reference_docx = Path(reference_docx) if reference_docx else None
+        self.chunk_size = chunk_size
 
     @property
     def supported_format(self) -> str:
@@ -65,21 +69,35 @@ class MD2DOCXConverter(BaseConverter):
         temp_dir = None
         md_path = input_path
 
-        if opts.separate_images and opts.images_dir:
-            images_dir = Path(opts.images_dir)
-            md_path, _ = self._extract_images_separately(
-                input_path, output_path, images_dir
+        if opts.separate_images:
+            # Default mode: extract images into organized output alongside the DOCX.
+            images_dir = (
+                Path(opts.images_dir)
+                if opts.images_dir
+                else output_path.parent / "images"
             )
-            logger.info(f"Separated images to {images_dir}, stripped MD at {md_path}")
+            md_path, _ = self._extract_images_separately(
+                input_path, output_path, images_dir,
+                images_json_data=opts.images_data,
+            )
+            logger.info(
+                "Separated images to %s, stripped MD at %s",
+                images_dir, md_path,
+            )
         else:
+            # Legacy embed mode: base64 images get rewritten to temp files
+            # so Pandoc embeds them in the DOCX.
             base64_images = self._find_base64_images(input_path)
             if base64_images:
                 md_path, temp_dir = self._preprocess_md_images(input_path)
-                logger.info(f"Extracted {len(base64_images)} base64 images to temp directory")
+                logger.info(
+                    "Extracted %d base64 images to temp directory",
+                    len(base64_images),
+                )
 
         # text-only mode: strip all image references and OLIMG placeholders
         # so pandoc produces a clean text-only DOCX.
-        if opts.text_only:
+        if opts.text_only or opts.separate_images:
             raw = md_path.read_text(encoding="utf-8")
             stripped = OLIMG_PATTERN.sub("", raw)
             stripped = IMAGE_REF_PATTERN.sub("", stripped)
@@ -91,6 +109,14 @@ class MD2DOCXConverter(BaseConverter):
                     "Text-only mode: stripped %d chars of image references",
                     len(raw) - len(stripped),
                 )
+
+        # For large MD files, use chunked conversion to avoid OOM.
+        if md_path.stat().st_size > self.chunk_size:
+            logger.info(
+                "File size %d bytes exceeds chunk threshold %d, using chunked conversion",
+                md_path.stat().st_size, self.chunk_size,
+            )
+            return self._convert_chunked(md_path, output_path, opts)
 
         cmd = [
             "pandoc",
@@ -116,7 +142,7 @@ class MD2DOCXConverter(BaseConverter):
 
             logger.debug(f"Pandoc output: {result.stdout}")
             if result.stderr:
-                if opts.text_only:
+                if opts.text_only or opts.separate_images:
                     logger.debug(f"Pandoc stderr: {result.stderr}")
                 else:
                     logger.warning(f"Pandoc stderr: {result.stderr}")
@@ -144,6 +170,92 @@ class MD2DOCXConverter(BaseConverter):
         finally:
             if temp_dir:
                 shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def _convert_chunked(
+        self,
+        md_path: Path,
+        output_path: Path,
+        opts: ConverterOptions,
+    ) -> ConversionResult:
+        """Convert a large MD file by splitting into chunks and processing each via pandoc.
+
+        Uses :class:`ChunkedMDConverter` to split the MD by ``##`` H2 headers,
+        converts each chunk through a separate pandoc invocation, then merges
+        the resulting DOCX fragments into a single output file.
+        """
+        splitter = ChunkedMDConverter(
+            chunk_size=self.chunk_size,
+            manifest=self.manifest,
+            frontmatter=self.frontmatter,
+        )
+        chunks = splitter._split_chunks(md_path)
+
+        if not chunks:
+            return ConversionResult(
+                output_path=output_path,
+                success=False,
+                errors=["Input file produced no chunks"],
+            )
+
+        chunk_temp_dir = Path(tempfile.mkdtemp(prefix="orf_md_chunks_"))
+        try:
+            docx_chunks: list[Path] = []
+            for chunk in chunks:
+                chunk_md = chunk_temp_dir / f"chunk_{chunk.index:04d}.md"
+                chunk_md.write_text(chunk.content, encoding="utf-8")
+
+                chunk_docx = chunk_temp_dir / f"chunk_{chunk.index:04d}.docx"
+                cmd = [
+                    "pandoc",
+                    str(chunk_md),
+                    "-o", str(chunk_docx),
+                    "--to", "docx",
+                    "--from", "markdown-smart",
+                ]
+                template = opts.template or self.reference_docx
+                if template:
+                    cmd.extend(["--reference-doc", str(template)])
+
+                logger.info("Running chunk %d: %s", chunk.index, " ".join(cmd))
+                subprocess.run(cmd, capture_output=True, text=True, check=True)
+                docx_chunks.append(chunk_docx)
+
+            merge_cmd = ["pandoc"] + [str(p) for p in docx_chunks] + [
+                "-o", str(output_path),
+            ]
+            logger.info(
+                "Merging %d DOCX chunks: %s",
+                len(docx_chunks), " ".join(merge_cmd),
+            )
+            subprocess.run(merge_cmd, capture_output=True, text=True, check=True)
+
+            return ConversionResult(
+                output_path=output_path,
+                success=True,
+                metadata={
+                    "tool": "pandoc",
+                    "cmd": " ".join(merge_cmd),
+                    "chunked": True,
+                    "chunk_count": len(chunks),
+                },
+            )
+
+        except subprocess.CalledProcessError as e:
+            logger.error("Chunked pandoc conversion failed: %s", e.stderr)
+            return ConversionResult(
+                output_path=output_path,
+                success=False,
+                errors=[f"Pandoc error in chunked conversion: {e.stderr}"],
+            )
+        except FileNotFoundError:
+            logger.error("Pandoc not found in PATH")
+            return ConversionResult(
+                output_path=output_path,
+                success=False,
+                errors=["Pandoc not installed or not in PATH"],
+            )
+        finally:
+            shutil.rmtree(chunk_temp_dir, ignore_errors=True)
 
     def _find_base64_images(self, md_path: Path) -> list[dict[str, Any]]:
         """Find all base64 data URI images in MD file."""
@@ -196,70 +308,115 @@ class MD2DOCXConverter(BaseConverter):
         input_path: Path,
         output_path: Path,
         images_dir: Path,
+        images_json_data: list[dict] | None = None,
     ) -> tuple[Path, None]:
-        """Extract all images to images_dir, write manifest, return stripped MD.
+        """Extract all images to ``images_dir``, produce ``images.zip`` and ``images.json``.
 
-        Unlike _preprocess_md_images which rewrites image refs to point at the
-        extracted files (and relies on Pandoc to embed them), this version
-        REMOVES the image references entirely. The output is a DOCX with no
-        embedded images, plus a directory of extracted images plus a manifest
-        describing the original → extracted mapping.
+        Uses OPP ``images_json_data`` (from the pipeline's ``images.json``) as the
+        primary image source.  Images are written to ``images_dir/``, packed into
+        ``images.zip``, and metadata is written to ``images.json`` — all three live
+        alongside the output DOCX.
 
         Returns:
-            Tuple of (stripped_md_path, None — no temp_dir to clean up;
-            images_dir is owned by the caller)
+            Tuple of (stripped_md_path, None) where stripped_md_path is a copy of
+            the input MD with all ``![...]()`` references removed.
         """
+        output_dir = output_path.parent
         images_dir.mkdir(parents=True, exist_ok=True)
         content = input_path.read_text(encoding="utf-8", errors="ignore")
 
-        manifest_entries: list[dict] = []
-        stripped_content = content
-        image_counter = 0
+        # Build image set from OPP images_json_data (primary).
+        img_entries: list[dict] = []
+        decoded_count = 0
+        if images_json_data:
+            for img in images_json_data:
+                try:
+                    b64_data = img.get("data_base64") or img.get("data")
+                    if not b64_data:
+                        continue
+                    img_bytes = base64.b64decode(b64_data)
+                    mime = img.get("mime_type", "image/png")
+                    # Derive extension from mime type
+                    ext = mime.split("/")[-1] if "/" in mime else "png"
+                    if ext == "jpeg":
+                        ext = "jpg"
+                    img_hash = hashlib.md5(img_bytes).hexdigest()[:12]
+                    filename = f"OLIMG_{decoded_count:04d}_{img_hash}.{ext}"
+                    filepath = images_dir / filename
+                    filepath.write_bytes(img_bytes)
+                    img_entries.append({
+                        "filename": filename,
+                        "mime_type": mime,
+                        "paragraph_index": img.get("paragraph_index"),
+                        "size_bytes": len(img_bytes),
+                        "md5_hash": img_hash,
+                    })
+                    decoded_count += 1
+                except Exception as e:
+                    logger.warning("Failed to decode OPP image entry: %s", e)
 
+        # Also try to resolve image file refs in the MD content (fallback).
+        # Some OPP outputs write image files to a directory next to the MD.
         for match in IMAGE_REF_PATTERN.finditer(content):
             alt = match.group(1)
             ref = match.group(2)
 
+            # Already handled via base64 from images_json_data — skip.
+            if ref.startswith("data:image/"):
+                continue
+
+            # Try resolving as a local file relative to input_path.
             try:
-                if ref.startswith("data:image/"):
-                    mime_match = re.match(r"data:image/([^;]+);base64,(.+)", ref)
-                    if not mime_match:
-                        continue
-                    mime_ext = mime_match.group(1)
-                    data = base64.b64decode(mime_match.group(2))
-                    ext = "png" if mime_ext == "png" else mime_ext
-                else:
-                    img_path = (input_path.parent / ref).resolve()
-                    if not img_path.exists():
-                        logger.warning(f"Image ref not found, skipping: {ref}")
-                        continue
+                img_path = (input_path.parent / ref).resolve()
+                if img_path.exists():
                     data = img_path.read_bytes()
+                    img_hash = hashlib.md5(data).hexdigest()[:12]
                     ext = img_path.suffix.lstrip(".") or "png"
-
-                image_counter += 1
-                img_hash = hashlib.md5(data).hexdigest()[:12]
-                filename = f"image_{image_counter:03d}_{img_hash}.{ext}"
-                out_path = images_dir / filename
-                out_path.write_bytes(data)
-
-                manifest_entries.append({
-                    "original_ref": ref,
-                    "extracted_path": str(out_path.relative_to(images_dir.parent)),
-                    "alt": alt,
-                    "size_bytes": len(data),
-                })
-
-                stripped_content = stripped_content.replace(match.group(0), "")
+                    # Deduplicate by hash
+                    if not any(e["md5_hash"] == img_hash for e in img_entries):
+                        filename = f"OLIMG_{decoded_count:04d}_{img_hash}.{ext}"
+                        filepath = images_dir / filename
+                        filepath.write_bytes(data)
+                        img_entries.append({
+                            "filename": filename,
+                            "mime_type": f"image/{ext}",
+                            "paragraph_index": None,
+                            "size_bytes": len(data),
+                            "md5_hash": img_hash,
+                        })
+                        decoded_count += 1
             except Exception as e:
-                logger.warning(f"Failed to extract image {ref}: {e}")
+                logger.warning("Failed to resolve image ref %s: %s", ref, e)
 
-        manifest_path = images_dir / "image_manifest.json"
+        # Write manifest images.json alongside output.
+        manifest_path = output_dir / "images.json"
+        manifest_payload = {
+            "images": img_entries,
+            "total": len(img_entries),
+            "source": "OPP extracted via md2docx separation",
+        }
         manifest_path.write_text(
-            json.dumps({"images": manifest_entries, "total": len(manifest_entries)}, indent=2),
+            json.dumps(manifest_payload, indent=2),
             encoding="utf-8",
         )
+        logger.info("Wrote image manifest to %s (%d images)", manifest_path, len(img_entries))
 
-        stripped_path = output_path.parent / f"{input_path.stem}.stripped.md"
+        # Pack images into images.zip.
+        zip_path = output_dir / "images.zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for entry in img_entries:
+                filepath = images_dir / entry["filename"]
+                if filepath.exists():
+                    zf.write(filepath, entry["filename"])
+        logger.info("Packed %d images into %s", len(img_entries), zip_path)
+
+        # Strip ALL image references from MD.
+        stripped_content = content
+        stripped_content = OLIMG_PATTERN.sub("", stripped_content)
+        stripped_content = IMAGE_REF_PATTERN.sub("", stripped_content)
+        stripped_content = stripped_content.strip()
+
+        stripped_path = output_dir / f"{input_path.stem}.stripped.md"
         stripped_path.write_text(stripped_content, encoding="utf-8")
 
         return stripped_path, None

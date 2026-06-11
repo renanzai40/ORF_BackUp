@@ -133,7 +133,8 @@ def find_md_with_frontmatter(directory: Path | str) -> list[Path]:
             content = md_file.read_text(encoding="utf-8", errors="ignore")
             if has_frontmatter(content):
                 results.append(md_file)
-        except Exception:
+        except (OSError, UnicodeDecodeError):
+            logger.exception("Failed to read MD file: %s", md_file)
             continue
 
     return results

@@ -1,6 +1,7 @@
 """Skeleton loader for DOCX/OOXML documents."""
 
 import zipfile
+from pathlib import Path
 from typing import Any
 
 from lxml import etree
@@ -19,26 +20,37 @@ class SkeletonLoader:
     def __init__(self) -> None:
         self.xml: str | None = None
         self.files: dict[str, Any] = {}
+        self.compress_types: dict[str, int] = {}
         self.bytes: bytes = b""
 
-    def load_skeleton(self, path: str) -> dict[str, Any]:
+    def load_skeleton(self, path: str, max_file_size_mb: int | None = None) -> dict[str, Any]:
         """Load a DOCX file and extract its contents.
 
         Args:
             path: Path to the DOCX file.
+            max_file_size_mb: Maximum allowed file size in MB. Raises ValueError if exceeded.
 
         Returns:
             dict with keys: xml (str), files (dict), bytes (bytes)
         """
         self.files = {}
+        self.compress_types = {}
         self.xml = None
         self.bytes = b""
+
+        if max_file_size_mb is not None:
+            file_size_mb = Path(path).stat().st_size / (1024 * 1024)
+            if file_size_mb > max_file_size_mb:
+                raise ValueError(
+                    f"File size ({file_size_mb:.1f} MB) exceeds limit of {max_file_size_mb} MB"
+                )
 
         with zipfile.ZipFile(path, "r") as zf:
             # Read entire ZIP into memory
             self.bytes = zf.read(zf.namelist()[0])  # Read first file as representative
             for name in zf.namelist():
                 self.files[name] = zf.read(name)
+                self.compress_types[name] = zf.getinfo(name).compress_type
 
         if "word/document.xml" in self.files:
             self.xml = self.files["word/document.xml"].decode("utf-8")
@@ -110,6 +122,10 @@ class SkeletonLoader:
     def repack_docx(self, output_path: str, modified_xml: str | None = None) -> None:
         """Repack modified XML into a new DOCX file.
 
+        Preserves the original compression method for each file (e.g. media files
+        are typically STORED, not DEFLATED). Some Windows preview handlers reject
+        DEFLATE-compressed media inside OOXML containers.
+
         Args:
             output_path: Path to write the new DOCX.
             modified_xml: XML string to write; if None, uses self.xml.
@@ -121,10 +137,15 @@ class SkeletonLoader:
         else:
             raise ValueError("No XML to repack. Call load_skeleton first.")
 
-        files_copy = dict(self.files)
-        if "word/document.xml" in files_copy:
-            files_copy["word/document.xml"] = xml_bytes
+        doc_compress_type = self.compress_types.get(
+            "word/document.xml", zipfile.ZIP_STORED
+        )
 
         with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            for name, data in files_copy.items():
-                zf.writestr(name, data)
+            for name in self.files:
+                data = self.files[name] if name != "word/document.xml" else xml_bytes
+                ct = self.compress_types.get(name, zipfile.ZIP_STORED)
+                if ct == zipfile.ZIP_STORED:
+                    zf.writestr(name, data, compress_type=zipfile.ZIP_STORED)
+                else:
+                    zf.writestr(name, data)

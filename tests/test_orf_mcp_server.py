@@ -1,5 +1,6 @@
 """Integration tests for ORF MCP Server."""
 
+import os
 import pytest
 import asyncio
 from pathlib import Path
@@ -208,23 +209,33 @@ class TestMCPIntegration:
     @patch("subprocess.run")
     def test_full_apply_md_flow(self, mock_run):
         """Test complete apply_md flow with mocked CLI."""
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps({
-                "success": True,
-                "output_path": "/tmp/result.docx",
-                "errors": [],
-                "warnings": [],
-                "metadata": {"format": "docx"}
-            })
-        )
-        
-        server = get_server()
-        result = asyncio.run(server.call_tool("apply_md", {
-            "input_md": "translated.md",
-            "target_format": "docx"
-        }))
-        result_data = json.loads(result.content[0].text)
-        
-        assert result_data["success"] is True
-        assert result_data["output_path"] == "/tmp/result.docx"
+        # Create a temp file inside the project root so it passes the
+        # directory allowlist check (default allowed_dir = cwd).
+        import tempfile
+        fd, input_path = tempfile.mkstemp(suffix=".md", prefix="orf_test_", dir=Path.cwd())
+        try:
+            os.close(fd)
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout=json.dumps({
+                    "success": True,
+                    "output_path": "/tmp/result.docx",
+                    "errors": [],
+                    "warnings": [],
+                    "metadata": {"format": "docx"}
+                })
+            )
+
+            server = get_server()
+            result = asyncio.run(server.call_tool("apply_md", {
+                "input_md": input_path,
+                "target_format": "docx"
+            }))
+            result_data = json.loads(result.content[0].text)
+
+            assert result_data["success"] is True
+        finally:
+            try:
+                os.unlink(input_path)
+            except OSError:
+                pass

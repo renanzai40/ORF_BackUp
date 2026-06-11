@@ -5,6 +5,7 @@
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -38,14 +39,18 @@ def setup_logger(name: str = "orf", level: str = "INFO") -> logging.Logger:
     if name in _loggers:
         return _loggers[name]
 
+    # Allow env var override: ORF_LOG_LEVEL=DEBUG
+    level = os.environ.get("ORF_LOG_LEVEL", level).upper()
+
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
 
     if logger.handlers:
         return logger
 
+    numeric_level = getattr(logging, level, logging.INFO)
     console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(numeric_level)
     console_formatter = logging.Formatter(
         '[%(levelname)s] %(message)s'
     )

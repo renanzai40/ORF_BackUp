@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Optional
 
@@ -52,6 +53,19 @@ def _cache_root() -> Path:
     return root
 
 
+def _hash_file(path: Path) -> str:
+    """SHA-256 hex digest of a file, read in 8192-byte chunks (avoids loading the entire file into memory).
+
+    This is used by the cache key functions so that large input files (e.g.
+    14 MB+) are not fully read into memory just to check cache membership.
+    """
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def _cache_key_apply_md(
     input_path: Path,
     target_format: str,
@@ -67,18 +81,18 @@ def _cache_key_apply_md(
     forces a fresh conversion.
     """
     h = hashlib.sha256()
-    h.update(input_path.read_bytes())
+    h.update(_hash_file(input_path).encode("utf-8"))
     h.update(target_format.encode("utf-8"))
     if manifest_path is not None and manifest_path.exists():
-        h.update(manifest_path.read_bytes())
+        h.update(_hash_file(manifest_path).encode("utf-8"))
     if template:
         tp = Path(template)
         if tp.exists():
-            h.update(tp.read_bytes())
+            h.update(_hash_file(tp).encode("utf-8"))
     if images_json:
         ip = Path(images_json)
         if ip.exists():
-            h.update(ip.read_bytes())
+            h.update(_hash_file(ip).encode("utf-8"))
     return h.hexdigest()
 
 
@@ -90,13 +104,13 @@ def _cache_key_apply_xliff(
 ) -> str:
     """sha256(input_bytes + xliff_bytes + format + images_json_bytes)."""
     h = hashlib.sha256()
-    h.update(input_path.read_bytes())
-    h.update(xliff_path.read_bytes())
+    h.update(_hash_file(input_path).encode("utf-8"))
+    h.update(_hash_file(xliff_path).encode("utf-8"))
     h.update(fmt.encode("utf-8"))
     if images_json:
         ip = Path(images_json)
         if ip.exists():
-            h.update(ip.read_bytes())
+            h.update(_hash_file(ip).encode("utf-8"))
     return h.hexdigest()
 
 
@@ -237,6 +251,7 @@ def _maybe_install_fake_pandoc() -> None:
 @click.option("--images-json", "images_json", type=click.Path(exists=True), help="JSON file with image placement data from OPP (NOTE: MD path extracts images for organized output, not injection)")
 @click.option("--no-cache", "no_cache", is_flag=True, help="Skip the .omni_cache/ cache check (force a fresh conversion)")
 @click.option("--clear-cache", "clear_cache", is_flag=True, help="Remove all cached ORF outputs and exit")
+@click.option("--max-file-size-mb", type=float, default=None, help="拒绝超过此大小 (MB) 的文件")
 def apply_md(
     input_md: str,
     target_format: str,
@@ -254,6 +269,7 @@ def apply_md(
     images_json: str | None,
     no_cache: bool,
     clear_cache: bool,
+    max_file_size_mb: float | None = None,
 ) -> None:
     """将 MD 文件转换为目标格式
 
@@ -264,6 +280,12 @@ def apply_md(
     请使用 XLIFF 管道。
     """
     input_path = Path(input_md)
+    if max_file_size_mb is not None:
+        size_mb = input_path.stat().st_size / (1024 * 1024)
+        if size_mb > max_file_size_mb:
+            click.echo(f"Error: File {input_path} is {size_mb:.1f}MB, exceeds limit of {max_file_size_mb}MB", err=True)
+            raise SystemExit(1)
+
     effective_template = template or reference_doc
 
     if target_format == "auto" or auto_detect:
@@ -506,18 +528,65 @@ def apply_md(
             )
 
 
+# ========== Batch mode: single-file helper ==========
+
+
+def _convert_single(
+    md_file: Path,
+    converter_class: type,
+    output_path: Path,
+    target_format: str,
+) -> tuple[bool, str | None]:
+    """Convert a single MD file and return (success, error_message_or_none).
+
+    This is extracted as a module-level function so it can be submitted
+    to a ThreadPoolExecutor for parallel batch processing.
+    """
+    try:
+        manifest = None
+        try:
+            manifest_path = find_manifest(md_file)
+            if manifest_path:
+                manifest = parse_manifest(manifest_path)
+        except Exception as exc:
+            logger.warning("Failed to parse manifest for %s: %s", md_file, exc)
+
+        frontmatter = None
+        try:
+            frontmatter = parse_frontmatter(md_file)
+        except Exception as exc:
+            logger.warning("Failed to parse frontmatter for %s: %s", md_file, exc)
+
+        converter = converter_class(manifest=manifest, frontmatter=frontmatter)
+        output_file = output_path / f"{md_file.stem}.{target_format}"
+
+        result = converter.convert(md_file, output_file)
+
+        if result.success:
+            return True, None
+        else:
+            return False, str(result.errors)
+
+    except Exception as e:
+        return False, str(e)
+
+
 @main.command("convert-batch")
 @click.argument("input_dir", type=click.Path(exists=True))
 @click.option("--target-format", "-t", type=click.Choice(["docx", "odt", "epub"]))
 @click.option("--output-dir", "-o", type=click.Path(), help="输出目录")
 @click.option("--pattern", "-p", default="*.md", help="文件匹配模式")
 @click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
+@click.option("--max-file-size-mb", type=float, default=None, help="拒绝超过此大小 (MB) 的文件")
+@click.option("--max-workers", type=int, default=4, help="最大并行工作线程数")
 def convert_batch(
     input_dir: str,
     target_format: str,
     output_dir: str | None,
     pattern: str,
     output_json: bool,
+    max_file_size_mb: float | None = None,
+    max_workers: int = 4,
 ) -> None:
     """批量转换 MD 文件"""
     input_path = Path(input_dir)
@@ -538,6 +607,13 @@ def convert_batch(
         click.echo("No files found to convert")
         return
 
+    if max_file_size_mb is not None:
+        for md_file in md_files:
+            size_mb = md_file.stat().st_size / (1024 * 1024)
+            if size_mb > max_file_size_mb:
+                click.echo(f"Error: File {md_file} is {size_mb:.1f}MB, exceeds limit of {max_file_size_mb}MB", err=True)
+                raise SystemExit(1)
+
     if target_format == "docx":
         converter_class: type = MD2DOCXConverter
     elif target_format == "odt":
@@ -554,37 +630,33 @@ def convert_batch(
     success_count = 0
     fail_count = 0
 
-    with click.progressbar(md_files, label=f"Converting to {target_format}", show_pos=True, show_percent=True) as bar:
-        for md_file in bar:
-            try:
-                manifest = None
-                try:
-                    manifest_path = find_manifest(md_file)
-                    if manifest_path:
-                        manifest = parse_manifest(manifest_path)
-                except Exception as exc:
-                    logger.warning("Failed to parse manifest for %s: %s", md_file, exc)
-
-                frontmatter = None
-                try:
-                    frontmatter = parse_frontmatter(md_file)
-                except Exception as exc:
-                    logger.warning("Failed to parse frontmatter for %s: %s", md_file, exc)
-
-                converter = converter_class(manifest=manifest, frontmatter=frontmatter)
-                output_file = output_path / f"{md_file.stem}.{target_format}"
-
-                result = converter.convert(md_file, output_file)
-
-                if result.success:
+    if max_workers <= 1:
+        with click.progressbar(md_files, label=f"Converting to {target_format}", show_pos=True, show_percent=True) as bar:
+            for md_file in bar:
+                success, error = _convert_single(md_file, converter_class, output_path, target_format)
+                if success:
                     success_count += 1
                 else:
                     fail_count += 1
-                    logger.error(f"Failed: {md_file}: {result.errors}")
-
-            except Exception as e:
-                fail_count += 1
-                logger.error(f"Error processing {md_file}: {e}")
+                    logger.error(f"Failed: {md_file}: {error}")
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(_convert_single, md_file, converter_class, output_path, target_format)
+                for md_file in md_files
+            ]
+            for i, future in enumerate(futures):
+                md_file = md_files[i]
+                try:
+                    success, error = future.result()
+                    if success:
+                        success_count += 1
+                    else:
+                        fail_count += 1
+                        logger.error(f"Failed: {md_file}: {error}")
+                except Exception as e:
+                    fail_count += 1
+                    logger.error(f"Error processing {md_file}: {e}")
 
     click.echo(f"\nCompleted: {success_count} succeeded, {fail_count} failed")
 
@@ -612,7 +684,8 @@ def convert_batch(
 @click.option("--images-json", "images_json", type=click.Path(exists=True), help="JSON file with image placement data from OPP")
 @click.option("--no-cache", "no_cache", is_flag=True, help="Skip the .omni_cache/ cache check (force a fresh conversion)")
 @click.option("--clear-cache", "clear_cache", is_flag=True, help="Remove all cached ORF outputs and exit")
-def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], output: str, format: str, output_json: bool, images_json: str, no_cache: bool, clear_cache: bool) -> None:
+@click.option("--max-file-size-mb", type=float, default=None, help="拒绝超过此大小 (MB) 的文件")
+def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], output: str, format: str, output_json: bool, images_json: str, no_cache: bool, clear_cache: bool, max_file_size_mb: float | None = None) -> None:
     """Apply XLIFF translation to original document.
 
     INPUT_FILE: Original document (DOCX/PPTX/EPUB/HTML)
@@ -631,6 +704,13 @@ def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], outpu
         with tempfile.NamedTemporaryFile(mode='w', suffix='.xliff', delete=False) as tmp:
             tmp.write(xliff_content)
             xliff_path = Path(tmp.name)
+
+    if max_file_size_mb is not None:
+        for check_path in [input_path, xliff_path]:
+            size_mb = check_path.stat().st_size / (1024 * 1024)
+            if size_mb > max_file_size_mb:
+                click.echo(f"Error: File {check_path} is {size_mb:.1f}MB, exceeds limit of {max_file_size_mb}MB", err=True)
+                raise SystemExit(1)
 
     if clear_cache:
         n = _clear_orf_cache()

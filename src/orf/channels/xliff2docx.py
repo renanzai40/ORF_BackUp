@@ -84,6 +84,31 @@ def _strip_wrapper(target_text: str) -> str:
     return target_text
 
 
+# Phase A.2.a: regex to strip <bx>/<ex> inline formatting tags that may leak
+# from the LLM output into the final DOCX <w:t> elements.
+_INLINE_TAGS_RE = re.compile(r'</?(?:bx|ex)\b[^>]*/?>', re.DOTALL)
+
+
+def _strip_inline_tags(target_text: str) -> str:
+    """Strip ``<bx .../>`` / ``<ex .../>`` inline formatting tags from text.
+
+    These tags are XLIFF inline markers that the LLM may reproduce literally
+    in its translation output.  If they reach ``<w:t>`` the user sees raw
+    ``<bx id="1" type="bold"/>`` in the final DOCX.  This function is a
+    defense-in-depth safety net for every backfill path.
+
+    Examples::
+
+        _strip_inline_tags('<bx id="1" type="bold"/>hello')  → 'hello'
+        _strip_inline_tags('hello<ex id="1"/>')              → 'hello'
+        _strip_inline_tags('<bx/>A<ex/><bx/>B<ex/>')         → 'AB'
+        _strip_inline_tags('plain text')                     → 'plain text'
+
+    Idempotent — calling twice produces the same result.
+    """
+    return _INLINE_TAGS_RE.sub('', target_text)
+
+
 @dataclass
 class XLIFFTransUnitData:
     """Minimal trans-unit data extracted from XLIFF."""
@@ -465,6 +490,33 @@ class XLIFF2DOCXConverter(BaseConverter):
             # Also keep body_paragraphs for _backfill_translation text matching.
             body_paragraphs = body.xpath("./w:p", namespaces=WORD_NS_MAP)
 
+            # ── O(P+M) lookup indexes: built ONCE before the trans-unit loop ──
+            # Pattern C: exact match on individual <w:t> elements
+            wt_text_map: dict[str, etree._Element] = {}
+            for t_elem in root.xpath("//w:t", namespaces=WORD_NS_MAP):
+                if t_elem.text:
+                    t_norm = re.sub(r"\s+", " ", t_elem.text).strip()
+                    if t_norm:
+                        wt_text_map[t_norm] = t_elem
+
+            # Pattern A: exact match on body paragraphs
+            body_paragraph_text_map: dict[str, etree._Element] = {}
+            for p in body_paragraphs:
+                text_runs = p.xpath(".//w:t", namespaces=WORD_NS_MAP)
+                text_content = "".join(t.text or "" for t in text_runs)
+                normalized = re.sub(r"\s+", " ", text_content).strip()
+                if normalized:
+                    body_paragraph_text_map[normalized] = p
+
+            # Pattern B: exact match on all paragraphs (for inline-elements path)
+            all_paragraph_text_map: dict[str, etree._Element] = {}
+            for p in root.xpath("//w:p", namespaces=WORD_NS_MAP):
+                text_runs = p.xpath(".//w:t", namespaces=WORD_NS_MAP)
+                text_content = "".join(t.text or "" for t in text_runs)
+                normalized = re.sub(r"\s+", " ", text_content).strip()
+                if normalized:
+                    all_paragraph_text_map[normalized] = p
+
             # Build a mapping from original Chinese text → target text for
             # textbox paragraphs, so we can also translate their Fallback-branch
             # counterparts (which are skipped by the text-based dedup).
@@ -530,6 +582,9 @@ class XLIFF2DOCXConverter(BaseConverter):
                         tu["source"],
                         target_text,
                         inline_elements,
+                        wt_text_map,
+                        body_paragraph_text_map,
+                        all_paragraph_text_map,
                     )
                 except Exception as e:
                     logger.warning(f"Failed to backfill trans-unit {tu_id}: {e}")
@@ -546,7 +601,10 @@ class XLIFF2DOCXConverter(BaseConverter):
                     len(chinese_to_target),
                 )
                 self._backfill_fallback_textboxes(root, chinese_to_target)
-            final_xml = etree.tostring(root, encoding="unicode", xml_declaration=False)
+            final_xml = (
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+                + etree.tostring(root, encoding="unicode")
+            )
 
         # 4. Repack as DOCX
         try:
@@ -575,19 +633,19 @@ class XLIFF2DOCXConverter(BaseConverter):
         source_text: str,
         target_text: str,
         inline_elements: list[InlineElement],
+        wt_text_map: dict[str, etree._Element],
+        body_paragraph_text_map: dict[str, etree._Element],
+        all_paragraph_text_map: dict[str, etree._Element],
     ) -> bool:
         r"""Backfill a single translation into the parsed document root.
 
         Mutates ``root`` in place. Returns True if a match was applied.
 
         POST_MORTEM ORF-2: matching is now layered:
-          1. Try exact match on the OPP source as-is.
-          2. Normalize whitespace on both sides (collapse runs of ``\s`` to a
-             single space) and try again.
-          3. Try SequenceMatcher ratio >= FUZZY_MATCH_THRESHOLD for cases
+          1. Try exact match via pre-built O(1) lookup indexes.
+          2. Try SequenceMatcher ratio >= FUZZY_MATCH_THRESHOLD for cases
              where the LLM rephrased (punctuation, missing/extra words).
-          4. Last resort: apply the LLM target to the closest paragraph so
-             we never leave the OPP source (often Chinese) in the output.
+          3. Last resort: skip so we never clobber unrelated content.
         """
         if not source_text and not target_text:
             return False
@@ -598,33 +656,25 @@ class XLIFF2DOCXConverter(BaseConverter):
 
         if inline_elements:
             found = self._backfill_with_inline_elements(
-                root, source_normalized, target_text, inline_elements
+                root, source_normalized, target_text, inline_elements,
+                all_paragraph_text_map,
             )
         else:
-            # ULTRAREADY-FIX (2026-06-08): require EXACT match on normalized
-            # text, not substring. The previous `source_normalized in
-            # t_elem.text` check overwrote any <w:t> that merely contained
-            # the source as a substring — destroying the body paragraph that
-            # happens to include a text box whose content matches a later
-            # non_body unit (e.g. body[8] = 周云杰 quote paragraph with
-            # nested text box containing "×116 ×54" gets overwritten when
-            # non_body_15 = "×116 ×54" is processed). Exact match on
-            # normalized text prevents this destructive overwrite.
-            for t_elem in root.xpath("//w:t", namespaces=WORD_NS_MAP):
-                if t_elem.text:
-                    t_norm = re.sub(r"\s+", " ", t_elem.text).strip()
-                    if t_norm == source_normalized or t_norm == source_stripped:
-                        found = True
-                        t_elem.text = target_text
+            # Pattern C: O(1) exact match on individual <w:t> elements
+            t_elem = wt_text_map.get(source_normalized)
+            if t_elem is None:
+                t_elem = wt_text_map.get(source_stripped)
+            if t_elem is not None:
+                found = True
+                t_elem.text = target_text
 
         if not found:
-            for p in body_paragraphs:
-                text_runs = [t.text for t in p.xpath(".//w:t", namespaces=WORD_NS_MAP) if t.text]
-                concat_text = "".join(text_runs)
-                concat_norm = re.sub(r"\s+", " ", concat_text).strip()
-                if concat_norm == source_normalized or concat_norm == source_stripped:
-                    found = self._backfill_split_runs(p, source_normalized, target_text)
-                    break
+            # Pattern A: O(1) exact match on body paragraphs
+            p = body_paragraph_text_map.get(source_normalized)
+            if p is None:
+                p = body_paragraph_text_map.get(source_stripped)
+            if p is not None:
+                found = self._backfill_split_runs(p, source_normalized, target_text)
 
         if not found:
             found = self._fuzzy_backfill(root, source_normalized, target_text)
@@ -707,6 +757,11 @@ class XLIFF2DOCXConverter(BaseConverter):
         children (set by OPP via `list(body).index(para._element)`).
         We must use the same indexing here — `//w:p` would include
         nested w:p (tables, text boxes) and shift the index.
+
+        BX/EX safety: if target_text contains ``<bx .../>`` / ``<ex .../>``
+        tags (from LLM literal reproduction), they are parsed into proper
+        DOCX ``<w:rPr>`` formatted runs via ``_build_formatted_runs``.
+        Plain text without tags is written directly as before.
         """
         if not (0 <= para_index < len(body_paragraphs)):
             logger.warning(
@@ -718,6 +773,35 @@ class XLIFF2DOCXConverter(BaseConverter):
         runs = para.xpath(".//w:t", namespaces=WORD_NS_MAP)
         if not runs:
             return False
+
+        # BX/EX leak fix: parse inline tags into formatted DOCX runs
+        formatted_runs = self._build_formatted_runs(target_text)
+        if formatted_runs:
+            target_run = runs[0]
+            parent = target_run.getparent()
+            if parent is not None:
+                W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                w_tag = f"{{{W_NS}}}"
+                insert_pos = list(parent.getparent()).index(parent) if parent.getparent() is not None else -1
+                if insert_pos >= 0:
+                    parent_para = parent.getparent()
+                    first_t_run = parent
+                    for i, fr in enumerate(formatted_runs):
+                        parent_para.insert(
+                            list(parent_para).index(first_t_run) + i,
+                            fr,
+                        )
+                    first_t_run.text = _strip_inline_tags(first_t_run.text or "")
+                    for r in runs[1:]:
+                        r.text = ""
+                    return True
+                # Fallback: strip tags if parent manipulation fails
+                runs[0].text = _strip_inline_tags(target_text)
+                for r in runs[1:]:
+                    r.text = ""
+                return True
+
+        # No bx/ex tags — plain text path (original behavior)
         runs[0].text = target_text
         for r in runs[1:]:
             r.text = ""
@@ -789,6 +873,9 @@ class XLIFF2DOCXConverter(BaseConverter):
         Used when the OPP source has resname="non_body_N". The index is the
         GLOBAL position in OPP's flat result.paragraphs list (body paragraphs
         first, then table cells, then textboxes deduplicated).
+
+        BX/EX safety: same as ``_backfill_by_position`` — inline tags are
+        parsed into proper ``<w:rPr>`` formatted runs.
         """
         if not (0 <= para_idx < len(paragraphs)):
             logger.warning(
@@ -801,6 +888,30 @@ class XLIFF2DOCXConverter(BaseConverter):
         runs = para.xpath("./w:r/w:t", namespaces=WORD_NS_MAP)
         if not runs:
             return False
+
+        # BX/EX leak fix: parse inline tags into formatted DOCX runs
+        formatted_runs = self._build_formatted_runs(target_text)
+        if formatted_runs:
+            target_run = runs[0]
+            parent = target_run.getparent()
+            if parent is not None:
+                parent_para = parent.getparent()
+                if parent_para is not None:
+                    first_t_run = parent
+                    for i, fr in enumerate(formatted_runs):
+                        parent_para.insert(
+                            list(parent_para).index(first_t_run) + i,
+                            fr,
+                        )
+                    first_t_run.text = _strip_inline_tags(first_t_run.text or "")
+                    for r in runs[1:]:
+                        r.text = ""
+                    return True
+                runs[0].text = _strip_inline_tags(target_text)
+                for r in runs[1:]:
+                    r.text = ""
+                return True
+
         runs[0].text = target_text
         for r in runs[1:]:
             r.text = ""
@@ -874,6 +985,7 @@ class XLIFF2DOCXConverter(BaseConverter):
         source_normalized: str,
         target_text: str,
         inline_elements: list[InlineElement],
+        all_paragraph_text_map: dict[str, etree._Element],
     ) -> bool:
         """Backfill when source has inline formatting tags.
 
@@ -881,6 +993,14 @@ class XLIFF2DOCXConverter(BaseConverter):
         then applies translations preserving inline structure.
         """
         found = False
+        # Pattern B: O(1) exact match on all paragraphs
+        p = all_paragraph_text_map.get(source_normalized)
+        if p is not None:
+            found = self._backfill_split_runs(p, source_normalized, target_text)
+            if found:
+                return found
+
+        # Fallback: sequential scan for paragraphs not in the exact-match index
         for p in root.xpath("//w:p", namespaces=WORD_NS_MAP):
             text_runs = p.xpath(".//w:t", namespaces=WORD_NS_MAP)
             text_content = "".join(t.text or "" for t in text_runs)
@@ -998,6 +1118,12 @@ class XLIFF2DOCXConverter(BaseConverter):
                     del open_formats[k]
 
             remaining = remaining[match_obj.end():]
+
+        # Fast path: no bx/ex in target_text → plain text, no formatting to parse.
+        # Lets callers use the simpler plain-text replacement path instead of
+        # inserting a new <w:r> alongside the existing one.
+        if not ('<bx' in target_text.lower() or '<ex' in target_text.lower()):
+            return []
 
         if not segments:
             clean = re.sub(r'<bx[^>]*/>|<ex[^>]*/>', '', target_text)
@@ -1212,15 +1338,20 @@ class XLIFF2DOCXConverter(BaseConverter):
                 logger.error("Failed to inject floating image: %s", e)
                 orphaned.append(img)
 
-        new_xml = etree.tostring(root, encoding="unicode", xml_declaration=False)
-
-        files_copy = dict(files)
-        files_copy["word/document.xml"] = new_xml.encode("utf-8")
+        new_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            + etree.tostring(root, encoding="unicode")
+        )
 
         try:
             with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                for name, data in files_copy.items():
-                    zf.writestr(name, data)
+                for name, data in files.items():
+                    ct = self.skeleton_loader.compress_types.get(name, zipfile.ZIP_STORED)
+                    data_to_write = data if name != "word/document.xml" else new_xml.encode("utf-8")
+                    if ct == zipfile.ZIP_STORED:
+                        zf.writestr(name, data_to_write, compress_type=zipfile.ZIP_STORED)
+                    else:
+                        zf.writestr(name, data_to_write)
         except Exception as e:
             logger.error("Failed to repack DOCX with images: %s", e)
             return (injected, orphaned + [img for img in positioned if img not in injected])
@@ -1511,7 +1642,6 @@ class XLIFF2DOCXConverter(BaseConverter):
         drawing = f'''
 <w:drawing xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-           xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
            xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"
            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"

@@ -342,10 +342,12 @@ class TestXLIFF2DOCXConverter:
         )
 
         plain_runs = converter._build_formatted_runs("plain text")
-        assert len(plain_runs) == 1
-        assert [child.tag for child in plain_runs[0]] == [w_t], (
-            f"runs without formatting must contain only <w:t>; "
-            f"got {[child.tag for child in plain_runs[0]]}"
+        # Plain text without bx/ex tags returns [] so callers fall through
+        # to the simpler plain-text replacement path (instead of inserting
+        # a new <w:r> alongside the existing one, which would let source
+        # Chinese text leak through).
+        assert len(plain_runs) == 0, (
+            f"plain text should return empty list, got {len(plain_runs)}"
         )
 
     @patch("orf.channels.xliff2docx.SkeletonLoader")

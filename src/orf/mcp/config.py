@@ -1,17 +1,35 @@
-"""MCP Server configuration."""
+"""MCP Server configuration with directory allowlist support."""
+
+import logging
+import os
 from dataclasses import dataclass
-from typing import Optional
+from pathlib import Path
+from typing import List, Optional
+
+import yaml
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class MCPConfig:
-    """Configuration for ORF MCP Server."""
+    """Configuration for ORF MCP Server.
+
+    Attributes:
+        host: Server host address.
+        port: Server port number.
+        max_file_size_mb: Maximum file size in megabytes.
+        timeout_seconds: Request timeout.
+        allowed_formats: List of allowed output formats.
+        allowed_directories: List of root directories allowed for file access.
+    """
 
     host: str = "127.0.0.1"
     port: int = 8765
     max_file_size_mb: int = 100
     timeout_seconds: int = 30
-    allowed_formats: Optional[list[str]] = None
+    allowed_formats: Optional[List[str]] = None
+    allowed_directories: Optional[List[Path]] = None
 
     def __post_init__(self) -> None:
         if self.allowed_formats is None:
@@ -31,3 +49,117 @@ class MCPConfig:
                 "msg",
                 "pptx",
             ]
+        if self.allowed_directories is None:
+            self.allowed_directories = [Path.cwd()]
+
+
+def _parse_allowed_dirs(value: str) -> List[Path]:
+    """Parse colon/semicolon separated paths into a list of Path objects."""
+    separators = [":", ";"]
+    for sep in separators:
+        if sep in value:
+            paths = [Path(p.strip()) for p in value.split(sep) if p.strip()]
+            if paths:
+                return paths
+            break
+    return []
+
+
+def _load_from_yaml(config_path: Path) -> Optional[dict]:
+    """Load configuration from a YAML file."""
+    if not config_path.exists():
+        return None
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except Exception as e:
+        logger.warning(f"Failed to load MCP config from {config_path}: {e}")
+        return None
+
+
+def _load_from_env() -> dict:
+    """Load configuration from environment variables."""
+    config = {}
+
+    allowed_dirs = os.environ.get("ORF_MCP_ALLOWED_DIRS", "")
+    if allowed_dirs:
+        config["allowed_directories"] = _parse_allowed_dirs(allowed_dirs)
+
+    max_file_size = os.environ.get("ORF_MCP_MAX_FILE_SIZE")
+    if max_file_size:
+        try:
+            config["max_file_size_mb"] = int(max_file_size)
+        except ValueError:
+            logger.warning(
+                "Invalid ORF_MCP_MAX_FILE_SIZE=%r; falling back to default", max_file_size
+            )
+
+    timeout = os.environ.get("ORF_MCP_TIMEOUT")
+    if timeout:
+        try:
+            config["timeout_seconds"] = int(timeout)
+        except ValueError:
+            logger.warning(
+                "Invalid ORF_MCP_TIMEOUT=%r; falling back to default", timeout
+            )
+
+    return config
+
+
+def _normalize_allowed_directories(dirs: list) -> List[Path]:
+    """Convert a mixed list of str/Path to List[Path]."""
+    result: List[Path] = []
+    for d in dirs:
+        if isinstance(d, str):
+            result.append(Path(d))
+        elif isinstance(d, Path):
+            result.append(d)
+        else:
+            logger.warning("Ignoring unexpected type in allowed_directories: %s", type(d))
+    return result
+
+
+def load_config(config_path: Optional[Path] = None) -> MCPConfig:
+    """Load MCP configuration from YAML file or environment variables.
+
+    Resolution order:
+      1. Environment variable ``ORF_MCP_ALLOWED_DIRS`` (colon/semicolon separated).
+      2. YAML config file (optional, with ``security.allowed_directories`` key).
+      3. Falls back to ``[Path.cwd()]`` if neither provides a value.
+
+    Args:
+        config_path: Optional path to YAML configuration file.
+
+    Returns:
+        MCPConfig instance with loaded configuration.
+    """
+    config_data: dict = {}
+
+    # Try loading from YAML file if provided
+    if config_path:
+        yaml_data = _load_from_yaml(config_path)
+        if yaml_data:
+            # Flatten nested keys: security.allowed_directories → allowed_directories
+            if "security" in yaml_data and isinstance(yaml_data["security"], dict):
+                for k, v in yaml_data["security"].items():
+                    config_data[k] = v
+            # Top-level keys override
+            for k, v in yaml_data.items():
+                if k != "security":
+                    config_data[k] = v
+
+    # Merge with environment variables (env vars take precedence)
+    env_data = _load_from_env()
+    config_data.update(env_data)
+
+    # Normalize allowed_directories from YAML strings to Path objects
+    if "allowed_directories" in config_data and isinstance(
+        config_data["allowed_directories"], list
+    ):
+        config_data["allowed_directories"] = _normalize_allowed_directories(
+            config_data["allowed_directories"]
+        )
+
+    # Build MCPConfig; __post_init__ fills defaults for any omitted fields
+    known_fields = {f.name for f in MCPConfig.__dataclass_fields__.values()}
+    return MCPConfig(**{k: v for k, v in config_data.items() if k in known_fields})

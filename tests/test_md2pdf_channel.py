@@ -1,7 +1,13 @@
 """MD to PDF channel tests."""
 
+import importlib
+import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+
+# Make weasyprint importable for mock patches when the package is not installed
+if importlib.util.find_spec("weasyprint") is None:
+    sys.modules["weasyprint"] = MagicMock()
 
 import pytest
 from orf.channels.md2pdf import MD2PDFConverter
@@ -65,10 +71,6 @@ class TestMD2PDFConverter:
         assert "--to" in call_args
         assert "pdf" in call_args
 
-    @pytest.mark.skipif(
-        True,
-        reason="WeasyPrint not installed"
-    )
     @patch("orf.channels.md2html.MD2HTMLConverter")
     @patch("weasyprint.HTML")
     def test_convert_weasyprint_success(self, mock_weasyprint_html, mock_md2html_class, sample_md: Path, tmp_path: Path):

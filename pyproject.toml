@@ -3,18 +3,16 @@ name = "omni-re-formatter"
 version = "0.3.0"
 description = "Omni-Re-Formatter: 将本地化后的 MD/XLIFF 还原为目标复杂格式"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [
     { name = "1StepMore" }
 ]
 keywords = ["localization", "docx", "md", "xliff", "pandoc"]
 classifiers = [
-    "Development Status :: 1 - Planning",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
 

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Generator, Optional
 
 from orf.converters.base import BaseConverter, ConversionResult
+from orf.converters.options import ConverterOptions
 from orf.logging import get_logger
 
 
@@ -100,6 +101,29 @@ class StreamingConverter(BaseConverter, ABC):
             转换结果
         """
         pass
+
+    def convert(
+        self,
+        input_path: Path | str,
+        output_path: Path | str,
+        options: ConverterOptions | None = None,
+    ) -> ConversionResult:
+        """Standard convert interface that delegates to ``convert_stream``.
+
+        Makes :class:`StreamingConverter` implement the full
+        :class:`BaseConverter` interface.  Subclasses that need to
+        pass format-specific options to :meth:`convert_stream` should
+        override this method.
+
+        Args:
+            input_path: Input file path
+            output_path: Output file path
+            options: Converter options (ignored in default impl)
+
+        Returns:
+            ConversionResult
+        """
+        return self.convert_stream(input_path, output_path)
 
     def convert_stream(
         self,

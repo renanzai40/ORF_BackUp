@@ -26,6 +26,8 @@ RUN apt-get update \
         pandoc \
         tesseract-ocr \
         tesseract-ocr-eng \
+        tesseract-ocr-chi-sim \
+        tesseract-ocr-chi-tra \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

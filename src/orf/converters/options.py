@@ -81,9 +81,10 @@ class ConverterOptions:
     embed_images: bool = False
 
     # docx layout
-    separate_images: bool = False
+    separate_images: bool = True
     images_dir: str | None = None
     text_only: bool = False
+    images_data: list[dict] | None = None  # OPP images.json payload for separation
 
     # tabular
     delimiter: str = ","

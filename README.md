@@ -233,7 +233,7 @@ src/orf/
 └── error_handlers/   # 错误处理与恢复策略
 ```
 
-## 项目状态 (v0.3.0)
+## 项目状态 (v0.4.1)
 
 - **Agent-Oriented 架构**：MCP Server + Foreman/Specialist + HITL 审批
 - **图片精确定位注入**：支持 DOCX/PPTX/HTML/EPUB 图片按位置回填
