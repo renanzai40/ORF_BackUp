@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.2 (2026-06-12)
+
+### 🛠️ 修复 / Fixed
+
+- **`tests/test_md2docx_channel.py`**: Fixed `test_convert_success` assertion — converter strips images before pandoc and passes `.stripped.md`, so the assertion now accepts any pandoc arg containing the input stem
+- **`tests/test_md_separate_images.py`**: Fixed 3 test failures:
+  - Manifest path: code writes `output_dir/images.json`, tests looked for `images_dir/image_manifest.json`
+  - Default behavior: `separate_images` default changed to `True`; test now passes `separate_images=False` explicitly
+  - Extraction test: `separate_images` path requires `images_data` from OPP pipeline, not raw MD data URIs
+
 ## v0.4.1 (2026-06-09)
 
 ### 🛠️ 修复 / Fixed

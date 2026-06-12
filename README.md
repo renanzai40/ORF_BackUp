@@ -194,7 +194,7 @@ XLIFF→DOCX 通道现在支持 **浮动图片**（绝对定位，独立于段�
 
 ### MD 图片分离模式 (`--separate-images`)
 
-`apply-md` 命令新增 `--separate-images` / `--images-dir` 标志，启用 **"DOCX + images separate" 模式**。在此模式下，MD 中的 `![alt](path)` 引用被剥离到指定 `images_dir/`，pandoc 生成的 DOCX 仅包含文本结构，图片清单写入 manifest。此模式适用于：MD 源含大量图片导致 pandoc 内嵌体积膨胀、需将图片资源单独发布、需在 DOCX 之外维护图片版本控制等场景。默认关闭（`separate_images=False`）以保持向后兼容。
+`apply-md` 命令新增 `--separate-images` / `--images-dir` 标志，启用 **"DOCX + images separate" 模式**。在此模式下，MD 中的 `![alt](path)` 引用被剥离到指定 `images_dir/`，pandoc 生成的 DOCX 仅包含文本结构，图片清单写入 manifest。此模式适用于：MD 源含大量图片导致 pandoc 内嵌体积膨胀、需将图片资源单独发布、需在 DOCX 之外维护图片版本控制等场景。默认启用（`separate_images=True`），可通过 `ConverterOptions(separate_images=False)` 关闭。
 
 ```bash
 # 启用 MD 图片分离模式
