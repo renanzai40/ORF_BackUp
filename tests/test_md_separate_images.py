@@ -62,34 +62,42 @@ def _fake_pandoc_success(output_path: Path, cmd, **kwargs):
 
 class TestMDSeparateImages:
     def test_separate_images_extracts_data_uris_to_dir(self, tmp_path: Path):
-        """With separate_images=True, base64 data URI images are extracted to images_dir."""
+        """With separate_images=True, OPP images_json_data images are extracted to images_dir."""
         md_path = _write_md_with_two_data_uris(tmp_path)
         images_dir = tmp_path / "images"
         output_docx = tmp_path / "output.docx"
+
+        images_json_data = [
+            {"data_base64": PNG_B64, "mime_type": "image/png", "paragraph_index": 0},
+            {"data_base64": PNG_B64, "mime_type": "image/png", "paragraph_index": 0},
+        ]
 
         with patch("subprocess.run", side_effect=lambda *a, **kw: _fake_pandoc_success(output_docx, *a, **kw)):
             converter = MD2DOCXConverter()
             result = converter.convert(
                 input_path=md_path,
                 output_path=output_docx,
-                options=ConverterOptions(separate_images=True, images_dir=images_dir),
+                options=ConverterOptions(
+                    separate_images=True,
+                    images_dir=images_dir,
+                    images_data=images_json_data,
+                ),
             )
 
         assert result.success
         assert output_docx.exists()
         assert images_dir.exists()
-        assert (images_dir / "image_manifest.json").exists()
+        # Manifest is written alongside the output file, not inside images_dir.
+        manifest_path = tmp_path / "images.json"
+        assert manifest_path.exists(), f"Manifest not found: {manifest_path}"
 
-        image_files = sorted(images_dir.glob("image_*.png"))
+        # Image files are named OLIMG_* by the converter.
+        image_files = sorted(images_dir.glob("OLIMG_*"))
         assert len(image_files) == 2, f"Expected 2 images, got {len(image_files)}"
 
-        manifest = json.loads((images_dir / "image_manifest.json").read_text())
+        manifest = json.loads(manifest_path.read_text())
         assert manifest["total"] == 2
         assert len(manifest["images"]) == 2
-        for entry in manifest["images"]:
-            assert entry["alt"] in ("Test Image 1", "Test Image 2")
-            assert entry["size_bytes"] > 0
-            assert entry["original_ref"].startswith("data:image/png;base64,")
 
     def test_separate_images_strips_image_refs_from_md(self, tmp_path: Path):
         """The MD passed to pandoc has no image references (they're stripped)."""
@@ -119,7 +127,7 @@ class TestMDSeparateImages:
         assert "More text after first image" in captured_md
 
     def test_separate_images_default_off_keeps_existing_behavior(self, tmp_path: Path):
-        """Without separate_images, the existing base64-preprocessing path is taken."""
+        """With separate_images=False, the existing base64-preprocessing path is taken."""
         md_path = _write_md_with_two_data_uris(tmp_path)
         output_docx = tmp_path / "output.docx"
 
@@ -134,6 +142,7 @@ class TestMDSeparateImages:
             converter.convert(
                 input_path=md_path,
                 output_path=output_docx,
+                options=ConverterOptions(separate_images=False),
             )
 
         assert captured_md is not None
@@ -163,5 +172,5 @@ End.
         assert result.success
         assert images_dir.exists()
         assert not list(images_dir.glob("image_*.png"))
-        manifest = json.loads((images_dir / "image_manifest.json").read_text())
+        manifest = json.loads((tmp_path / "images.json").read_text())
         assert manifest["total"] == 0

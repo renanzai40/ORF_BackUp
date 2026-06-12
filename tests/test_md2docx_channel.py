@@ -64,7 +64,9 @@ class TestMD2DOCXConverter:
 
         call_args = mock_run.call_args[0][0]
         assert "pandoc" in call_args
-        assert str(sample_md) in call_args
+        # The converter may strip images first and pass the .stripped.md to pandoc
+        assert any(sample_md.stem in arg for arg in call_args), \
+            f"Expected '{sample_md.stem}' in pandoc args: {call_args}"
         assert str(output) in call_args
         assert "--to" in call_args
         assert "docx" in call_args
