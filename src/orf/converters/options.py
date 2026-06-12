@@ -70,7 +70,7 @@ class ConverterOptions:
     # common / pandoc
     template: Path | None = None
     css: str | None = None
-    engine: str = "pandoc"
+    engine: str = "weasyprint"
     chinese_font: str | None = None
 
     # epub metadata
