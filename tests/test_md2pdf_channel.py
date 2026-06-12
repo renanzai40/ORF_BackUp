@@ -52,13 +52,15 @@ class TestMD2PDFConverter:
 
     @patch("subprocess.run")
     def test_convert_pandoc_success(self, mock_run, sample_md: Path, tmp_path: Path):
+        from orf.converters.options import ConverterOptions
+
         output = tmp_path / "output.pdf"
         mock_run.return_value = MagicMock(
             returncode=0, stdout="", stderr=""
         )
 
         converter = MD2PDFConverter()
-        result = converter.convert(sample_md, output)
+        result = converter.convert(sample_md, output, ConverterOptions(engine="pandoc"))
 
         assert isinstance(result, ConversionResult)
         assert result.success is True
@@ -98,13 +100,15 @@ class TestMD2PDFConverter:
     def test_convert_pandoc_error(self, mock_run, sample_md: Path, tmp_path: Path):
         from subprocess import CalledProcessError
 
+        from orf.converters.options import ConverterOptions
+
         output = tmp_path / "output.pdf"
         mock_run.side_effect = CalledProcessError(
             1, "pandoc", stderr="Unknown extension"
         )
 
         converter = MD2PDFConverter()
-        result = converter.convert(sample_md, output)
+        result = converter.convert(sample_md, output, ConverterOptions(engine="pandoc"))
 
         assert result.success is False
         assert len(result.errors) > 0
@@ -112,11 +116,13 @@ class TestMD2PDFConverter:
 
     @patch("subprocess.run")
     def test_convert_pandoc_not_found(self, mock_run, sample_md: Path, tmp_path: Path):
+        from orf.converters.options import ConverterOptions
+
         output = tmp_path / "output.pdf"
         mock_run.side_effect = FileNotFoundError()
 
         converter = MD2PDFConverter()
-        result = converter.convert(sample_md, output)
+        result = converter.convert(sample_md, output, ConverterOptions(engine="pandoc"))
 
         assert result.success is False
         assert "not in PATH" in result.errors[0].message
