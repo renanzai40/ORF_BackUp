@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.3 (2026-06-14)
+
+### 🛠️ 修复 / Fixed
+
+- **ORF inline image dedup** (`src/orf/channels/xliff2docx.py`): The inline image injection path was missing a dedup check, causing ORF to re-inject inline drawings that were already in the skeleton. The floating-image path (`_inject_floating_image`) had a dedup at the positionH/V level, but the inline path (`_inject_inline_images`) inserted blindly. Result: 2 extra "Picture"-named duplicates of the first 2 source images (IM 16, 组合 116) in the Haier DOCX output (11 source `<w:drawing>` blocks → 13 output blocks).
+  - **Fix**: Added `_paragraph_already_has_drawing(root, cx, cy)` helper that iterates `root.iter('{wp}extent')` document-wide and returns True if any drawing already has matching cx/cy. Wired into the inline image loop (line 1343+). On match, the image is appended to `injected` (mirroring the floating path's "treat as injected" return) and `continue` skips the actual insertion.
+  - **Document-wide (not paragraph-local) dedup** is required because OPP's `paragraph_index` is off-by-one vs. ORF's `//w:p` enumeration: Haier DOCX OPP says paragraph 6, skeleton places IM 16 at paragraph 7. The cx/cy match is the only safe key that works regardless of the indexing mismatch.
+  - **Verification**: `tests/turnkey/test_image_fidelity.py::test_drawing_count_equals_source` was XFAIL pending this fix; now PASS. ORF output for Haier DOCX shows 11 `<w:drawing>` blocks (matches source) and 22 `word/media/` files.
+
 ## v0.4.2 (2026-06-12)
 
 ### 🛠️ 修复 / Fixed
