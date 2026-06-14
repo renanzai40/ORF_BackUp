@@ -1301,8 +1301,24 @@ class XLIFF2DOCXConverter(BaseConverter):
             for i, img in enumerate(imgs):
                 try:
                     img_bytes = self._get_image_bytes(img)
-                    rId = self._add_image_to_zip(img_bytes, img.mime_type, files, namelist)
                     width, height = self._get_image_dimensions(img, img_bytes)
+
+                    # Dedup (TURNKEY-IMG-01): the skeleton already preserves
+                    # the original document.xml (including its inline drawings).
+                    # OPP's images.json lists every image with its original
+                    # paragraph_index, so without this check ORF re-injects
+                    # duplicates of inline drawings that are already in the
+                    # skeleton. Mirrors the floating-image dedup at 1448-1467.
+                    if self._paragraph_already_has_drawing(root, width, height):
+                        logger.debug(
+                            "Skipping duplicate inline image at paragraph %d "
+                            "with cx=%d, cy=%d (already present in skeleton)",
+                            para_idx, width, height,
+                        )
+                        injected.append(img)  # count as "injected" to mirror floating path
+                        continue
+
+                    rId = self._add_image_to_zip(img_bytes, img.mime_type, files, namelist)
                     drawing_xml = self._create_drawing_xml(rId, width, height)
                     drawing_elem = etree.fromstring(drawing_xml)
 
@@ -1363,6 +1379,38 @@ class XLIFF2DOCXConverter(BaseConverter):
             )
 
         return (injected, orphaned)
+
+    def _paragraph_already_has_drawing(
+        self,
+        root: etree._Element,
+        cx: int,
+        cy: int,
+    ) -> bool:
+        """True iff ``root`` already contains a ``<w:drawing>`` with matching extent.
+
+        Mirrors the floating-image dedup at 1448-1467: that one iterates
+        ``root.iter('{wp}anchor')`` (whole document) and skips when the
+        positionH/V match. This one iterates the whole document looking for a
+        ``<wp:extent>`` with matching cx/cy, because:
+
+        * The skeleton preserves the original document.xml — every inline
+          drawing OPP records is already in the skeleton.
+        * OPP's paragraph_index doesn't reliably match ORF's
+          ``root.xpath('//w:p')`` enumeration (off-by-one observed on the
+          Haier DOCX: OPP says 6, skeleton places IM 16 at paragraph 7).
+
+        A global extent match is the only safe dedup key that works regardless
+        of the paragraph-index mismatch.
+        """
+        for extent in root.iter(f"{{{WP_NS}}}extent"):
+            try:
+                existing_cx = int(extent.get("cx", "-1"))
+                existing_cy = int(extent.get("cy", "-1"))
+            except (ValueError, TypeError):
+                continue
+            if existing_cx == cx and existing_cy == cy:
+                return True
+        return False
 
     def _inject_floating_image(
         self,
