@@ -16,6 +16,7 @@ import click
 from orf.channels.md2docx import MD2DOCXConverter
 from orf.channels.md2odt import MD2ODTConverter
 from orf.channels.md2epub import MD2EPUBConverter
+from orf.channels.md2html import MD2HTMLConverter
 from orf.converters.base import BaseConverter
 from orf.converters.options import ConverterOptions
 from orf.parsers.manifest import parse_manifest, find_manifest, ManifestParseError
@@ -233,7 +234,7 @@ def _maybe_install_fake_pandoc() -> None:
 @click.option(
     "--target-format",
     "-t",
-    type=click.Choice(["auto", "docx", "odt", "epub", "html", "rtf", "pdf", "csv", "json", "xlsx", "xml", "ipynb", "eml", "msg"]),
+    type=click.Choice(["auto", "docx", "odt", "epub", "html", "rtf", "pdf", "csv", "json", "xlsx", "xml", "ipynb", "eml", "msg", "icml", "srt"]),
     default="docx",
     help="目标格式",
 )
@@ -417,6 +418,12 @@ def apply_md(
                 f"Install with: pip install omni-re-formatter[email-output]\n"
                 f"Error: {e}"
             )
+    elif target_format == "icml":
+        from orf.channels.md2icml import MD2ICMLConverter
+        converter = MD2ICMLConverter(manifest=manifest, frontmatter=frontmatter)
+    elif target_format == "srt":
+        from orf.channels.md2srt import MD2SRTConverter
+        converter = MD2SRTConverter(manifest=manifest, frontmatter=frontmatter)
     else:
         raise click.ClickException(
             f"Unsupported format '{target_format}'\n"
@@ -573,7 +580,7 @@ def _convert_single(
 
 @main.command("convert-batch")
 @click.argument("input_dir", type=click.Path(exists=True))
-@click.option("--target-format", "-t", type=click.Choice(["docx", "odt", "epub"]))
+@click.option("--target-format", "-t", type=click.Choice(["docx", "odt", "epub", "html"]))
 @click.option("--output-dir", "-o", type=click.Path(), help="输出目录")
 @click.option("--pattern", "-p", default="*.md", help="文件匹配模式")
 @click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
@@ -620,10 +627,12 @@ def convert_batch(
         converter_class = MD2ODTConverter
     elif target_format == "epub":
         converter_class = MD2EPUBConverter
+    elif target_format == "html":
+        converter_class = MD2HTMLConverter
     else:
         raise click.ClickException(
             f"Unsupported format '{target_format}'\n"
-            f"Hint: Valid formats are: docx, odt, epub\n"
+            f"Hint: Valid formats are: docx, odt, epub, html\n"
             f"       Use --target-format <format> to specify"
         )
 
@@ -748,6 +757,26 @@ def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], outpu
             logger.warning(f"Failed to load images from {images_json}: {e}")
 
     logger.info(f"Applying XLIFF {xliff_path} to {input_path} -> {output_path} ({format})")
+
+    # 2026-06-17 round 5 (FIX-#8): XLIFF backfill is format-preserving —
+    # fail early on a mismatched skeleton rather than letting
+    # translate-toolkit crash with an abstract error.
+    # Round 9: also accept .zip (OPP's skeleton.zip packaging).
+    _FORMAT_EXT = {"docx": ".docx", "pptx": ".pptx", "epub": ".epub", "html": ".html", "odt": ".odt"}
+    _ZIP_FORMATS = {"docx", "pptx", "epub"}
+    if format in _FORMAT_EXT:
+        expected_ext = _FORMAT_EXT[format]
+        actual_ext = input_path.suffix.lower()
+        valid_exts = {".xlf", ".xliff", expected_ext}
+        if format in _ZIP_FORMATS:
+            valid_exts.add(".zip")
+        if actual_ext and actual_ext not in valid_exts:
+            raise click.BadParameter(
+                f"Skeleton file extension '{actual_ext}' does not match "
+                f"--format '{format}' (expected '{expected_ext}' or '.zip'). "
+                f"XLIFF backfill is format-preserving; use the MD path for "
+                f"cross-format conversion."
+            )
 
     converter: Any
     if format == "docx":
