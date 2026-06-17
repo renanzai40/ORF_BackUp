@@ -87,3 +87,78 @@ def test_apply_xliff_accepts_xlf_input_with_format(tmp_path):
     assert "does not match" not in combined, (
         f"Generic .xlf should bypass format check; got: {combined}"
     )
+
+
+class TestZipSkeletonAccepted:
+    """FIX-#8 round 9: OPP packages skeleton as .zip; ORF must accept.
+
+    Without this fix, OPP's `skeleton.zip` is rejected by ORF's
+    format-preservation check (`.zip != .docx` for --format=docx).
+    e2e_runner.py Tier 2 run caught this on xliff_cli path.
+    """
+
+    def test_zip_skeleton_with_format_docx_accepted(self, tmp_path):
+        """`.zip` skeleton + --format=docx must be accepted.
+
+        OPP produces `skeleton.zip` from DOCX inputs; this is the
+        canonical skeleton source. ORF's skeleton loader handles it.
+        The round 5 FIX-#8 guard was too strict; round 9 extends it.
+        """
+        fake_skeleton = tmp_path / "input.skeleton.zip"
+        fake_skeleton.write_bytes(b"PK\x03\x04")  # zip magic
+        fake_xlf = tmp_path / "translation.xlf"
+        fake_xlf.write_text('<?xml version="1.0"?><xliff/>')
+        output = tmp_path / "out.docx"
+
+        result = _run_orf_cli(
+            "apply-xliff", str(fake_skeleton),
+            "--xliff", str(fake_xlf),
+            "--output", str(output),
+            "--format", "docx",
+        )
+        # The guard must NOT fire — expect rc=0 OR rc != 2 (rc=2 is the
+        # BadParameter exit code). We accept any other outcome (real
+        # ORF execution may fail for unrelated reasons in tests).
+        assert "does not match" not in (result.stdout + result.stderr), (
+            f".zip skeleton rejected by round 5 guard; round 9 should "
+            f"have extended it:\n{result.stdout}\n{result.stderr}"
+        )
+
+    def test_pptx_skeleton_with_format_docx_still_rejected(self, tmp_path):
+        """Cross-format (pptx + docx) must still be rejected."""
+        fake_skeleton = tmp_path / "input.pptx"
+        fake_skeleton.write_bytes(b"PK\x03\x04")
+        fake_xlf = tmp_path / "translation.xlf"
+        fake_xlf.write_text('<?xml version="1.0"?><xliff/>')
+        output = tmp_path / "out.docx"
+
+        result = _run_orf_cli(
+            "apply-xliff", str(fake_skeleton),
+            "--xliff", str(fake_xlf),
+            "--output", str(output),
+            "--format", "docx",
+        )
+        combined = result.stdout + result.stderr
+        assert "does not match" in combined, (
+            f"Cross-format pptx→docx must be rejected; got:\n{combined}"
+        )
+
+    def test_html_skeleton_with_format_docx_still_rejected(self, tmp_path):
+        """html + docx cross-format: OPP doesn't produce .zip for HTML,
+        so HTML skeleton with --format=docx must be rejected."""
+        fake_skeleton = tmp_path / "input.html"
+        fake_skeleton.write_text("<html></html>")
+        fake_xlf = tmp_path / "translation.xlf"
+        fake_xlf.write_text('<?xml version="1.0"?><xliff/>')
+        output = tmp_path / "out.docx"
+
+        result = _run_orf_cli(
+            "apply-xliff", str(fake_skeleton),
+            "--xliff", str(fake_xlf),
+            "--output", str(output),
+            "--format", "docx",
+        )
+        combined = result.stdout + result.stderr
+        assert "does not match" in combined, (
+            f"HTML→DOCX cross-format must be rejected:\n{combined}"
+        )
