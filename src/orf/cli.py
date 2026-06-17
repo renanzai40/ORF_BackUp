@@ -234,6 +234,9 @@ def _maybe_install_fake_pandoc() -> None:
 @click.option(
     "--target-format",
     "-t",
+    # 2026-06-17 round 10: pptx removed from Choice (MD2PPTXConverter needs
+    # the external `md2pptx` binary which is not installed by default).
+    # Use apply-xliff for PPTX via XLIFF backfill (P2) instead.
     type=click.Choice(["auto", "docx", "odt", "epub", "html", "rtf", "pdf", "csv", "json", "xlsx", "xml", "ipynb", "eml", "msg", "icml", "srt"]),
     default="docx",
     help="目标格式",
