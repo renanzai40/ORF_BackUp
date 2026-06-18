@@ -11,16 +11,13 @@ from pathlib import Path
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-# 日志目录
 LOG_DIR = Path("logs")
 LOG_DIR.mkdir(exist_ok=True, parents=True)
 
-# 日志文件命名
 LOG_FILE_PATTERN = "orf_{date}.log"
-MAX_BYTES = 10 * 1024 * 1024  # 10MB
+MAX_BYTES = 10 * 1024 * 1024
 BACKUP_COUNT = 5
 
-# 全局 logger 缓存
 _loggers: dict[str, logging.Logger] = {}
 
 
@@ -30,16 +27,36 @@ class AuditLogRecord(logging.LogRecord):
     agent_id = 'N/A'
 
 
-# Register the custom record factory
 logging.setLogRecordFactory(AuditLogRecord)
 
 
+def _is_json_mode() -> bool:
+    return os.environ.get("OMNI_LOG_FORMAT", "console").lower() == "json"
+
+
+def _build_formatter(json_mode: bool) -> logging.Formatter:
+    """Return text or JSON formatter based on mode."""
+    if json_mode:
+        from pythonjsonlogger.json import JsonFormatter
+        return JsonFormatter(
+            "%(asctime)s %(levelname)s %(name)s %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            rename_fields={
+                "asctime": "timestamp",
+                "levelname": "level",
+                "name": "module",
+            },
+        )
+    return logging.Formatter(
+        '[%(asctime)s.%(msecs)03d] [%(levelname)s] [%(name)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+
 def setup_logger(name: str = "orf", level: str = "INFO") -> logging.Logger:
-    """配置 ORF 日志器"""
     if name in _loggers:
         return _loggers[name]
 
-    # Allow env var override: ORF_LOG_LEVEL=DEBUG
     level = os.environ.get("ORF_LOG_LEVEL", level).upper()
 
     logger = logging.getLogger(name)
@@ -49,12 +66,14 @@ def setup_logger(name: str = "orf", level: str = "INFO") -> logging.Logger:
         return logger
 
     numeric_level = getattr(logging, level, logging.INFO)
+    json_mode = _is_json_mode()
+
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setLevel(numeric_level)
-    console_formatter = logging.Formatter(
-        '[%(levelname)s] %(message)s'
-    )
-    console_handler.setFormatter(console_formatter)
+    if json_mode:
+        console_handler.setFormatter(_build_formatter(json_mode=True))
+    else:
+        console_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
     logger.addHandler(console_handler)
 
     log_file = LOG_DIR / LOG_FILE_PATTERN.format(date=datetime.now().strftime("%Y%m%d"))
@@ -65,11 +84,7 @@ def setup_logger(name: str = "orf", level: str = "INFO") -> logging.Logger:
         encoding="utf-8",
     )
     file_handler.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter(
-        '[%(asctime)s.%(msecs)03d] [%(levelname)s] [%(name)s] %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    file_handler.setFormatter(file_formatter)
+    file_handler.setFormatter(_build_formatter(json_mode=json_mode))
     logger.addHandler(file_handler)
 
     _loggers[name] = logger
@@ -99,16 +114,6 @@ def get_audit_logger(name: str = "orf.audit") -> logging.Logger:
 
 
 def get_logger(name: str = "orf") -> logging.Logger:
-    """获取 logger 实例
-
-    如果 logger 未配置，先进行默认配置。
-
-    Args:
-        name: 模块名称 (如 "cli", "channel.md2docx")
-
-    Returns:
-        Logger 实例
-    """
     if name not in _loggers:
         return setup_logger(name)
     return _loggers[name]
