@@ -595,6 +595,46 @@ def apply_xliff(
     return json.dumps(result)
 
 
+def batch_convert(input_dir: str, target_format: str, pattern: str = "*.md") -> str:
+    """Batch convert MD files. In-process equivalent of the MCP tool."""
+    result_dir = _path_validator.validate_path(input_dir, allow_missing=True)
+    if not result_dir.success:
+        return json.dumps({
+            "success_count": 0,
+            "fail_count": 0,
+            "total": 0,
+            "errors": [{"code": "PATH_NOT_ALLOWED", "message": result_dir.error, "recovery_strategy": None}]
+        })
+
+    args = ["convert-batch", input_dir, "--target-format", target_format, "--pattern", pattern]
+    return json.dumps(_run_cli_command(args))
+
+
+def detect_format(file_path: str) -> str:
+    """Detect document format. In-process equivalent of the MCP tool."""
+    result_df = _path_validator.validate_path(file_path)
+    if not result_df.success:
+        return json.dumps({"format": "UNKNOWN", "confidence": 0.0})
+
+    args = ["info", file_path]
+    result = _run_cli_command(args)
+    return json.dumps({"format": result.get("format", "UNKNOWN"), "confidence": 1.0})
+
+
+def info(file_path: str) -> str:
+    """Get document information. In-process equivalent of the MCP tool."""
+    result_info = _path_validator.validate_path(file_path)
+    if not result_info.success:
+        return json.dumps({
+            "format": "UNKNOWN",
+            "size_mb": 0.0,
+            "resource_count": None,
+            "manifest_status": "error"
+        })
+
+    return json.dumps(_run_cli_command(["info", file_path]))
+
+
 def main():
     """Run the MCP server."""
     server = get_server()

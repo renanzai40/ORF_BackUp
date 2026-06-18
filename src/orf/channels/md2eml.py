@@ -90,15 +90,34 @@ class MD2EMLConverter(BaseConverter):
 
         # Parse email_headers from frontmatter
         email_headers = self._parse_email_headers(content)
-        if not email_headers:
-            return ConversionResult(
-                output_path=output_path,
-                success=False,
-                errors=["Email headers required in frontmatter"],
-            )
 
         # Extract MD body (content after frontmatter)
         md_body = self._strip_frontmatter(content)
+
+        # 2026-06-18 round 14 #5: OPP's EmailExtractor parses RFC 822
+        # headers (From, To, Subject, Date) into metadata, but the MD
+        # frontmatter is replaced by OL during translation, so any
+        # email_headers we put there are lost. The default path now uses
+        # synthesized headers from the body + current timestamp so the
+        # round-trip still produces a valid (if minimal) EML.
+        if not email_headers:
+            logger.info(
+                "No email_headers in frontmatter; synthesizing defaults "
+                "from MD body. Subject=first H1, From=placeholder."
+            )
+            email_headers = {}
+            # Use the first H1 as the subject (typical email title convention)
+            for line in md_body.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("# "):
+                    email_headers["Subject"] = stripped[2:].strip()
+                    break
+                if stripped:
+                    break
+            if "Subject" not in email_headers:
+                email_headers["Subject"] = "(no subject)"
+            email_headers["From"] = "noreply@localization.local"
+            email_headers["To"] = "recipient@localization.local"
 
         # Create RFC 5322 email message
         msg = EmailMessage()
