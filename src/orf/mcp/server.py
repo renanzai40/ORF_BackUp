@@ -19,6 +19,8 @@ except ImportError:
 
 from orf.mcp.security import PathValidator
 from orf.logging import get_logger
+# 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
+from orf.mcp.auth import check_auth, auth_failure_response
 
 # ULTRAREADY-VERIFY (2026-06-07): env vars that must NEVER be inherited
 # by the CLI subprocess. These are test-only seams — if a test harness
@@ -364,8 +366,12 @@ def _register_tools():
         return json.dumps(result)
 
     @server.tool()
-    def batch_convert(input_dir: str, target_format: str, pattern: str = "*.md") -> str:
+    def batch_convert(input_dir: str, target_format: str, pattern: str = "*.md", auth_token: Optional[str] = None) -> str:
         """Batch convert MD files."""
+        # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
+        auth_ok, _ = check_auth(auth_token)
+        if not auth_ok:
+            return json.dumps(auth_failure_response(), ensure_ascii=False)
         result_dir = _path_validator.validate_path(input_dir, allow_missing=True)
         if not result_dir.success:
             return json.dumps({
@@ -379,8 +385,12 @@ def _register_tools():
         return json.dumps(_run_cli_command(args))
 
     @server.tool()
-    def detect_format(file_path: str) -> str:
+    def detect_format(file_path: str, auth_token: Optional[str] = None) -> str:
         """Detect document format."""
+        # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
+        auth_ok, _ = check_auth(auth_token)
+        if not auth_ok:
+            return json.dumps(auth_failure_response(), ensure_ascii=False)
         result_df = _path_validator.validate_path(file_path)
         if not result_df.success:
             return json.dumps({"format": "UNKNOWN", "confidence": 0.0})
@@ -390,8 +400,12 @@ def _register_tools():
         return json.dumps({"format": result.get("format", "UNKNOWN"), "confidence": 1.0})
 
     @server.tool()
-    def info(file_path: str) -> str:
+    def info(file_path: str, auth_token: Optional[str] = None) -> str:
         """Get document information."""
+        # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
+        auth_ok, _ = check_auth(auth_token)
+        if not auth_ok:
+            return json.dumps(auth_failure_response(), ensure_ascii=False)
         result_info = _path_validator.validate_path(file_path)
         if not result_info.success:
             return json.dumps({
@@ -420,7 +434,12 @@ def apply_md(
     output_path: Optional[str] = None,
     images: Optional[list[dict]] = None,
     separate_images: bool = True,
+    auth_token: Optional[str] = None,
 ) -> str:
+    # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
+    auth_ok, _ = check_auth(auth_token)
+    if not auth_ok:
+        return json.dumps(auth_failure_response(), ensure_ascii=False)
     """Convert MD to target format. In-process equivalent of the MCP tool."""
     result = _path_validator.validate_path(input_md)
     if not result.success:
@@ -474,7 +493,12 @@ def apply_xliff(
     format: str,
     xliff_content: Optional[str] = None,
     images: Optional[list[dict]] = None,
+    auth_token: Optional[str] = None,
 ) -> str:
+    # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
+    auth_ok, _ = check_auth(auth_token)
+    if not auth_ok:
+        return json.dumps(auth_failure_response(), ensure_ascii=False)
     """Apply XLIFF translation. In-process equivalent of the MCP tool."""
     # C4 fix: reject image placements that carry `file_path` (arbitrary
     # file read). MCP clients must provide `data_base64` only.
@@ -595,8 +619,12 @@ def apply_xliff(
     return json.dumps(result)
 
 
-def batch_convert(input_dir: str, target_format: str, pattern: str = "*.md") -> str:
+def batch_convert(input_dir: str, target_format: str, pattern: str = "*.md", auth_token: Optional[str] = None) -> str:
     """Batch convert MD files. In-process equivalent of the MCP tool."""
+    # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
+    auth_ok, _ = check_auth(auth_token)
+    if not auth_ok:
+        return json.dumps(auth_failure_response(), ensure_ascii=False)
     result_dir = _path_validator.validate_path(input_dir, allow_missing=True)
     if not result_dir.success:
         return json.dumps({
@@ -610,8 +638,12 @@ def batch_convert(input_dir: str, target_format: str, pattern: str = "*.md") -> 
     return json.dumps(_run_cli_command(args))
 
 
-def detect_format(file_path: str) -> str:
+def detect_format(file_path: str, auth_token: Optional[str] = None) -> str:
     """Detect document format. In-process equivalent of the MCP tool."""
+    # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
+    auth_ok, _ = check_auth(auth_token)
+    if not auth_ok:
+        return json.dumps(auth_failure_response(), ensure_ascii=False)
     result_df = _path_validator.validate_path(file_path)
     if not result_df.success:
         return json.dumps({"format": "UNKNOWN", "confidence": 0.0})
@@ -621,8 +653,12 @@ def detect_format(file_path: str) -> str:
     return json.dumps({"format": result.get("format", "UNKNOWN"), "confidence": 1.0})
 
 
-def info(file_path: str) -> str:
+def info(file_path: str, auth_token: Optional[str] = None) -> str:
     """Get document information. In-process equivalent of the MCP tool."""
+    # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
+    auth_ok, _ = check_auth(auth_token)
+    if not auth_ok:
+        return json.dumps(auth_failure_response(), ensure_ascii=False)
     result_info = _path_validator.validate_path(file_path)
     if not result_info.success:
         return json.dumps({
