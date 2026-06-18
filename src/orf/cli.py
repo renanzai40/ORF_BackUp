@@ -234,10 +234,10 @@ def _maybe_install_fake_pandoc() -> None:
 @click.option(
     "--target-format",
     "-t",
-    # 2026-06-17 round 10: pptx removed from Choice (MD2PPTXConverter needs
-    # the external `md2pptx` binary which is not installed by default).
-    # Use apply-xliff for PPTX via XLIFF backfill (P2) instead.
-    type=click.Choice(["auto", "docx", "odt", "epub", "html", "rtf", "pdf", "csv", "json", "xlsx", "xml", "ipynb", "eml", "msg", "icml", "srt"]),
+    # 2026-06-17 round 10: pptx removed (md2pptx binary not installed).
+    # 2026-06-18 round 13: re-added after MartinPacker/md2pptx installed at
+    # /home/renanzai/.local/bin/md2pptx. See .omo/plans/2026-06-17-fix-plan-round-13.md.
+    type=click.Choice(["auto", "docx", "odt", "epub", "html", "rtf", "pdf", "pptx", "csv", "json", "xlsx", "xml", "ipynb", "eml", "msg", "icml", "srt"]),
     default="docx",
     help="目标格式",
 )
@@ -427,10 +427,13 @@ def apply_md(
     elif target_format == "srt":
         from orf.channels.md2srt import MD2SRTConverter
         converter = MD2SRTConverter(manifest=manifest, frontmatter=frontmatter)
+    elif target_format == "pptx":
+        from orf.channels.md2pptx import MD2PPTXConverter
+        converter = MD2PPTXConverter(manifest=manifest, frontmatter=frontmatter)
     else:
         raise click.ClickException(
             f"Unsupported format '{target_format}'\n"
-            f"Hint: Valid formats are: docx, odt, epub, html, rtf, pdf, csv, json, xlsx, xml, ipynb, eml, msg\n"
+            f"Hint: Valid formats are: docx, odt, epub, html, rtf, pdf, pptx, csv, json, xlsx, xml, ipynb, eml, msg\n"
             f"       Use --target-format <format> to specify"
         )
 

@@ -49,10 +49,14 @@ class MD2PPTXConverter(BaseConverter):
                 errors=[f"Invalid input file: {input_path}"],
             )
 
+        # md2pptx (MartinPacker) uses positional INPUT OUTPUT — no -o flag.
+        # The earlier `md2pptx INPUT -o OUTPUT` form made md2pptx treat "-o"
+        # as the output filename and silently created a file literally named
+        # "-o" in CWD. See .omo/plans/2026-06-17-fix-plan-round-13.md.
         cmd = [
             "md2pptx",
             str(input_path),
-            "-o", str(output_path),
+            str(output_path),
         ]
 
         try:
