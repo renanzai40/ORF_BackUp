@@ -25,6 +25,7 @@ class AuditLogRecord(logging.LogRecord):
     """Custom log record with audit fields."""
     correlation_id = 'N/A'
     agent_id = 'N/A'
+    request_id = 'N/A'
 
 
 logging.setLogRecordFactory(AuditLogRecord)
@@ -104,13 +105,27 @@ def get_audit_logger(name: str = "orf.audit") -> logging.Logger:
     handler.setLevel(logging.INFO)
 
     formatter = logging.Formatter(
-        '[%(asctime)s.%(msecs)03d] [%(levelname)s] [%(name)s] [corr:%(correlation_id)s] [agent:%(agent_id)s] %(message)s',
+        '[%(asctime)s.%(msecs)03d] [%(levelname)s] [%(name)s] [corr:%(correlation_id)s] [agent:%(agent_id)s] [req:%(request_id)s] %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
     return logger
+
+
+def log_request_id(request_id: str, context: str = "") -> None:
+    """Log a request_id entry to the audit log (B2).
+
+    Writes a single audit line with the request_id and optional
+    context message. Used by ORF entry points to trace a
+    request from OPP -> OL -> ORF.
+    """
+    logger = get_audit_logger()
+    msg = f"request_id={request_id}"
+    if context:
+        msg += f" {context}"
+    logger.info(msg, extra={"request_id": request_id})
 
 
 def get_logger(name: str = "orf") -> logging.Logger:

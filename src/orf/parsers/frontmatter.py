@@ -21,6 +21,7 @@ class FrontmatterMetadata:
     version: str = "unknown"
     translated_at: str = ""
     original_file: str = ""
+    request_id: str = ""
 
 
 class FrontmatterParseError(Exception):
@@ -89,6 +90,7 @@ def parse_frontmatter(md_path: Path | str) -> FrontmatterMetadata:
         version=data.get("version", "unknown"),
         translated_at=data.get("translated_at", ""),
         original_file=data.get("original_file", ""),
+        request_id=data.get("request_id", ""),
     )
 
 
