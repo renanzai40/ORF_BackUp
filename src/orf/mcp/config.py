@@ -54,7 +54,16 @@ class MCPConfig:
 
 
 def _parse_allowed_dirs(value: str) -> List[Path]:
-    """Parse colon/semicolon separated paths into a list of Path objects."""
+    """Parse colon/semicolon separated paths into a list of Path objects.
+
+    2026-06-17 round 12 (FIX-#5): handle single-path values without
+    separator. Previously `/tmp` returned [] (no separator matched),
+    which caused the MCP server to fall back to Path.cwd() as the
+    allowlist, rejecting tmp_path fixtures in tests.
+    """
+    value = value.strip()
+    if not value:
+        return []
     separators = [":", ";"]
     for sep in separators:
         if sep in value:
@@ -62,7 +71,7 @@ def _parse_allowed_dirs(value: str) -> List[Path]:
             if paths:
                 return paths
             break
-    return []
+    return [Path(value)]
 
 
 def _load_from_yaml(config_path: Path) -> Optional[dict]:
