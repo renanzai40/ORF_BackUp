@@ -417,6 +417,19 @@ def _register_tools():
 
         return json.dumps(_run_cli_command(["info", file_path]))
 
+    @server.tool()
+    def ping(auth_token: Optional[str] = None) -> str:
+        """Health check endpoint. Returns module name and version."""
+        # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
+        auth_ok, _ = check_auth(auth_token)
+        if not auth_ok:
+            return json.dumps(auth_failure_response(), ensure_ascii=False)
+        from orf import __version__ as _orf_version
+        return json.dumps(
+            {"success": True, "module": "orf", "version": _orf_version},
+            ensure_ascii=False,
+        )
+
 
 # Module-level aliases for in-process use (tests, callers that import these
 # directly rather than going through the FastMCP server). The bodies of
@@ -669,6 +682,19 @@ def info(file_path: str, auth_token: Optional[str] = None) -> str:
         })
 
     return json.dumps(_run_cli_command(["info", file_path]))
+
+
+def ping(auth_token: Optional[str] = None) -> str:
+    """Health check endpoint. In-process equivalent of the MCP tool."""
+    # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
+    auth_ok, _ = check_auth(auth_token)
+    if not auth_ok:
+        return json.dumps(auth_failure_response(), ensure_ascii=False)
+    from orf import __version__ as _orf_version
+    return json.dumps(
+        {"success": True, "module": "orf", "version": _orf_version},
+        ensure_ascii=False,
+    )
 
 
 def main():
