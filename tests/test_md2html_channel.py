@@ -44,12 +44,8 @@ class TestMD2HTMLConverter:
         converter = MD2HTMLConverter()
         assert converter.validate_input(txt_file) is False
 
-    @patch("subprocess.run")
-    def test_convert_success(self, mock_run, sample_md: Path, tmp_path: Path):
+    def test_convert_success(self, sample_md: Path, tmp_path: Path):
         output = tmp_path / "output.html"
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout="", stderr=""
-        )
 
         converter = MD2HTMLConverter()
         result = converter.convert(sample_md, output)
@@ -57,55 +53,48 @@ class TestMD2HTMLConverter:
         assert isinstance(result, ConversionResult)
         assert result.success is True
         assert result.output_path == output
+        assert output.exists()
+        assert output.stat().st_size > 0
+        assert result.metadata["tool"] == "markdown"
 
-        call_args = mock_run.call_args[0][0]
-        assert "pandoc" in call_args
-        assert str(sample_md) in call_args
-        assert str(output) in call_args
-        assert "--to" in call_args
-        assert "html5" in call_args
-
-    @patch("subprocess.run")
-    def test_convert_with_css(self, mock_run, sample_md: Path, tmp_path: Path):
+    def test_convert_with_css(self, sample_md: Path, tmp_path: Path):
         output = tmp_path / "output.html"
         css_file = tmp_path / "style.css"
-        css_file.touch()
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        css_file.write_text("body { color: red; }")
 
         converter = MD2HTMLConverter(css=css_file)
         result = converter.convert(sample_md, output)
 
         assert result.success is True
-        call_args = mock_run.call_args[0][0]
-        assert "--css" in call_args
-        assert str(css_file) in call_args
+        content = output.read_text(encoding="utf-8")
+        assert f'link rel="stylesheet" href="{css_file}"' in content
 
-    @patch("subprocess.run")
-    def test_convert_pandoc_error(self, mock_run, sample_md: Path, tmp_path: Path):
-        from subprocess import CalledProcessError
-
+    @patch("orf.channels.md2html.markdown.Markdown")
+    def test_convert_pandoc_error(self, mock_md_class, sample_md: Path, tmp_path: Path):
         output = tmp_path / "output.html"
-        mock_run.side_effect = CalledProcessError(
-            1, "pandoc", stderr="Unknown extension"
-        )
+        mock_instance = MagicMock()
+        mock_instance.convert.side_effect = RuntimeError("Markdown parse failure")
+        mock_md_class.return_value = mock_instance
 
         converter = MD2HTMLConverter()
         result = converter.convert(sample_md, output)
 
         assert result.success is False
         assert len(result.errors) > 0
-        assert "Pandoc error" in result.errors[0].message
+        assert "HTML conversion error" in result.errors[0].message
 
-    @patch("subprocess.run")
-    def test_convert_pandoc_not_found(self, mock_run, sample_md: Path, tmp_path: Path):
+    @patch("orf.channels.md2html.markdown.Markdown")
+    def test_convert_pandoc_not_found(self, mock_md_class, sample_md: Path, tmp_path: Path):
         output = tmp_path / "output.html"
-        mock_run.side_effect = FileNotFoundError()
+        mock_instance = MagicMock()
+        mock_instance.convert.side_effect = OSError("Some I/O error")
+        mock_md_class.return_value = mock_instance
 
         converter = MD2HTMLConverter()
         result = converter.convert(sample_md, output)
 
         assert result.success is False
-        assert "not in PATH" in result.errors[0].message
+        assert "HTML conversion error" in result.errors[0].message
 
     def test_convert_invalid_input(self, tmp_path: Path):
         invalid_file = tmp_path / "nonexistent.md"
@@ -116,3 +105,23 @@ class TestMD2HTMLConverter:
 
         assert result.success is False
         assert "Invalid input file" in result.errors[0].message
+
+    def test_convert_pure_python_no_pandoc(self, tmp_path):
+        """Test that the pure-Python markdown path works without pandoc."""
+        md_file = tmp_path / "test.md"
+        md_file.write_text("# Hello\n\nThis is a **test** paragraph.\n\n- List item 1\n- List item 2\n\n```python\nprint('hello')\n```")
+
+        output_file = tmp_path / "output.html"
+        converter = MD2HTMLConverter()
+        result = converter.convert(str(md_file), str(output_file))
+
+        assert result.success, f"Conversion failed: {result.errors}"
+        assert output_file.exists(), "Output file not created"
+        assert output_file.stat().st_size > 100, "Output too small"
+
+        content = output_file.read_text(encoding='utf-8')
+        assert '<!DOCTYPE html>' in content, "Missing DOCTYPE"
+        assert '<h1' in content, "Missing h1 heading"
+        assert '<strong>' in content, "Missing bold text"
+        assert '<li>' in content, "Missing list item"
+        assert '<code' in content, "Missing code block"

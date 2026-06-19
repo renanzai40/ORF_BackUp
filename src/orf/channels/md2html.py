@@ -1,10 +1,11 @@
-"""Markdown to HTML conversion channel using Pandoc."""
+"""Markdown to HTML conversion channel using the Python markdown library (pandoc-independent)."""
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from typing import Optional
+
+import markdown
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
@@ -16,7 +17,7 @@ logger = get_logger("channel.md2html")
 
 
 class MD2HTMLConverter(BaseConverter):
-    """Markdown to HTML converter using Pandoc."""
+    """Markdown to HTML converter using the Python markdown library (pandoc-independent)."""
 
     def __init__(
         self,
@@ -52,52 +53,62 @@ class MD2HTMLConverter(BaseConverter):
                 errors=[f"Invalid input file: {input_path}"],
             )
 
-        cmd = [
-            "pandoc",
-            str(input_path),
-            "-o", str(output_path),
-            "--to", "html5",
-            "--standalone",
-        ]
-
-        css = opts.css or self.css
-        if css:
-            cmd.extend(["--css", str(css)])
-
         try:
-            logger.info(f"Running: {' '.join(cmd)}")
-            cmd[1] = str(input_path.resolve())
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=True,
-                cwd=str(input_path.parent),
+            md_content = input_path.read_text(encoding="utf-8")
+
+            extensions = ["extra", "codehilite", "toc", "tables", "fenced_code"]
+            md = markdown.Markdown(extensions=extensions)
+            body_html = md.convert(md_content)
+
+            css = opts.css or self.css
+            css_link = f'<link rel="stylesheet" href="{css}">' if css else ""
+
+            html = (
+                '<!DOCTYPE html>\n'
+                '<html lang="en">\n'
+                '<head>\n'
+                '<meta charset="utf-8">\n'
+                '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+                '<title>Converted Document</title>\n'
+                f'{css_link}\n'
+                '<style>\n'
+                'body {\n'
+                '    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;\n'
+                '    max-width: 48rem;\n'
+                '    margin: 0 auto;\n'
+                '    padding: 2rem;\n'
+                '    line-height: 1.6;\n'
+                '    color: #333;\n'
+                '}\n'
+                'pre { background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; }\n'
+                'code { font-family: "Fira Code", "Cascadia Code", monospace; font-size: 0.9em; }\n'
+                'table { border-collapse: collapse; width: 100%; }\n'
+                'th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; }\n'
+                'th { background: #f4f4f4; }\n'
+                '</style>\n'
+                '</head>\n'
+                '<body>\n'
+                f'{body_html}\n'
+                '</body>\n'
+                '</html>\n'
             )
 
-            logger.debug(f"Pandoc output: {result.stdout}")
-            if result.stderr:
-                logger.warning(f"Pandoc stderr: {result.stderr}")
+            output_path.write_text(html, encoding="utf-8")
+
+            logger.info(f"Converted {input_path} to HTML using markdown library")
 
             return ConversionResult(
                 output_path=output_path,
                 success=True,
-                metadata={"tool": "pandoc", "cmd": " ".join(cmd)},
+                metadata={"tool": "markdown", "extensions": extensions},
             )
 
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Pandoc failed: {e.stderr}")
+        except Exception as e:
+            logger.error(f"HTML conversion failed: {e}")
             return ConversionResult(
                 output_path=output_path,
                 success=False,
-                errors=[f"Pandoc error: {e.stderr}"],
-            )
-        except FileNotFoundError:
-            logger.error("Pandoc not found in PATH")
-            return ConversionResult(
-                output_path=output_path,
-                success=False,
-                errors=["Pandoc not installed or not in PATH"],
+                errors=[f"HTML conversion error: {e}"],
             )
 
     def inject_images(
