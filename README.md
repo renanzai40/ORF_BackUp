@@ -37,6 +37,13 @@ ORF 是 Omni 文档本地化生态的最后一环，负责将标准化中间件�
 ### 邮件格式
 - EML, MSG
 
+### 转换引擎依赖
+
+- **pandoc 路径**：MD→{DOCX, ODT, EPUB, RTF, ICML} 需要 `pandoc`（由 `pypandoc-binary` 自动提供，`pip install omni-re-formatter` 时安装）。
+- **纯 Python 路径**：MD→HTML 和 MD→PDF（weasyprint 引擎）不依赖 pandoc，使用 `markdown` 库 + WeasyPrint。
+- **XLIFF 跨格式**：`apply-xliff --force` 可绕过格式校验，在跨格式场景下尝试回填并输出警告。
+- **邮件格式**：MD→MSG 在缺少 `email_headers` frontmatter 时自动合成默认头，不再硬失败。
+
 ## 安装
 
 ```bash
