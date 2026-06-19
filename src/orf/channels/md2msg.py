@@ -22,6 +22,27 @@ FRONTMATTER_PATTERN = re.compile(
 )
 
 
+def _synthesize_default_headers(md_body: str) -> dict[str, str]:
+    """Synthesize default email headers from markdown body.
+
+    Uses the first H1 as subject; fills From/To with placeholder addresses.
+    """
+    headers: dict[str, str] = {
+        "from": "noreply@localization.local",
+        "to": "recipient@localization.local",
+    }
+    for line in md_body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            headers["subject"] = stripped[2:].strip()
+            break
+        if stripped:
+            break
+    if "subject" not in headers:
+        headers["subject"] = "(no subject)"
+    return headers
+
+
 class MD2MSGConverter(BaseConverter):
     """Markdown to Outlook MSG converter using Aspose.Email."""
 
@@ -110,15 +131,15 @@ class MD2MSGConverter(BaseConverter):
         email_headers = self._parse_email_headers(content)
         mapi_properties = self._parse_mapi_properties(content)
 
-        if not email_headers and not mapi_properties:
-            return ConversionResult(
-                output_path=output_path,
-                success=False,
-                errors=["Email headers or MAPI properties required in frontmatter"],
-            )
-
         # Extract MD body (content after frontmatter)
         md_body = self._strip_frontmatter(content)
+
+        if not email_headers and not mapi_properties:
+            logger.info(
+                "No email_headers in frontmatter; synthesizing defaults "
+                "from MD body. Subject=first H1, From/To=placeholders."
+            )
+            email_headers = _synthesize_default_headers(md_body)
 
         try:
             from aspose.email import (

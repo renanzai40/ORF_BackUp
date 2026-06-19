@@ -168,20 +168,19 @@ class TestMD2MSGConverter:
         args, _kwargs = mapi_msg.save.call_args
         assert str(output) in args
 
-    def test_convert_errors_when_no_headers_or_mapi(
+    def test_convert_fallback_when_no_headers_or_mapi(
         self, msg_md_no_headers: Path, tmp_path: Path
     ):
+        """When no email_headers or mapi_properties exist, conversion succeeds
+        with synthesized defaults (subject from H1 or '(no subject)')."""
         _install_aspose_mocks()
         output = tmp_path / "out.msg"
 
         converter = md2msg.MD2MSGConverter()
         result = converter.convert(msg_md_no_headers, output)
 
-        assert result.success is False
-        assert any(
-            "Email headers or MAPI properties required" in e.message
-            for e in result.errors
-        )
+        assert result.success is True
+        assert result.metadata.get("format") == "MSG"
 
     def test_convert_writes_msg_file(self, msg_md: Path, tmp_path: Path):
         """Happy path: a real .msg file gets written and the file system is touched."""

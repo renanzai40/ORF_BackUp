@@ -700,10 +700,15 @@ def convert_batch(
 @click.option("--no-cache", "no_cache", is_flag=True, help="Skip the .omni_cache/ cache check (force a fresh conversion)")
 @click.option("--clear-cache", "clear_cache", is_flag=True, help="Remove all cached ORF outputs and exit")
 @click.option("--max-file-size-mb", type=float, default=None, help="拒绝超过此大小 (MB) 的文件")
-def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], output: str, format: str, output_json: bool, images_json: str, no_cache: bool, clear_cache: bool, max_file_size_mb: float | None = None) -> None:
+@click.option("--force", is_flag=True, default=False, help="Bypass skeleton format validation (may produce broken output). Use with caution.")
+def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], output: str, format: str, output_json: bool, images_json: str, no_cache: bool, clear_cache: bool, max_file_size_mb: float | None = None, force: bool = False) -> None:
     """Apply XLIFF translation to original document.
 
-    INPUT_FILE: Original document (DOCX/PPTX/EPUB/HTML)
+    INPUT_FILE: Original document (DOCX/PPTX/EPUB/HTML) or skeleton (XLIFF/ZIP).
+    
+    XLIFF backfill is format-preserving — the skeleton file extension must match
+    --format by default. Use --force to bypass this validation for experimental
+    cross-format conversion (output may be incomplete or invalid).
     """
     input_path = Path(input_file)
     output_path = Path(output)
@@ -777,12 +782,19 @@ def apply_xliff(input_file: str, xliff: str, xliff_content: Optional[str], outpu
         if format in _ZIP_FORMATS:
             valid_exts.add(".zip")
         if actual_ext and actual_ext not in valid_exts:
-            raise click.BadParameter(
-                f"Skeleton file extension '{actual_ext}' does not match "
-                f"--format '{format}' (expected '{expected_ext}' or '.zip'). "
-                f"XLIFF backfill is format-preserving; use the MD path for "
-                f"cross-format conversion."
-            )
+            if not force:
+                raise click.BadParameter(
+                    f"Skeleton file extension '{actual_ext}' does not match "
+                    f"--format '{format}' (expected '{expected_ext}' or '.zip'). "
+                    f"XLIFF backfill is format-preserving; use the MD path for "
+                    f"cross-format conversion, or pass --force to attempt anyway "
+                    f"(output may be incomplete or invalid)."
+                )
+            else:
+                logger.warning(
+                    f"FORCE MODE: Skeleton extension '{actual_ext}' does not match "
+                    f"--format '{format}'. Continuing with --force flag — output may be broken."
+                )
 
     converter: Any
     if format == "docx":

@@ -162,3 +162,67 @@ class TestZipSkeletonAccepted:
         assert "does not match" in combined, (
             f"HTML→DOCX cross-format must be rejected:\n{combined}"
         )
+
+
+class TestForceFlag:
+    """W2.2: --force flag bypasses skeleton format validation with a warning."""
+
+    def test_force_bypasses_validation(self, tmp_path):
+        """--force allows cross-format skeleton/format mismatch to proceed."""
+        skeleton = tmp_path / "input.pptx"
+        skeleton.write_bytes(b"PK\x03\x04")
+        xlf = tmp_path / "translation.xlf"
+        xlf.write_text('<?xml version="1.0"?><xliff/>')
+        output = tmp_path / "out.docx"
+
+        # Without --force: should fail with format mismatch
+        result = _run_orf_cli(
+            "apply-xliff", str(skeleton),
+            "--xliff", str(xlf),
+            "--output", str(output),
+            "--format", "docx",
+        )
+        assert result.returncode != 0
+        combined = result.stdout + result.stderr
+        assert "does not match" in combined, (
+            f"Expected format rejection without --force; got:\n{combined}"
+        )
+
+        # With --force: should NOT fail with the BadParameter rejection
+        # (it may still fail for other reasons, but the FORCE MODE warning is present)
+        result = _run_orf_cli(
+            "apply-xliff", str(skeleton),
+            "--xliff", str(xlf),
+            "--output", str(output),
+            "--format", "docx",
+            "--force",
+        )
+        combined = result.stdout + result.stderr
+        # BadParameter produces "Error: Invalid value:" — must be absent
+        assert "Invalid value" not in combined, (
+            f"--force should bypass BadParameter; got:\n{combined}"
+        )
+        # FORCE MODE warning must be present
+        assert "FORCE MODE" in combined, (
+            f"--force should emit warning; got:\n{combined}"
+        )
+
+    def test_force_produces_warning_on_mismatch(self, tmp_path):
+        """--force emits a clear warning when bypassing format validation."""
+        skeleton = tmp_path / "input.pptx"
+        skeleton.write_bytes(b"PK\x03\x04")
+        xlf = tmp_path / "translation.xlf"
+        xlf.write_text('<?xml version="1.0"?><xliff/>')
+        output = tmp_path / "out.docx"
+
+        result = _run_orf_cli(
+            "apply-xliff", str(skeleton),
+            "--xliff", str(xlf),
+            "--output", str(output),
+            "--format", "docx",
+            "--force",
+        )
+        combined = result.stdout + result.stderr
+        assert "FORCE MODE" in combined or "force" in combined.lower(), (
+            f"--force warning not produced; got:\n{combined}"
+        )
