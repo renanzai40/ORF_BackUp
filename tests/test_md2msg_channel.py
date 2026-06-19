@@ -17,6 +17,13 @@ import pytest
 from orf.channels import md2msg
 from orf.converters.base import ConversionResult
 
+# W2.2: Availability flag for conditional test assertions
+try:
+    import aspose.email as _aspose_check  # noqa: F401
+    ASPOSE_AVAILABLE = True
+except ImportError:
+    ASPOSE_AVAILABLE = False
+
 
 # ---------------------------------------------------------------------------
 # Mock helpers
@@ -125,6 +132,15 @@ def msg_md_mapi_only(tmp_path: Path) -> Path:
     return md
 
 
+@pytest.fixture
+def msg_md_with_headers(tmp_path: Path) -> Path:
+    """W2.2: MD with valid email_headers for MSG/EML conversion tests."""
+    content = "---\nemail_headers:\n  from: sender@example.com\n  to: receiver@example.com\n  subject: Test Subject\n  date: 2026-06-20T10:00:00Z\n---\n\n# Test Subject\n\nBody content.\n"
+    md_file = tmp_path / "with_headers.md"
+    md_file.write_text(content, encoding="utf-8")
+    return md_file
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -222,7 +238,7 @@ class TestMD2MSGConverter:
         assert remaining is images
 
     def test_convert_missing_aspose(self, msg_md: Path, tmp_path: Path):
-        """When aspose.email cannot be imported, convert reports MISSING_DEPENDENCY."""
+        """When aspose.email cannot be imported, convert gracefully degrades to EML fallback."""
         original_module = sys.modules.get("aspose.email")
 
         def _raise_on_import(name, globals=None, locals=None, fromlist=(), level=0):
@@ -240,8 +256,14 @@ class TestMD2MSGConverter:
             converter = md2msg.MD2MSGConverter()
             result = converter.convert(msg_md, output)
 
-            assert result.success is False
-            assert any("Aspose.Email library required" in e.message for e in result.errors)
+            assert result.success is True
+            assert result.metadata.get("format") == "eml"
+            assert len(result.warnings) > 0
+            all_warnings = " ".join(w.message for w in result.warnings)
+            assert "aspose" in all_warnings.lower() or "eml" in all_warnings.lower()
+            # EML fallback file must exist
+            assert result.output_path.exists()
+            assert result.output_path.suffix == ".eml"
         finally:
             builtins.__import__ = real_import
             if original_module is not None:
@@ -249,3 +271,46 @@ class TestMD2MSGConverter:
             else:
                 sys.modules.pop("aspose.email", None)
             importlib.reload(md2msg)
+
+
+# --- W2.2: MSG path documentation tests ---
+
+class TestMSGPathDocumentation:
+    def test_msg_path_without_backend_warns_clearly(self, msg_md_with_headers: Path, tmp_path: Path):
+        """W2.1: Without aspose-email-foss, MD→MSG must emit clear warning, write .eml fallback."""
+        original_modules = {k: sys.modules[k] for k in list(sys.modules) if k.startswith("aspose")}
+        for mod in list(original_modules):
+            del sys.modules[mod]
+
+        importlib.reload(md2msg)
+        try:
+            output = tmp_path / "out.msg"
+            converter = md2msg.MD2MSGConverter()
+            result = converter.convert(msg_md_with_headers, output)
+
+            if not ASPOSE_AVAILABLE:
+                assert result.success is True
+                assert len(result.warnings) > 0
+                all_messages = " ".join(w.message for w in result.warnings)
+                assert "aspose" in all_messages.lower()
+                assert result.metadata.get("format") == "eml"
+                assert result.output_path.suffix == ".eml"
+                assert result.output_path.exists()
+        finally:
+            sys.modules.update(original_modules)
+            importlib.reload(md2msg)
+
+
+class TestEMLAlternative:
+    def test_eml_path_always_works_as_alternative(self, msg_md_with_headers: Path, tmp_path: Path):
+        """W2.1: EML is the fully-supported open alternative — must always work."""
+        from orf.channels.md2eml import MD2EMLConverter
+        output = tmp_path / "out.eml"
+        converter = MD2EMLConverter()
+        result = converter.convert(msg_md_with_headers, output)
+        assert result.success
+        assert output.exists() and output.stat().st_size > 0
+        content = output.read_text(encoding="utf-8")
+        assert "from:" in content.lower()
+        assert "to:" in content.lower()
+        assert "subject:" in content.lower()

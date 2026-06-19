@@ -43,6 +43,8 @@ ORF 是 Omni 文档本地化生态的最后一环，负责将标准化中间件�
 - **纯 Python 路径**：MD→HTML 和 MD→PDF（weasyprint 引擎）不依赖 pandoc，使用 `markdown` 库 + WeasyPrint。
 - **XLIFF 跨格式**：`apply-xliff --force` 可绕过格式校验，在跨格式场景下尝试回填并输出警告。
 - **邮件格式**：MD→MSG 在缺少 `email_headers` frontmatter 时自动合成默认头，不再硬失败。
+- **MD→MSG 格式**：需要 `aspose-email-foss`（GPLv3 开源 fork）— `pip install 'omni-re-formatter[email-output]'`。
+  Aspose 是商业库。**推荐使用 .eml 格式**（ORF 完全支持，W2.1 已实现优雅回退），是开源标准。
 
 ## 安装
 

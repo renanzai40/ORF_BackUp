@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
 
-from orf.converters.base import BaseConverter, ConversionResult
+from orf.converters.base import BaseConverter, ConversionResult, WarningDetail
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
 from orf.logging import get_logger
@@ -41,6 +42,19 @@ def _synthesize_default_headers(md_body: str) -> dict[str, str]:
     if "subject" not in headers:
         headers["subject"] = "(no subject)"
     return headers
+
+
+def _write_eml_fallback(path: Path, headers: dict[str, str], body: str) -> None:
+    msg = MIMEText(body)
+    if headers.get("from"):
+        msg["From"] = str(headers["from"])
+    if headers.get("to"):
+        msg["To"] = str(headers["to"])
+    if headers.get("subject"):
+        msg["Subject"] = str(headers["subject"])
+    if headers.get("date"):
+        msg["Date"] = str(headers["date"])
+    path.write_text(msg.as_string(), encoding="utf-8")
 
 
 class MD2MSGConverter(BaseConverter):
@@ -213,12 +227,23 @@ class MD2MSGConverter(BaseConverter):
                 metadata=metadata,
             )
 
-        except ImportError as e:
-            logger.error(f"Aspose.Email not available: {e}")
+        except ImportError:
+            logger.warning(
+                "Aspose.Email not available for .msg output. Install with: "
+                "pip install 'omni-re-formatter[email-output]'. "
+                "As a fully-supported open alternative, .eml is recommended."
+            )
+            eml_path = output_path.with_suffix(".eml")
+            _write_eml_fallback(eml_path, email_headers if email_headers else {}, md_body)
             return ConversionResult(
-                output_path=output_path,
-                success=False,
-                errors=["Aspose.Email library required for MSG conversion. Install with: pip install aspose.email"],
+                output_path=eml_path,
+                success=True,
+                warnings=[WarningDetail(
+                    code="MISSING_DEPENDENCY",
+                    message="Install aspose-email-foss for .msg; .eml fallback written. "
+                            "pip install 'omni-re-formatter[email-output]'"
+                )],
+                metadata={"format": "eml", "recommended": "msg requires aspose-email-foss"},
             )
         except Exception as e:
             logger.error(f"MSG conversion failed: {e}")
