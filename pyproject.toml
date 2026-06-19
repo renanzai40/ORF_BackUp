@@ -24,6 +24,8 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "python-json-logger>=2.0.0",
     "prometheus_client>=0.20.0",
+    "pypandoc-binary>=1.17",
+    "markdown>=3.5",
 ]
 
 [project.optional-dependencies]
