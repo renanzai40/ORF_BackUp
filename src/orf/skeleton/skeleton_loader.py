@@ -17,6 +17,25 @@ class SkeletonLoader:
     and provides helpers for paragraph manipulation and repacking.
     """
 
+    @staticmethod
+    def _validate_zip_entry_name(name: str) -> None:
+        """Reject ZIP entries that could escape the extraction directory (zip-slip).
+
+        Raises ValueError if the entry name is an absolute path or contains
+        parent-directory references (``..``).
+        """
+        # Reject absolute paths (POSIX /, Windows \\, or C:)
+        if name.startswith(("/", "\\")) or (len(name) >= 2 and name[1] == ":"):
+            raise ValueError(
+                f"Skipped unsafe skeleton entry '{name}': absolute paths not allowed"
+            )
+        # Reject parent-directory references
+        parts = name.replace("\\", "/").split("/")
+        if any(part == ".." for part in parts):
+            raise ValueError(
+                f"Skipped unsafe skeleton entry '{name}': parent-directory reference (..) not allowed"
+            )
+
     def __init__(self) -> None:
         self.xml: str | None = None
         self.files: dict[str, Any] = {}
@@ -46,6 +65,9 @@ class SkeletonLoader:
                 )
 
         with zipfile.ZipFile(path, "r") as zf:
+            # Validate every entry name BEFORE reading (zip-slip prevention)
+            for name in zf.namelist():
+                self._validate_zip_entry_name(name)
             # Read entire ZIP into memory
             self.bytes = zf.read(zf.namelist()[0])  # Read first file as representative
             for name in zf.namelist():

@@ -180,6 +180,8 @@ class XLIFF2PPTXConverter(BaseConverter):
         files: dict[str, bytes] = {}
         with zipfile.ZipFile(str(pptx_path), "r") as zf:
             for name in zf.namelist():
+                SkeletonLoader._validate_zip_entry_name(name)
+            for name in zf.namelist():
                 files[name] = zf.read(name)
 
         return {"files": files, "bytes": b""}
@@ -498,6 +500,8 @@ class XLIFF2PPTXConverter(BaseConverter):
         if not positioned:
             if images:
                 with zipfile.ZipFile(skeleton_path, "r") as zf_in:
+                    for item in zf_in.namelist():
+                        SkeletonLoader._validate_zip_entry_name(item)
                     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf_out:
                         for item in zf_in.namelist():
                             zf_out.writestr(item, zf_in.read(item))

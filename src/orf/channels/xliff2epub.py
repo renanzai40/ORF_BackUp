@@ -18,6 +18,7 @@ from lxml import etree
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.mcp.schemas import ImagePlacement
 from orf.skeleton.inline_formatting import XLIFFInlineParser, EPUBHTMLInlineApplier
+from orf.skeleton.skeleton_loader import SkeletonLoader
 from orf.error_handlers.conversion_error import XLIFFParseError, InlineFormattingError
 from orf.logging import get_logger
 from orf.converters.options import ConverterOptions
@@ -236,6 +237,8 @@ class XLIFF2EPUBConverter(BaseConverter):
 
         with zipfile.ZipFile(epub_path, "r") as zf:
             for name in zf.namelist():
+                SkeletonLoader._validate_zip_entry_name(name)
+            for name in zf.namelist():
                 files[name] = zf.read(name)
 
         return files
@@ -430,6 +433,8 @@ class XLIFF2EPUBConverter(BaseConverter):
         if not positioned:
             if images:
                 with zipfile.ZipFile(epub_path, "r") as zf_in:
+                    for item in zf_in.namelist():
+                        SkeletonLoader._validate_zip_entry_name(item)
                     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf_out:
                         for item in zf_in.namelist():
                             zf_out.writestr(item, zf_in.read(item))
