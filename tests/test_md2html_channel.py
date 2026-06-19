@@ -63,7 +63,7 @@ class TestMD2HTMLConverter:
         assert str(sample_md) in call_args
         assert str(output) in call_args
         assert "--to" in call_args
-        assert "html" in call_args
+        assert "html5" in call_args
 
     @patch("subprocess.run")
     def test_convert_with_css(self, mock_run, sample_md: Path, tmp_path: Path):

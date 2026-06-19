@@ -56,7 +56,8 @@ class MD2HTMLConverter(BaseConverter):
             "pandoc",
             str(input_path),
             "-o", str(output_path),
-            "--to", "html",
+            "--to", "html5",
+            "--standalone",
         ]
 
         css = opts.css or self.css
@@ -65,6 +66,7 @@ class MD2HTMLConverter(BaseConverter):
 
         try:
             logger.info(f"Running: {' '.join(cmd)}")
+            cmd[1] = str(input_path.resolve())
             result = subprocess.run(
                 cmd,
                 capture_output=True,

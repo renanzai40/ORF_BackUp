@@ -100,7 +100,8 @@ class TestMD2EMLConverter:
         assert "," in msg["Date"]
         assert "202" in msg["Date"] or "203" in msg["Date"]
 
-    def test_convert_errors_when_no_email_headers(self, tmp_path: Path):
+    def test_convert_synthesizes_default_headers(self, tmp_path: Path):
+        """When no email_headers in frontmatter, code synthesizes defaults."""
         md = tmp_path / "no_headers.md"
         md.write_text(
             "---\n"
@@ -116,11 +117,17 @@ class TestMD2EMLConverter:
         result = converter.convert(md, output)
 
         assert isinstance(result, ConversionResult)
-        assert result.success is False
-        assert any("Email headers required" in e.message for e in result.errors)
+        assert result.success is True
+        assert result.metadata.get("format") == "EML"
+        from email import message_from_bytes
+        raw = output.read_bytes()
+        msg = message_from_bytes(raw)
+        assert msg["From"] == "noreply@localization.local"
+        assert msg["To"] == "recipient@localization.local"
+        assert msg["Subject"] == "(no subject)"
 
-    def test_convert_handles_yaml_parse_error(self, tmp_path: Path):
-        """Invalid YAML in frontmatter → treated as 'no headers'."""
+    def test_convert_synthesizes_headers_when_yaml_parse_error(self, tmp_path: Path):
+        """Invalid YAML in frontmatter → synthesizes default headers."""
         md = tmp_path / "bad_yaml.md"
         # Malformed YAML (unclosed quote) inside the frontmatter block.
         md.write_text(
@@ -137,9 +144,16 @@ class TestMD2EMLConverter:
         converter = MD2EMLConverter()
         result = converter.convert(md, output)
 
-        # YAML parse error collapses to "no email_headers" → same error path.
-        assert result.success is False
-        assert any("Email headers required" in e.message for e in result.errors)
+        # YAML parse error collapses to "no email_headers" → synthesizes defaults.
+        assert isinstance(result, ConversionResult)
+        assert result.success is True
+        assert result.metadata.get("format") == "EML"
+        from email import message_from_bytes
+        raw = output.read_bytes()
+        msg = message_from_bytes(raw)
+        assert msg["From"] == "noreply@localization.local"
+        assert msg["To"] == "recipient@localization.local"
+        assert msg["Subject"] == "(no subject)"
 
     def test_inject_images_noop(self):
         converter = MD2EMLConverter()

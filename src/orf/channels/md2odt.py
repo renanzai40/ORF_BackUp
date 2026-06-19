@@ -65,6 +65,7 @@ class MD2ODTConverter(BaseConverter):
 
         try:
             logger.info(f"Running: {' '.join(cmd)}")
+            cmd[1] = str(input_path.resolve())
             subprocess.run(
                 cmd,
                 capture_output=True,

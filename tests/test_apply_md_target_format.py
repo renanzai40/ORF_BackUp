@@ -1,11 +1,7 @@
-"""Round 10 regression: apply-md --target-format Choice coverage.
+"""Round 13+: apply-md --target-format Choice coverage.
 
-Tier 3 surfaced that orf apply-md's --target-format Choice did not
-include 'pptx' (it was in apply-xliff Choice but not apply-md).
-Round 10 attempted to add pptx + MD2PPTXConverter wiring but
-md2pptx binary is not installed by default, so the converter
-fails with FileNotFoundError. Decision: keep pptx out of the
-Choice (route pptx users to apply-xliff / P2 instead).
+Round 10 excluded pptx (md2pptx binary not installed by default).
+Round 13 re-added pptx after MartinPacker/md2pptx was installed.
 
 These tests lock in the current Choice composition so future
 additions are explicit and tested.
@@ -46,22 +42,20 @@ class TestApplyMdTargetFormatChoice:
         m = re.search(r"--target-format \[([^\]]+)\]", out)
         assert m, f"--target-format Choice not found in help:\n{out}"
         choices = m.group(1).split("|")
-        # 16 = auto + 15 formats (pptx excluded, requires md2pptx binary)
-        assert len(choices) == 16, (
-            f"Expected 16 target-format choices, got {len(choices)}: {choices}"
+        # 17 = auto + 16 formats (pptx re-added in round 13)
+        assert len(choices) == 17, (
+            f"Expected 17 target-format choices, got {len(choices)}: {choices}"
         )
 
-    def test_pptx_excluded_from_choices(self):
-        """PPTX must NOT be in --target-format Choice (round 10 decision:
-        apply-md requires md2pptx binary which is not installed by
-        default; use apply-xliff for PPTX)."""
+    def test_pptx_included_in_choices(self):
+        """PPTX must now be in --target-format Choice (round 13 re-added
+        pptx after md2pptx binary was installed)."""
         out = _run_apply_md_help()
         m = re.search(r"--target-format \[([^\]]+)\]", out)
         assert m
         choices = m.group(1).split("|")
-        assert "pptx" not in choices, (
-            f"pptx should be excluded; if adding it back, ensure md2pptx "
-            f"binary is available (which: md2pptx). Got: {choices}"
+        assert "pptx" in choices, (
+            f"pptx should be in choices now; md2pptx is installed. Got: {choices}"
         )
 
     def test_all_standard_data_formats_present(self):

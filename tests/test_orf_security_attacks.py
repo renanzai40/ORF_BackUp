@@ -6,6 +6,7 @@ specific to the Omni-Re-Formatter MCP surface.
 
 import base64
 import json
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -17,6 +18,11 @@ _REPO_ROOT = Path(__file__).parent.parent
 _ORF_SRC = _REPO_ROOT / "src"
 if str(_ORF_SRC) not in sys.path:
     sys.path.insert(0, str(_ORF_SRC))
+
+# Round 13: set ORF_MCP_ALLOWED_DIRS so the MCP PathValidator singleton
+# (created on first import of orf.mcp.server) allows tmp_path fixtures.
+if "ORF_MCP_ALLOWED_DIRS" not in os.environ:
+    os.environ["ORF_MCP_ALLOWED_DIRS"] = f"{_REPO_ROOT}:/tmp"
 
 
 # 1x1 transparent PNG, base64.

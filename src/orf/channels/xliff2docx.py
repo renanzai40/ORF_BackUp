@@ -776,7 +776,13 @@ class XLIFF2DOCXConverter(BaseConverter):
 
         # BX/EX leak fix: parse inline tags into formatted DOCX runs
         formatted_runs = self._build_formatted_runs(target_text)
-        if formatted_runs:
+        has_real_inline_tags = bool(
+            re.search(
+                r"<\s*/?\s*bx\b|<\s*/?\s*ex\b",
+                target_text,
+            )
+        )
+        if formatted_runs and has_real_inline_tags:
             target_run = runs[0]
             parent = target_run.getparent()
             if parent is not None:
@@ -785,13 +791,14 @@ class XLIFF2DOCXConverter(BaseConverter):
                 insert_pos = list(parent.getparent()).index(parent) if parent.getparent() is not None else -1
                 if insert_pos >= 0:
                     parent_para = parent.getparent()
-                    first_t_run = parent
                     for i, fr in enumerate(formatted_runs):
                         parent_para.insert(
-                            list(parent_para).index(first_t_run) + i,
+                            list(parent_para).index(parent) + i,
                             fr,
                         )
-                    first_t_run.text = _strip_inline_tags(first_t_run.text or "")
+                    # lxml: setting .text on the parent w:r does NOT
+                    # clear text in child w:t nodes. Set the w:t directly.
+                    target_run.text = ""
                     for r in runs[1:]:
                         r.text = ""
                     return True
@@ -891,19 +898,26 @@ class XLIFF2DOCXConverter(BaseConverter):
 
         # BX/EX leak fix: parse inline tags into formatted DOCX runs
         formatted_runs = self._build_formatted_runs(target_text)
-        if formatted_runs:
+        has_real_inline_tags = bool(
+            re.search(
+                r"<\s*/?\s*bx\b|<\s*/?\s*ex\b",
+                target_text,
+            )
+        )
+        if formatted_runs and has_real_inline_tags:
             target_run = runs[0]
             parent = target_run.getparent()
             if parent is not None:
                 parent_para = parent.getparent()
                 if parent_para is not None:
-                    first_t_run = parent
                     for i, fr in enumerate(formatted_runs):
                         parent_para.insert(
-                            list(parent_para).index(first_t_run) + i,
+                            list(parent_para).index(parent) + i,
                             fr,
                         )
-                    first_t_run.text = _strip_inline_tags(first_t_run.text or "")
+                    # lxml: setting .text on the parent w:r does NOT
+                    # clear text in child w:t nodes. Set the w:t directly.
+                    target_run.text = ""
                     for r in runs[1:]:
                         r.text = ""
                     return True

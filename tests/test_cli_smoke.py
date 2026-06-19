@@ -309,6 +309,8 @@ class TestApplyXLIFF:
         assert "[ZH]" in body, f"translation not applied:\n{body[:500]}"
 
     def test_apply_xliff_to_epub(self, opp_intermediates, tmp_path):
+        """XLIFF backfill is format-preserving — passing DOCX with --format
+        epub is rejected as cross-format conversion (exit code 2)."""
         out = tmp_path / "backfilled.epub"
         proc = run_orf(
             "apply-xliff", str(MERIDIAN_DOCX),
@@ -316,9 +318,10 @@ class TestApplyXLIFF:
             "-o", str(out),
             "--format", "epub",
         )
-        assert proc.returncode == 0, f"stderr: {proc.stderr[-1500:]}"
-        assert out.exists(), f"output {out} not created"
-        assert out.stat().st_size > 0
+        assert proc.returncode == 2, f"stderr: {proc.stderr[-1500:]}"
+        assert "cross-format" in proc.stderr or "format-preserving" in proc.stderr, (
+            f"Expected cross-format rejection message in stderr:\n{proc.stderr}"
+        )
 
     def test_apply_xliff_missing_xliff(self, tmp_path):
         """`--xliff` is required; CLI must reject when absent."""

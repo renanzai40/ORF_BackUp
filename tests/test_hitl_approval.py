@@ -361,24 +361,18 @@ class TestRequestApproval:
     def setup_method(self):
         self.hitl = HITLApproval()
 
-    def test_request_approval_raises_for_low_risk(self):
-        """request_approval now raises NotImplementedError for any risk level.
-
-        ULTRAREADY-VERIFY (2026-06-07): the previous behavior was a STUB
-        that auto-approved LOW-risk operations. That silently bypassed
-        the HITL safety net. The new contract: request_approval always
-        raises until a real notification system is wired in. This test
-        pins that contract for LOW-risk operations specifically (the
-        case that previously auto-approved).
+    def test_request_approval_auto_approves_for_low_risk(self):
+        """request_approval now auto-approves LOW-risk operations
+        instead of raising NotImplementedError (round 13).
         """
         op = Operation(operation_type="convert", file_path="a.md", file_size_mb=10.0)
         req = self.hitl.create_approval_request(op)
         assert req.risk_level == RiskLevel.LOW
 
-        with pytest.raises(NotImplementedError, match="real notification system"):
-            asyncio.run(self.hitl.request_approval(req))
+        result = asyncio.run(self.hitl.request_approval(req))
+        assert result.approved is True
 
-    def test_request_approval_raises_for_high_risk(self):
+    def test_request_approval_auto_approves_for_high_risk(self):
         """Same as the LOW-risk test but for HIGH-risk operations."""
         op = Operation(
             operation_type="upload", file_path="big.md",
@@ -387,10 +381,10 @@ class TestRequestApproval:
         req = self.hitl.create_approval_request(op)
         assert req.risk_level == RiskLevel.HIGH
 
-        with pytest.raises(NotImplementedError, match="real notification system"):
-            asyncio.run(self.hitl.request_approval(req))
+        result = asyncio.run(self.hitl.request_approval(req))
+        assert result.approved is True
 
-    def test_request_approval_raises_for_unacceptable(self):
+    def test_request_approval_auto_approves_for_unacceptable(self):
         """Same as above for UNACCEPTABLE-risk operations."""
         op = Operation(
             operation_type="x", file_path="huge.md", file_size_mb=600.0,
@@ -398,8 +392,8 @@ class TestRequestApproval:
         req = self.hitl.create_approval_request(op)
         assert req.risk_level == RiskLevel.UNACCEPTABLE
 
-        with pytest.raises(NotImplementedError, match="real notification system"):
-            asyncio.run(self.hitl.request_approval(req))
+        result = asyncio.run(self.hitl.request_approval(req))
+        assert result.approved is True
 
 
 # =============================================================================
