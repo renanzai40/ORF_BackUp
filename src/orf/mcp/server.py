@@ -21,6 +21,8 @@ from orf.mcp.security import PathValidator
 from orf.logging import get_logger
 # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
 from orf.mcp.auth import check_auth, auth_failure_response
+# H5: token bucket DoS rate limiter (2026-06-20)
+from orf.mcp.rate_limiter import check_rate_limit, rate_limit_failure_response
 
 # ULTRAREADY-VERIFY (2026-06-07): env vars that must NEVER be inherited
 # by the CLI subprocess. These are test-only seams — if a test harness
@@ -35,7 +37,7 @@ _MCP_SCRUB_ENV_KEYS = frozenset({
     "OMNI_TEST_STUB",
 })
 
-from orf.mcp.security import PathValidator, ValidationResult
+from orf.mcp.security import PathValidator
 from orf.mcp.config import MCPConfig, load_config
 from orf.logging import get_logger
 logger = get_logger("mcp.server")
@@ -168,15 +170,26 @@ def _register_tools():
         output_path: Optional[str] = None,
         images: Optional[list[dict]] = None,
         separate_images: bool = True,
+        reference_doc: Optional[str] = None,
+        template: Optional[str] = None,
+        title: Optional[str] = None,
+        author: Optional[str] = None,
+        lang: Optional[str] = None,
+        embed_images: bool = False,
+        text_only: bool = False,
+        max_file_size_mb: Optional[float] = None,
     ) -> str:
         """Convert MD to target format.
-
         Images (from OPP ``images.json``) are extracted during conversion into
         ``images.zip + images.json`` alongside the output DOCX when
         ``separate_images=True`` (default). When ``separate_images=False``,
         images embedded as base64 data URIs in the markdown are decoded and
         placed inline in the output document by Pandoc.
         """
+        # H5: token bucket rate limiter
+        rate_ok, rate_err = check_rate_limit()
+        if not rate_ok:
+            return json.dumps({**rate_limit_failure_response(), "error": rate_err})
         # Validate input path
         result = _path_validator.validate_path(input_md)
         if not result.success:
@@ -200,11 +213,41 @@ def _register_tools():
                     "metadata": {}
                 })
 
+        for path_param, path_value in (("reference_doc", reference_doc), ("template", template)):
+            if path_value:
+                pv = _path_validator.validate_path(path_value, allow_missing=True)
+                if not pv.success:
+                    return json.dumps({
+                        "success": False,
+                        "output_path": None,
+                        "errors": [{"code": "PATH_NOT_ALLOWED",
+                                    "message": f"{path_param}: {pv.error}",
+                                    "recovery_strategy": None}],
+                        "warnings": [],
+                        "metadata": {}
+                    })
+
         args = ["apply-md", input_md, "--target-format", target_format]
         if output_path:
             args.extend(["--output", output_path])
         if not separate_images:
             args.append("--no-separate-images")
+        if reference_doc:
+            args.extend(["--reference-doc", reference_doc])
+        if template:
+            args.extend(["--template", template])
+        if title:
+            args.extend(["--title", title])
+        if author:
+            args.extend(["--author", author])
+        if lang:
+            args.extend(["--lang", lang])
+        if embed_images:
+            args.append("--embed-images")
+        if text_only:
+            args.append("--text-only")
+        if max_file_size_mb is not None:
+            args.extend(["--max-file-size-mb", str(max_file_size_mb)])
 
         # Write images data to a temp JSON file and pass via --images-json.
         images_json_path: str | None = None
@@ -232,20 +275,22 @@ def _register_tools():
         format: str,
         xliff_content: Optional[str] = None,
         images: Optional[list[dict]] = None,
+        force: bool = False,
+        no_cache: bool = False,
+        max_file_size_mb: Optional[float] = None,
     ) -> str:
         """Apply XLIFF translation to original document with optional image injection.
 
         Args:
-            input_file: Original document file path (skeleton).
-            xliff_path: Translated XLIFF file path (mutually exclusive with xliff_content).
-            output_path: Output file path.
-            format: Output format (docx, pptx, epub, html, odt).
-            xliff_content: Inline XLIFF content (mutually exclusive with xliff_path).
-            images: Optional list of image placement data from OPP for precise image restoration.
-
-        Returns:
-            JSON result string.
+            force: Bypass skeleton-vs-format validation for cross-format
+                conversions (e.g. DOCX XLIFF → PPTX). CLI: --force.
+            no_cache: Skip ORF's content-addressed cache. CLI: --no-cache.
+            max_file_size_mb: Reject inputs above this size. CLI: --max-file-size-mb.
         """
+        # H5: token bucket rate limiter
+        rate_ok, rate_err = check_rate_limit()
+        if not rate_ok:
+            return json.dumps({**rate_limit_failure_response(), "error": rate_err})
         # C4 fix: reject image placements that carry `file_path` (arbitrary
         # file read). MCP clients must provide `data_base64` only.
         if images:
@@ -311,6 +356,12 @@ def _register_tools():
             "--output", output_path,
             "--format", format,
         ]
+        if force:
+            args.append("--force")
+        if no_cache:
+            args.append("--no-cache")
+        if max_file_size_mb is not None:
+            args.extend(["--max-file-size-mb", str(max_file_size_mb)])
 
         temp_created = False
         if images:
@@ -368,6 +419,10 @@ def _register_tools():
     @server.tool()
     def batch_convert(input_dir: str, target_format: str, pattern: str = "*.md", auth_token: Optional[str] = None) -> str:
         """Batch convert MD files."""
+        # H5: token bucket rate limiter
+        rate_ok, rate_err = check_rate_limit()
+        if not rate_ok:
+            return json.dumps({**rate_limit_failure_response(), "error": rate_err})
         # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
         auth_ok, _ = check_auth(auth_token)
         if not auth_ok:
@@ -387,6 +442,10 @@ def _register_tools():
     @server.tool()
     def detect_format(file_path: str, auth_token: Optional[str] = None) -> str:
         """Detect document format."""
+        # H5: token bucket rate limiter
+        rate_ok, rate_err = check_rate_limit()
+        if not rate_ok:
+            return json.dumps({**rate_limit_failure_response(), "error": rate_err})
         # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
         auth_ok, _ = check_auth(auth_token)
         if not auth_ok:
@@ -402,6 +461,10 @@ def _register_tools():
     @server.tool()
     def info(file_path: str, auth_token: Optional[str] = None) -> str:
         """Get document information."""
+        # H5: token bucket rate limiter
+        rate_ok, rate_err = check_rate_limit()
+        if not rate_ok:
+            return json.dumps({**rate_limit_failure_response(), "error": rate_err})
         # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
         auth_ok, _ = check_auth(auth_token)
         if not auth_ok:
@@ -420,6 +483,10 @@ def _register_tools():
     @server.tool()
     def ping(auth_token: Optional[str] = None) -> str:
         """Health check endpoint. Returns module name and version."""
+        # H5: token bucket rate limiter
+        rate_ok, rate_err = check_rate_limit()
+        if not rate_ok:
+            return json.dumps({**rate_limit_failure_response(), "error": rate_err})
         # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
         auth_ok, _ = check_auth(auth_token)
         if not auth_ok:
@@ -447,8 +514,20 @@ def apply_md(
     output_path: Optional[str] = None,
     images: Optional[list[dict]] = None,
     separate_images: bool = True,
+    reference_doc: Optional[str] = None,
+    template: Optional[str] = None,
+    title: Optional[str] = None,
+    author: Optional[str] = None,
+    lang: Optional[str] = None,
+    embed_images: bool = False,
+    text_only: bool = False,
+    max_file_size_mb: Optional[float] = None,
     auth_token: Optional[str] = None,
 ) -> str:
+    # H5: token bucket rate limiter
+    rate_ok, rate_err = check_rate_limit()
+    if not rate_ok:
+        return json.dumps({**rate_limit_failure_response(), "error": rate_err})
     # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
     auth_ok, _ = check_auth(auth_token)
     if not auth_ok:
@@ -475,11 +554,41 @@ def apply_md(
                 "metadata": {}
             })
 
+    for path_param, path_value in (("reference_doc", reference_doc), ("template", template)):
+        if path_value:
+            pv = _path_validator.validate_path(path_value, allow_missing=True)
+            if not pv.success:
+                return json.dumps({
+                    "success": False,
+                    "output_path": None,
+                    "errors": [{"code": "PATH_NOT_ALLOWED",
+                                "message": f"{path_param}: {pv.error}",
+                                "recovery_strategy": None}],
+                    "warnings": [],
+                    "metadata": {}
+                })
+
     args = ["apply-md", input_md, "--target-format", target_format]
     if output_path:
         args.extend(["--output", output_path])
     if not separate_images:
         args.append("--no-separate-images")
+    if reference_doc:
+        args.extend(["--reference-doc", reference_doc])
+    if template:
+        args.extend(["--template", template])
+    if title:
+        args.extend(["--title", title])
+    if author:
+        args.extend(["--author", author])
+    if lang:
+        args.extend(["--lang", lang])
+    if embed_images:
+        args.append("--embed-images")
+    if text_only:
+        args.append("--text-only")
+    if max_file_size_mb is not None:
+        args.extend(["--max-file-size-mb", str(max_file_size_mb)])
 
     images_json_path: str | None = None
     if images:
@@ -506,8 +615,15 @@ def apply_xliff(
     format: str,
     xliff_content: Optional[str] = None,
     images: Optional[list[dict]] = None,
+    force: bool = False,
+    no_cache: bool = False,
+    max_file_size_mb: Optional[float] = None,
     auth_token: Optional[str] = None,
 ) -> str:
+    # H5: token bucket rate limiter
+    rate_ok, rate_err = check_rate_limit()
+    if not rate_ok:
+        return json.dumps({**rate_limit_failure_response(), "error": rate_err})
     # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
     auth_ok, _ = check_auth(auth_token)
     if not auth_ok:
@@ -578,6 +694,12 @@ def apply_xliff(
         "--output", output_path,
         "--format", format,
     ]
+    if force:
+        args.append("--force")
+    if no_cache:
+        args.append("--no-cache")
+    if max_file_size_mb is not None:
+        args.extend(["--max-file-size-mb", str(max_file_size_mb)])
 
     temp_created = False
     temp_path = ""
@@ -634,6 +756,10 @@ def apply_xliff(
 
 def batch_convert(input_dir: str, target_format: str, pattern: str = "*.md", auth_token: Optional[str] = None) -> str:
     """Batch convert MD files. In-process equivalent of the MCP tool."""
+    # H5: token bucket rate limiter
+    rate_ok, rate_err = check_rate_limit()
+    if not rate_ok:
+        return json.dumps({**rate_limit_failure_response(), "error": rate_err})
     # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
     auth_ok, _ = check_auth(auth_token)
     if not auth_ok:
@@ -653,6 +779,10 @@ def batch_convert(input_dir: str, target_format: str, pattern: str = "*.md", aut
 
 def detect_format(file_path: str, auth_token: Optional[str] = None) -> str:
     """Detect document format. In-process equivalent of the MCP tool."""
+    # H5: token bucket rate limiter
+    rate_ok, rate_err = check_rate_limit()
+    if not rate_ok:
+        return json.dumps({**rate_limit_failure_response(), "error": rate_err})
     # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
     auth_ok, _ = check_auth(auth_token)
     if not auth_ok:
@@ -668,6 +798,10 @@ def detect_format(file_path: str, auth_token: Optional[str] = None) -> str:
 
 def info(file_path: str, auth_token: Optional[str] = None) -> str:
     """Get document information. In-process equivalent of the MCP tool."""
+    # H5: token bucket rate limiter
+    rate_ok, rate_err = check_rate_limit()
+    if not rate_ok:
+        return json.dumps({**rate_limit_failure_response(), "error": rate_err})
     # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
     auth_ok, _ = check_auth(auth_token)
     if not auth_ok:
@@ -686,6 +820,10 @@ def info(file_path: str, auth_token: Optional[str] = None) -> str:
 
 def ping(auth_token: Optional[str] = None) -> str:
     """Health check endpoint. In-process equivalent of the MCP tool."""
+    # H5: token bucket rate limiter
+    rate_ok, rate_err = check_rate_limit()
+    if not rate_ok:
+        return json.dumps({**rate_limit_failure_response(), "error": rate_err})
     # 2026-06-18 round 16 Phase A4: MCP shared-secret auth.
     auth_ok, _ = check_auth(auth_token)
     if not auth_ok:
