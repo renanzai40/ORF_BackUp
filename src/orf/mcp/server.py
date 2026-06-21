@@ -838,7 +838,7 @@ def ping(auth_token: Optional[str] = None) -> str:
 def main():
     """Run the MCP server."""
     server = get_server()
-    server.run()
+    server.run(transport="stdio")
 
 
 if __name__ == "__main__":
