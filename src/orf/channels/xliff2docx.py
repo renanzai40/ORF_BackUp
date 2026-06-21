@@ -444,7 +444,21 @@ class XLIFF2DOCXConverter(BaseConverter):
         # 1. Load skeleton (original DOCX ZIP)
         try:
             skeleton_data = self.skeleton_loader.load_skeleton(str(input_skeleton))
-            document_xml = skeleton_data["xml"]
+            document_xml = skeleton_data.get("xml")
+            if document_xml is None:
+                skeleton_kind = (
+                    "pptx" if "slides" in skeleton_data else
+                    "epub" if "opf" in skeleton_data else
+                    "unknown"
+                )
+                return ConversionResult(
+                    output_path=output_path,
+                    success=False,
+                    errors=[
+                        f"Skeleton is {skeleton_kind} format, not DOCX. "
+                        f"Cross-format XLIFF (e.g. PPTX→DOCX) is not supported by this converter."
+                    ],
+                )
         except Exception as e:
             return ConversionResult(
                 output_path=output_path,
@@ -1280,7 +1294,13 @@ class XLIFF2DOCXConverter(BaseConverter):
             orphaned.extend(images)
             return (injected, orphaned)
 
-        document_xml = skeleton_data["xml"]
+        document_xml = skeleton_data.get("xml")
+        if document_xml is None:
+            logger.warning(
+                "Skeleton has no 'xml' key (cross-format?). Skipping image injection."
+            )
+            orphaned.extend(images)
+            return (injected, orphaned)
         files = skeleton_data["files"]
         namelist = list(files.keys())
 
