@@ -131,6 +131,7 @@ class MD2DOCXConverter(BaseConverter):
             cmd.extend(["--reference-doc", str(template)])
 
         cmd[1] = str(md_path.resolve())
+        cmd[3] = str(output_path.resolve())
 
         try:
             logger.info(f"Running: {' '.join(cmd)}")
