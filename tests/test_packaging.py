@@ -9,6 +9,24 @@ from click.testing import CliRunner
 
 from orf.cli import main
 
+_IN_WORKSPACE = False
+"""Whether we are running inside the omni-suite root workspace.
+
+When running from the suite root, ``python -m build`` picks up the root
+``pyproject.toml`` and produces ``omni_suite-*.tar.gz`` instead of
+``orf-*.tar.gz``, which would break the build assertions below.
+"""
+_workspace_pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+if _workspace_pyproject.exists():
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib  # Python < 3.11 fallback
+    with open(_workspace_pyproject, "rb") as _fh:
+        _data = tomllib.load(_fh)
+    if _data.get("project", {}).get("name") == "omni-suite":
+        _IN_WORKSPACE = True
+
 
 @pytest.fixture
 def runner():
@@ -29,6 +47,7 @@ def clean_dist():
             f.unlink()
 
 
+@pytest.mark.skipif(_IN_WORKSPACE, reason="Standalone ORF packaging context required")
 class TestPackaging:
     """Test package build and distribution."""
 

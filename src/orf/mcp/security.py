@@ -169,6 +169,9 @@ class PathValidator:
 
         # Check allowed extensions (document whitelist)
         if input_path.suffix.lower() not in self.ALLOWED_EXTENSIONS:
+            # Directories have no extension; skip extension check for directories
+            if resolved.is_dir():
+                return ValidationResult(success=True, resolved_path=resolved)
             return ValidationResult(
                 success=False,
                 error=f"Extension '{input_path.suffix}' not in allowed set",

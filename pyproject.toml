@@ -1,9 +1,9 @@
 [project]
 name = "omni-re-formatter"
-version = "0.3.0"
+version = "0.4.3"
 description = "Omni-Re-Formatter: 将本地化后的 MD/XLIFF 还原为目标复杂格式"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 license = { text = "MIT" }
 authors = [
     { name = "1StepMore" }
@@ -13,19 +13,23 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 
 dependencies = [
     "click>=8.1.0",
-    "tqdm>=4.66.0",
     "pyyaml>=6.0",
     "python-magic>=0.4.27",
     "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
     "python-json-logger>=2.0.0",
-    "prometheus_client>=0.20.0",
+    "tqdm>=4.66.0",
     "pypandoc-binary>=1.17",
     "markdown>=3.5",
+    "mcp>=1.0.0",
+    "pydantic>=2.0.0",
+    "anyio>=4.0.0",
+    "prometheus_client>=0.20.0",
 ]
 
 [project.optional-dependencies]
@@ -35,7 +39,6 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "ruff>=0.1.0",
     "mypy>=1.5.0",
-    "fastmcp>=0.1.0",
     "weasyprint>=60.0",
     "boto3>=1.34.0",
     "azure-storage-blob>=12.19.0",
@@ -52,7 +55,7 @@ ai = ["openai>=1.12.0"]
 office = ["openpyxl>=3.0.0"]
 notebook = ["nbformat>=5.0.0"]
 email-output = ["aspose-email-foss>=24.0.0"]
-mcp = ["fastmcp>=0.1.0"]
+mcp = ["mcp>=1.0.0"]
 
 [project.scripts]
 orf = "orf.cli:main"
@@ -76,8 +79,8 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py313"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.13"
 ignore_missing_imports = true

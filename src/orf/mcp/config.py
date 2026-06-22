@@ -30,6 +30,7 @@ class MCPConfig:
     timeout_seconds: int = 30
     allowed_formats: Optional[List[str]] = None
     allowed_directories: Optional[List[Path]] = None
+    metrics_dir: str = "/tmp/omni-metrics"
 
     def __post_init__(self) -> None:
         if self.allowed_formats is None:
@@ -111,6 +112,10 @@ def _load_from_env() -> dict:
             logger.warning(
                 "Invalid ORF_MCP_TIMEOUT=%r; falling back to default", timeout
             )
+
+    metrics_dir = os.environ.get("OMNI_METRICS_DIR")
+    if metrics_dir:
+        config["metrics_dir"] = metrics_dir
 
     return config
 

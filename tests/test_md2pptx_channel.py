@@ -65,8 +65,8 @@ class TestMD2PPTXConverter:
         call_args = mock_run.call_args[0][0]
         assert "md2pptx" in call_args
         assert str(sample_md) in call_args
-        assert "-o" in call_args
-        assert str(output) in call_args
+        # md2pptx uses positional args: md2pptx <input> <output>  (no -o flag)
+        assert call_args[-1] == str(output)
 
     @patch("subprocess.run")
     def test_convert_md2pptx_error(self, mock_run, sample_md: Path, tmp_path: Path):

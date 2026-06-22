@@ -196,10 +196,20 @@ def _sanitize_for_json(obj: Any) -> Any:
 
 
 @click.group()
+@click.version_option(package_name="omni-re-formatter", prog_name="orf")
 @click.option("--verbose", "-v", is_flag=True, help="启用详细日志")
-def main(verbose: bool) -> None:
+@click.option(
+    "--log-format",
+    type=click.Choice(["console", "json"]),
+    default=None,
+    envvar="OMNI_LOG_FORMAT",
+    help="日志输出格式: 'console' (默认) 或 'json'。也可通过 OMNI_LOG_FORMAT 环境变量设置。",
+)
+def main(verbose: bool, log_format: str | None = None) -> None:
     """ORF - Omni-Re-Formatter: 将本地化后的 MD/XLIFF 还原为目标复杂格式。"""
     log_level = "DEBUG" if verbose else "INFO"
+    if log_format:
+        os.environ["OMNI_LOG_FORMAT"] = log_format
     setup_logger(level=log_level)
     _maybe_install_fake_pandoc()
 
