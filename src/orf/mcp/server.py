@@ -205,8 +205,8 @@ def _safe_temp_output(suffix: str, parent: Optional[Path] = None) -> str:
 
 
 def apply_md(
-    input_md: str,
-    target_format: str,
+    input_md: Optional[str] = None,
+    target_format: str = "",
     output_path: Optional[str] = None,
     images: Optional[list[dict]] = None,
     separate_images: bool = True,
@@ -220,6 +220,7 @@ def apply_md(
     max_file_size_mb: Optional[float] = None,
     auth_token: Optional[str] = None,
     traceparent: Optional[str] = None,
+    content: Optional[str] = None,
 ) -> str:
     # H5: token bucket rate limiter
     rate_ok, rate_err = check_rate_limit()
@@ -230,79 +231,138 @@ def apply_md(
     if not auth_ok:
         return json.dumps(auth_failure_response(), ensure_ascii=False)
     """Convert MD to target format. In-process equivalent of the MCP tool."""
-    result = _path_validator.validate_path(input_md)
-    if not result.success:
+    # E2E-76: accept inline markdown via ``content`` alongside the
+    # path-based ``input_md`` so text-in/text-out agent flows work.
+    if not input_md and not content:
         return json.dumps({
             "success": False,
             "output_path": None,
-            "errors": [{"code": "PATH_NOT_ALLOWED", "message": result.error, "recovery_strategy": None}],
+            "errors": [{
+                "code": "MISSING_INPUT",
+                "message": "Either input_md (path) or content (inline markdown) is required.",
+                "recovery_strategy": None,
+            }],
             "warnings": [],
-            "metadata": {}
+            "metadata": {},
+        })
+    if input_md and content:
+        return json.dumps({
+            "success": False,
+            "output_path": None,
+            "errors": [{
+                "code": "MUTUALLY_EXCLUSIVE",
+                "message": "input_md and content are mutually exclusive — supply one, not both.",
+                "recovery_strategy": None,
+            }],
+            "warnings": [],
+            "metadata": {},
         })
 
-    if output_path:
-        result_out = _path_validator.validate_path(output_path, allow_missing=True)
-        if not result_out.success:
+    content_temp_path: str | None = None
+    if content is not None:
+        # PathValidator requires the path to live under an allowed dir;
+        # mkstemp with an explicit parent keeps it inside cwd.
+        parent = Path.cwd()
+        try:
+            parent_resolved = parent.resolve()
+            fd, content_temp_path = tempfile.mkstemp(
+                suffix=".md", prefix="orf_mcp_inline_", dir=str(parent_resolved),
+            )
+            os.close(fd)
+            with open(content_temp_path, "w", encoding="utf-8") as f:
+                f.write(content)
+        except Exception as e:
+            logger.error("Failed to write inline content to tempfile: %s", e)
             return json.dumps({
                 "success": False,
                 "output_path": None,
-                "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"output_path: {result_out.error}", "recovery_strategy": None}],
+                "errors": [{
+                    "code": "INLINE_CONTENT_WRITE_FAILED",
+                    "message": f"Failed to materialize inline content: {e}",
+                    "recovery_strategy": None,
+                }],
+                "warnings": [],
+                "metadata": {},
+            })
+        input_md = content_temp_path
+
+    try:
+        result = _path_validator.validate_path(input_md)
+        if not result.success:
+            return json.dumps({
+                "success": False,
+                "output_path": None,
+                "errors": [{"code": "PATH_NOT_ALLOWED", "message": result.error, "recovery_strategy": None}],
                 "warnings": [],
                 "metadata": {}
             })
 
-    for path_param, path_value in (("reference_doc", reference_doc), ("template", template)):
-        if path_value:
-            pv = _path_validator.validate_path(path_value, allow_missing=True)
-            if not pv.success:
+        if output_path:
+            result_out = _path_validator.validate_path(output_path, allow_missing=True)
+            if not result_out.success:
                 return json.dumps({
                     "success": False,
                     "output_path": None,
-                    "errors": [{"code": "PATH_NOT_ALLOWED",
-                                "message": f"{path_param}: {pv.error}",
-                                "recovery_strategy": None}],
+                    "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"output_path: {result_out.error}", "recovery_strategy": None}],
                     "warnings": [],
                     "metadata": {}
                 })
 
-    args = ["apply-md", input_md, "--target-format", target_format]
-    if output_path:
-        args.extend(["--output", output_path])
-    if not separate_images:
-        args.append("--no-separate-images")
-    if reference_doc:
-        args.extend(["--reference-doc", reference_doc])
-    if template:
-        args.extend(["--template", template])
-    if title:
-        args.extend(["--title", title])
-    if author:
-        args.extend(["--author", author])
-    if lang:
-        args.extend(["--lang", lang])
-    if embed_images:
-        args.append("--embed-images")
-    if text_only:
-        args.append("--text-only")
-    if max_file_size_mb is not None:
-        args.extend(["--max-file-size-mb", str(max_file_size_mb)])
+        for path_param, path_value in (("reference_doc", reference_doc), ("template", template)):
+            if path_value:
+                pv = _path_validator.validate_path(path_value, allow_missing=True)
+                if not pv.success:
+                    return json.dumps({
+                        "success": False,
+                        "output_path": None,
+                        "errors": [{"code": "PATH_NOT_ALLOWED",
+                                    "message": f"{path_param}: {pv.error}",
+                                    "recovery_strategy": None}],
+                        "warnings": [],
+                        "metadata": {}
+                    })
 
-    images_json_path: str | None = None
-    if images:
+        args = ["apply-md", input_md, "--target-format", target_format]
+        if output_path:
+            args.extend(["--output", output_path])
+        if not separate_images:
+            args.append("--no-separate-images")
+        if reference_doc:
+            args.extend(["--reference-doc", reference_doc])
+        if template:
+            args.extend(["--template", template])
+        if title:
+            args.extend(["--title", title])
+        if author:
+            args.extend(["--author", author])
+        if lang:
+            args.extend(["--lang", lang])
+        if embed_images:
+            args.append("--embed-images")
+        if text_only:
+            args.append("--text-only")
+        if max_file_size_mb is not None:
+            args.extend(["--max-file-size-mb", str(max_file_size_mb)])
+
+        images_json_path: str | None = None
+        if images:
+            try:
+                fd, images_json_path = tempfile.mkstemp(suffix=".json", prefix="orf_mcp_images_")
+                os.close(fd)
+                with open(images_json_path, "w") as f:
+                    json.dump({"images": images}, f)
+                args.extend(["--images-json", images_json_path])
+            except Exception as e:
+                logger.warning("Failed to write images temp file: %s", e)
+
         try:
-            fd, images_json_path = tempfile.mkstemp(suffix=".json", prefix="orf_mcp_images_")
-            os.close(fd)
-            with open(images_json_path, "w") as f:
-                json.dump({"images": images}, f)
-            args.extend(["--images-json", images_json_path])
-        except Exception as e:
-            logger.warning("Failed to write images temp file: %s", e)
-
-    try:
-        return json.dumps(_run_cli_command(args))
+            return json.dumps(_run_cli_command(args))
+        finally:
+            if images_json_path:
+                _safe_unlink(images_json_path)
     finally:
-        if images_json_path:
-            _safe_unlink(images_json_path)
+        if content_temp_path:
+            _safe_unlink(content_temp_path)
 
 
 def apply_xliff(
@@ -578,7 +638,11 @@ async def _list_tools() -> list[types.Tool]:
                 "properties": {
                     "input_md": {
                         "type": "string",
-                        "description": "Path to input markdown file.",
+                        "description": "Path to input markdown file. Mutually exclusive with ``content``.",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Inline markdown content (text-in/text-out agent flow). Mutually exclusive with ``input_md``.",
                     },
                     "target_format": {
                         "type": "string",
@@ -616,7 +680,10 @@ async def _list_tools() -> list[types.Tool]:
                         "description": "Optional W3C Trace Context traceparent header to make this ORF span a child of an upstream trace (e.g. from OL translate_md_text).",
                     },
                 },
-                "required": ["input_md", "target_format"],
+                "anyOf": [
+                    {"required": ["input_md", "target_format"]},
+                    {"required": ["content", "target_format"]},
+                ],
             },
         ),
         types.Tool(
