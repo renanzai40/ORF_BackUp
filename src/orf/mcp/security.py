@@ -59,7 +59,14 @@ class PathValidator:
         max_file_size_bytes: Maximum allowed file size in bytes (default: 100MB).
     """
 
-    ALLOWED_EXTENSIONS = {'.md', '.docx', '.pptx', '.xliff', '.xlf', '.xml', '.html', '.odt', '.epub', '.zip'}
+    # E2E-80: extended with all the output formats ORF's apply-md
+    # advertises support for. Previously the validator rejected output
+    # paths like result.csv or result.xlsx even though ORF supports them.
+    ALLOWED_EXTENSIONS = {
+        '.md', '.docx', '.pptx', '.xliff', '.xlf', '.xml', '.html', '.odt', '.epub', '.zip',
+        '.csv', '.tsv', '.xlsx', '.json', '.ipynb', '.eml', '.msg', '.srt', '.icml', '.rtf',
+        '.pdf',
+    }
 
     def __init__(
         self,
