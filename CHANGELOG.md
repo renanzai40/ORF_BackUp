@@ -289,3 +289,10 @@ ORF v0.2.0 从传统 CLI 工具重构为 **AI Agent 原生集成** 的文档转�
 - 结构化标记：XML
 - Jupyter 笔记本：IPYNB
 - 邮件格式：EML, MSG
+
+## v0.4.4 (2026-06-23)
+
+### 🛠️ 修复 / Fixed
+
+- **XLIFF→DOCX fuzzy paragraph match (E2E-07)**: `_backfill_split_runs()` now falls back to `difflib.SequenceMatcher` fuzzy matching (ratio ≥ 0.85, length diff ≤ 5) when exact substring match fails. Fixes cases where XLIFF source text doesn't exactly match DOCX paragraph concat text due to editor paragraph splitting.
+  - `src/orf/channels/xliff2docx.py`
