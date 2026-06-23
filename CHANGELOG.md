@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.5 (2026-06-24)
+
+### 🛠️ 修复 / Fixed
+
+- **E2E-79** (`src/orf/channels/md2pptx.py`): `MD2PPTXConverter.convert()` called `subprocess.run(['md2pptx', ...])` without checking whether the binary exists. On any Linux box without the .NET SDK (and no `/usr/local/bin/md2pptx`), the call raised `FileNotFoundError` which was caught and surfaced as the unhelpful `'md2pptx not installed or not in PATH'`. Users had no way to know that `md2pptx` is a .NET tool (NOT a pip package). Fix: pre-flight `shutil.which('md2pptx')` check that fails fast with a clear, platform-aware install hint covering the three known install paths (`.NET SDK + 'dotnet tool install --global md2pptx'`, GitHub release binary on PATH, or pandoc fallback). Rare-race `FileNotFoundError` handler with the same hint.
+
+### 🛠️ 修复 / Fixed
+
+- **E2E-80** (`src/orf/mcp/security.py:62`): `PathValidator.ALLOWED_EXTENSIONS` only listed primary INPUT formats (md, docx, pptx, xliff, xlf, xml, html, odt, epub, zip). All the OUTPUT formats ORF's `apply-md` advertises support for (csv, tsv, xlsx, json, ipynb, eml, msg, srt, icml, rtf, pdf) were rejected by the path validator with `'Extension ".csv" not in allowed set'`, making `--target-format csv / xlsx / etc.` effectively unusable over the MCP path even though ORF clearly supports them. Fix: extended the set with the 11 missing output formats. Both INPUT and OUTPUT paths flow through the same validator, so the extension set must include every format ORF can produce. The BLOCKED set (executables: .exe/.bat/.sh/.ps1/.vbs/.js) is unchanged.
+
 ## v0.4.3 (2026-06-14)
 
 ### 🛠️ 修复 / Fixed
