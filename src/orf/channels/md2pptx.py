@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -13,6 +14,23 @@ from orf.logging import get_logger
 from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.md2pptx")
+
+
+def _md2pptx_install_hint() -> str:
+    """Return an install hint for the md2pptx binary.
+
+    md2pptx is a .NET tool, not a pip package.
+    """
+    return (
+        "md2pptx binary not found in PATH. md2pptx is a .NET tool, not a "
+        "pip package. Install one of:\n"
+        "  - .NET SDK + 'dotnet tool install --global md2pptx'\n"
+        "  - Or download a release binary from "
+        "https://github.com/MartinPacker/md2pptx/releases and place it "
+        "on PATH (e.g. /usr/local/bin/md2pptx)\n"
+        "  - Or use the 'pandoc' backend (--target-format pptx via pandoc) "
+        "as a fallback."
+    )
 
 
 class MD2PPTXConverter(BaseConverter):
@@ -47,6 +65,19 @@ class MD2PPTXConverter(BaseConverter):
                 output_path=output_path,
                 success=False,
                 errors=[f"Invalid input file: {input_path}"],
+            )
+
+        # E2E-79: pre-flight check for the md2pptx binary. The previous
+        # code relied on FileNotFoundError being raised by subprocess.run
+        # which gave no actionable guidance. Now we surface the install
+        # hint up front.
+        if shutil.which("md2pptx") is None:
+            hint = _md2pptx_install_hint()
+            logger.error(hint)
+            return ConversionResult(
+                output_path=output_path,
+                success=False,
+                errors=[hint],
             )
 
         # md2pptx (MartinPacker) uses positional INPUT OUTPUT — no -o flag.
@@ -86,9 +117,12 @@ class MD2PPTXConverter(BaseConverter):
                 errors=[f"md2pptx error: {e.stderr}"],
             )
         except FileNotFoundError:
-            logger.error("md2pptx not found in PATH")
+            # E2E-79: rare race — binary on PATH at pre-flight but gone
+            # now. Surface the same hint.
+            hint = _md2pptx_install_hint()
+            logger.error(hint)
             return ConversionResult(
                 output_path=output_path,
                 success=False,
-                errors=["md2pptx not installed or not in PATH"],
+                errors=[hint],
             )
