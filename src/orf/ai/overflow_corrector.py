@@ -14,9 +14,11 @@ logger = get_logger("ai.overflow_corrector")
 EXPANSION_RATIOS: Dict[Tuple[str, str], float] = {
     ("en", "zh"): 1.8,
     ("en", "de"): 1.25,
+    ("en", "it"): 1.18,  # Issue #4: Italian (Romance, similar to fr/es)
     ("en", "ja"): 1.1,
     ("en", "ko"): 1.3,
     ("en", "fr"): 1.15,
+    ("en", "ru"): 1.12,  # Issue #4: Russian (Cyrillic, slightly denser)
     ("en", "es"): 1.1,
 }
 

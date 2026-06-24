@@ -274,6 +274,8 @@ class TestExpansionRatios:
         assert ("en", "ko") in EXPANSION_RATIOS
         assert ("en", "fr") in EXPANSION_RATIOS
         assert ("en", "es") in EXPANSION_RATIOS
+        assert ("en", "it") in EXPANSION_RATIOS  # Issue #4
+        assert ("en", "ru") in EXPANSION_RATIOS  # Issue #4
 
     def test_expansion_ratio_en_zh_value(self):
         """English to Chinese ratio is 1.8."""

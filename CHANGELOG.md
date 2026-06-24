@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.6 (2026-06-24)
+
+### 🛠️ 修复 / Fixed
+
+- **Issue #4 — missing en→it and en→ru expansion ratios** (`src/orf/ai/overflow_corrector.py:18,20`): The `EXPANSION_RATIOS` dict defined ratios for 6 language pairs (en→zh/de/ja/ko/fr/es) but omitted en→it (Italian) and en→ru (Russian). When translating to/from these languages, `estimate_expansion_ratio` returned the default 1.0, underestimating text expansion by 10-20% (real expansion: it~1.18, ru~1.12). This caused the layout overflow corrector to skip translations that genuinely expand the text, potentially producing texts that overflow PPTX/PDF layout containers. Fix: added `("en", "it"): 1.18` and `("en", "ru"): 1.12` to `EXPANSION_RATIOS`. Reverse ratios (it→en, ru→en) are auto-computed by the existing reverse-pair logic at line 102-110. No change to `FALLBACK_RATIOS` needed. 2 new test assertions in `test_expansion_ratios_defined` pin the presence of both new entries.
+
 ## v0.4.5 (2026-06-24)
 
 ### 🛠️ 修复 / Fixed
