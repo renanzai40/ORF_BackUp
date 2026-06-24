@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.7 (2026-06-25)
+
+### 🛠️ 修复 / Fixed
+
+- **md2json combined mode**: Now supports combined mode — uses ` ```json ` fenced block as base structure (preserves numbers, booleans, nulls, key order) and applies `json_field:path = value` translations on top of string values. This pairs with OPP 0.7.0's new JSONExtractor output format.
+- **OPP_KV_PATTERN**: Now requires `json_field:` prefix. Lines without this prefix are no longer treated as OPP kv pairs (avoids false positives from hand-authored MD).
+
+### 📦 新增 / Added
+
+- `_apply_opp_kv_translations()` helper: walks base structure and substitutes string leaves only, preserving non-string types.
+- New test file `tests/test_md2json_combined.py` covers combined mode (13 tests).
+
 ## v0.4.6 (2026-06-24)
 
 ### 🛠️ 修复 / Fixed

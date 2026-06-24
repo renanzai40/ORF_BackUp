@@ -16,14 +16,13 @@ from orf.parsers.manifest import Manifest
 logger = get_logger("channel.md2json")
 
 JSON_BLOCK_PATTERN = re.compile(r"```json\s*(.*?)\s*(?:```|$)", re.DOTALL)
-# 2026-06-18 round 14 #3: OPP's JSONExtractor flattens nested JSON to
-# `key.path = value` lines (one per leaf). The reverse — unflattening these
-# back to nested JSON — was missing, so any OPP→OL→ORF round-trip of a
-# JSON file failed with "No JSON code block found in Markdown".
-# Both `.` and full-width `。` are accepted as path delimiters because
-# OL may translate the period when target_lang is zh.
+# OPP 0.7.0+: JSONExtractor emits json_field:path = value lines (one per string
+# leaf) alongside a ```json fenced block. The json_field: prefix acts as a
+# structural anchor — OL preserves it while translating the value. Both `.`
+# and full-width `。` are accepted as path delimiters because OL may translate
+# the period when target_lang is zh.
 OPP_KV_PATTERN = re.compile(
-    r"^([A-Za-z_\u4e00-\u9fff][\w.\u3002\[\]0-9]*)\s*=\s*(.*)$"
+    r"^json_field:([A-Za-z_\u4e00-\u9fff0-9][\w.\u3002\[\]0-9]*)\s*=\s*(.*)$"
 )
 
 
@@ -96,6 +95,25 @@ def _unflatten_opp_kv(pairs: list[tuple[str, str]]) -> dict[str, Any]:
     return root
 
 
+def _apply_opp_kv_translations(base: Any, translations: dict[str, str]) -> Any:
+    """Walk base structure, substitute string leaves with translations where available.
+
+    Non-string values (numbers, bools, nulls) are preserved from base — only
+    string leaves are looked up in the translations dict. If a path is not
+    found in translations, the original base value is kept (partial translation
+    support).
+    """
+    def _walk(node, path):
+        if isinstance(node, dict):
+            return {k: _walk(v, f"{path}.{k}" if path else k) for k, v in node.items()}
+        elif isinstance(node, list):
+            return [_walk(v, f"{path}.{i}" if path else str(i)) for i, v in enumerate(node)]
+        elif isinstance(node, str):
+            return translations.get(path, node)
+        return node
+    return _walk(base, "")
+
+
 class MD2JSONConverter(BaseConverter):
     """Markdown to JSON converter."""
 
@@ -139,40 +157,58 @@ class MD2JSONConverter(BaseConverter):
                 errors=[f"Failed to read input file: {e}"],
             )
 
-        # 2026-06-18 round 14 #3: try OPP-style `key.path = value` lines
-        # FIRST (this is what OPP's JSONExtractor actually produces).
-        # Fall back to a JSON code block for hand-authored MD.
         data: Any = None
-        pairs: list[tuple[str, str]] = []
-        for line in content.splitlines():
-            m = OPP_KV_PATTERN.match(line)
-            if m:
-                pairs.append((m.group(1), m.group(2)))
+        base_data: Any = None
+        translations: dict[str, str] = {}
 
-        if pairs:
+        # Strategy 1: combined mode — fenced block as base + json_field: kv as translations
+        fence_match = JSON_BLOCK_PATTERN.search(content)
+        if fence_match:
             try:
-                data = _unflatten_opp_kv(pairs)
-            except Exception as e:
-                logger.warning(f"OPP-KV unflatten failed ({e}); falling back to JSON block")
-                data = None
-
-        if data is None:
-            match = JSON_BLOCK_PATTERN.search(content)
-            if not match:
-                return ConversionResult(
-                    output_path=output_path,
-                    success=False,
-                    errors=["No JSON code block or OPP key=value pairs found in Markdown"],
-                )
-            json_str = match.group(1)
-            try:
-                data = json.loads(json_str)
+                base_data = json.loads(fence_match.group(1))
             except json.JSONDecodeError as e:
                 return ConversionResult(
                     output_path=output_path,
                     success=False,
-                    errors=[f"Invalid JSON syntax: {e}"],
+                    errors=[f"Invalid JSON syntax in fenced block: {e}"],
                 )
+
+        # Collect json_field: kv translations
+        for line in content.splitlines():
+            m = OPP_KV_PATTERN.match(line)
+            if m:
+                translations[m.group(1)] = m.group(2)
+
+        if base_data is not None:
+            if translations:
+                try:
+                    data = _apply_opp_kv_translations(base_data, translations)
+                except Exception as e:
+                    return ConversionResult(
+                        output_path=output_path,
+                        success=False,
+                        errors=[f"Failed to apply json_field translations: {e}"],
+                    )
+            else:
+                data = base_data
+        elif translations:
+            # Fallback: kv lines only, no fence — use legacy unflatten (loses non-strings)
+            pairs = [(k, v) for k, v in translations.items()]
+            try:
+                data = _unflatten_opp_kv(pairs)
+            except Exception as e:
+                logger.warning(f"OPP-KV unflatten failed ({e})")
+                return ConversionResult(
+                    output_path=output_path,
+                    success=False,
+                    errors=[f"OPP-KV unflatten failed: {e}"],
+                )
+        else:
+            return ConversionResult(
+                output_path=output_path,
+                success=False,
+                errors=["No JSON code block or OPP json_field: kv pairs found in Markdown"],
+            )
 
         try:
             with open(output_path, "w", encoding="utf-8") as f:
