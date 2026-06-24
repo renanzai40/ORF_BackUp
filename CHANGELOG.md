@@ -4,6 +4,20 @@
 
 ### 🛠️ 修复 / Fixed
 
+- **E2E-76** (`src/orf/mcp/server.py:apply_md` inputSchema, lines ~626-696):
+  The `apply_md` MCP tool's `inputSchema` accepted only `input_md` (a filesystem
+  path), but the underlying function also accepted inline markdown content and
+  distinguished the two by checking whether `input_md` existed on disk. When a
+  caller passed inline content in `input_md`, ORF silently echoed the literal
+  content string back as `output_path`, breaking text-in/text-out agent flows.
+  Fix: split the schema into two mutually-exclusive required-branches via
+  `anyOf`: either `(input_md + target_format)` OR `(content + target_format)`.
+  Old `input_md`-only callers keep working unchanged; new `content`-only
+  callers work as expected. **Backward-compatible** per
+  `docs/API_STABILITY.md` § 4.3 exception #2 (bug fix that does not break
+  the documented happy path → patch bump). Frozen schema fixture
+  `tests/contract/fixtures/orf_mcp_schemas.json` regenerated to reflect the
+  new state.
 - **E2E-79** (`src/orf/channels/md2pptx.py`): `MD2PPTXConverter.convert()` called `subprocess.run(['md2pptx', ...])` without checking whether the binary exists. On any Linux box without the .NET SDK (and no `/usr/local/bin/md2pptx`), the call raised `FileNotFoundError` which was caught and surfaced as the unhelpful `'md2pptx not installed or not in PATH'`. Users had no way to know that `md2pptx` is a .NET tool (NOT a pip package). Fix: pre-flight `shutil.which('md2pptx')` check that fails fast with a clear, platform-aware install hint covering the three known install paths (`.NET SDK + 'dotnet tool install --global md2pptx'`, GitHub release binary on PATH, or pandoc fallback). Rare-race `FileNotFoundError` handler with the same hint.
 
 ### 🛠️ 修复 / Fixed
