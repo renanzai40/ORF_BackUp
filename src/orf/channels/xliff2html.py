@@ -439,6 +439,20 @@ class XLIFF2HTMLConverter(BaseConverter):
         (hand-crafted HTML, smoke-test fixtures).  The primary attribute-based
         path runs first; this method only triggers when zero nodes matched.
 
+        The method runs two passes:
+
+        1. **Per-node pass** — checks each ``element.text`` and
+           ``child.tail`` individually against the XLIFF source strings.
+        2. **text_content() fallback** — for elements with nested inline
+           markup (e.g. ``<li><strong>foo</strong> — bar</li>``), the
+           per-node pass may miss fragments because OPP flattened the text
+           into per-fragment trans-units while the per-node loop only
+           checked the first-level text/tail.  The fallback concatenates
+           all descendant text via ``text_content()`` and, when the full
+           string matches a source key, walks the element's text/tail
+           fragments again with ``dict.get()`` to pick up any that the
+           first pass missed.
+
         Returns the number of text nodes that were replaced.
         """
         trans_unit_pattern = re.compile(
@@ -459,6 +473,10 @@ class XLIFF2HTMLConverter(BaseConverter):
             if src_match:
                 src_text = self._strip_xliff_inline_tags(src_match.group(1))
                 source_to_target[src_text] = translations[unit_id]
+                # Also store stripped key so .strip()ed DOM text matches
+                stripped = src_text.strip()
+                if stripped != src_text:
+                    source_to_target[stripped] = translations[unit_id]
 
         if not source_to_target:
             return 0
@@ -472,6 +490,43 @@ class XLIFF2HTMLConverter(BaseConverter):
                 if child.tail and child.tail.strip() in source_to_target:
                     child.tail = source_to_target[child.tail.strip()]
                     replaced += 1
+
+        # Pass 2: text_content() fallback for nested markup
+        # (e.g. <li><strong>foo</strong> — bar</li>)
+        for element in root.iter():
+            if element.text and element.text.strip() in source_to_target:
+                continue
+            if any(
+                child.tail and child.tail.strip() in source_to_target
+                for child in element
+            ):
+                continue
+
+            # HtmlElement has text_content(); plain etree elements don't
+            try:
+                full_text = element.text_content().strip()
+            except AttributeError:
+                full_text = "".join(element.itertext()).strip()
+
+            if not full_text or full_text not in source_to_target:
+                continue
+
+            logger.debug(
+                "text_content() fallback: <%s> full_text=%r",
+                element.tag,
+                full_text[:80],
+            )
+            if element.text and element.text.strip():
+                fragment = element.text.strip()
+                if fragment in source_to_target:
+                    element.text = source_to_target[fragment]
+                    replaced += 1
+            for child in element:
+                if child.tail and child.tail.strip():
+                    fragment = child.tail.strip()
+                    if fragment in source_to_target:
+                        child.tail = source_to_target[fragment]
+                        replaced += 1
 
         if replaced:
             logger.debug(

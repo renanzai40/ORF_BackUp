@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.8 (2026-06-25)
+
+### 🛠️ 修复 / Fixed
+
+- **Issue #6 — HTML XLIFF backfill fails for nested elements** (`src/orf/channels/xliff2html.py:_backfill_by_text_match`). When OPP flattens HTML like `<li><strong>foo</strong> — bar</li>` into per-fragment trans-units, the fallback text-match path only checked individual `.text`/`.tail` values, missing nested structure. Added a `text_content()`-based fallback that walks all text/tail fragments within an element when the per-node pass fails. Fixes silent translation loss for list items, table cells, and any element with inline children.
+
 ## v0.4.7 (2026-06-25)
 
 ### 🛠️ 修复 / Fixed
