@@ -1,0 +1,192 @@
+"""convert-batch command: Batch convert MD files in a directory."""
+
+from __future__ import annotations
+
+import json
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import click
+
+from orf.parsers.manifest import parse_manifest, find_manifest
+from orf.parsers.frontmatter import parse_frontmatter, has_frontmatter
+from orf.logging import get_logger
+
+logger = get_logger("cli")
+
+
+def _convert_single(
+    md_file: Path,
+    converter_class: type,
+    output_path: Path,
+    target_format: str,
+) -> tuple[bool, str | None]:
+    """Convert a single MD file and return (success, error_message_or_none).
+
+    This is extracted as a module-level function so it can be submitted
+    to a ThreadPoolExecutor for parallel batch processing.
+    """
+    try:
+        manifest = None
+        try:
+            manifest_path = find_manifest(md_file)
+            if manifest_path:
+                manifest = parse_manifest(manifest_path)
+        except Exception as exc:
+            logger.warning("Failed to parse manifest for %s: %s", md_file, exc)
+
+        frontmatter = None
+        try:
+            frontmatter = parse_frontmatter(md_file)
+        except Exception as exc:
+            logger.warning("Failed to parse frontmatter for %s: %s", md_file, exc)
+
+        converter = converter_class(manifest=manifest, frontmatter=frontmatter)
+        output_file = output_path / f"{md_file.stem}.{target_format}"
+
+        result = converter.convert(md_file, output_file)
+
+        if result.success:
+            return True, None
+        else:
+            return False, str(result.errors)
+
+    except Exception as e:
+        return False, str(e)
+
+
+@click.command("convert-batch")
+@click.argument("input_dir", type=click.Path(exists=True))
+@click.option(
+    "--target-format",
+    "-t",
+    type=click.Choice(["docx", "odt", "epub", "html"]),
+)
+@click.option("--output-dir", "-o", type=click.Path(), help="输出目录")
+@click.option("--pattern", "-p", default="*.md", help="文件匹配模式")
+@click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
+@click.option(
+    "--max-file-size-mb",
+    type=float,
+    default=None,
+    help="拒绝超过此大小 (MB) 的文件",
+)
+@click.option(
+    "--max-workers",
+    type=int,
+    default=4,
+    help="最大并行工作线程数",
+)
+def convert_batch(
+    input_dir: str,
+    target_format: str,
+    output_dir: str | None,
+    pattern: str,
+    output_json: bool,
+    max_file_size_mb: float | None = None,
+    max_workers: int = 4,
+) -> None:
+    """批量转换 MD 文件"""
+    input_path = Path(input_dir)
+    output_path = Path(output_dir) if output_dir else input_path
+
+    md_files = []
+    for md_file in input_path.rglob(pattern):
+        try:
+            content = md_file.read_text(encoding="utf-8", errors="ignore")
+            if has_frontmatter(content):
+                md_files.append(md_file)
+        except Exception as e:
+            logger.warning(f"Skipping {md_file}: {e}")
+
+    logger.info(f"Found {len(md_files)} MD files to convert")
+
+    if not md_files:
+        click.echo("No files found to convert")
+        return
+
+    if max_file_size_mb is not None:
+        for md_file in md_files:
+            size_mb = md_file.stat().st_size / (1024 * 1024)
+            if size_mb > max_file_size_mb:
+                click.echo(
+                    f"Error: File {md_file} is {size_mb:.1f}MB, exceeds limit of {max_file_size_mb}MB",
+                    err=True,
+                )
+                raise SystemExit(1)
+
+    # Lazy imports from orf.cli for test patch compat
+    from orf.cli import MD2DOCXConverter, MD2ODTConverter, MD2EPUBConverter, MD2HTMLConverter
+
+    if target_format == "docx":
+        converter_class: type = MD2DOCXConverter
+    elif target_format == "odt":
+        converter_class = MD2ODTConverter
+    elif target_format == "epub":
+        converter_class = MD2EPUBConverter
+    elif target_format == "html":
+        converter_class = MD2HTMLConverter
+    else:
+        raise click.ClickException(
+            f"Unsupported format '{target_format}'\n"
+            f"Hint: Valid formats are: docx, odt, epub, html\n"
+            f"       Use --target-format <format> to specify"
+        )
+
+    success_count = 0
+    fail_count = 0
+
+    if max_workers <= 1:
+        with click.progressbar(
+            md_files,
+            label=f"Converting to {target_format}",
+            show_pos=True,
+            show_percent=True,
+        ) as bar:
+            for md_file in bar:
+                success, error = _convert_single(
+                    md_file, converter_class, output_path, target_format
+                )
+                if success:
+                    success_count += 1
+                else:
+                    fail_count += 1
+                    logger.error(f"Failed: {md_file}: {error}")
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(
+                    _convert_single,
+                    md_file,
+                    converter_class,
+                    output_path,
+                    target_format,
+                )
+                for md_file in md_files
+            ]
+            for i, future in enumerate(futures):
+                md_file = md_files[i]
+                try:
+                    success, error = future.result()
+                    if success:
+                        success_count += 1
+                    else:
+                        fail_count += 1
+                        logger.error(f"Failed: {md_file}: {error}")
+                except Exception as e:
+                    fail_count += 1
+                    logger.error(f"Error processing {md_file}: {e}")
+
+    click.echo(f"\nCompleted: {success_count} succeeded, {fail_count} failed")
+
+    if output_json:
+        click.echo(
+            json.dumps(
+                {
+                    "success_count": success_count,
+                    "fail_count": fail_count,
+                    "total": len(md_files),
+                },
+                indent=2,
+            )
+        )

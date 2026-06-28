@@ -191,3 +191,35 @@ def minimal_docx(tmp_path: Path) -> Path:
     path = tmp_path / "test.docx"
     create_minimal_docx(path, MINIMAL_DOCX_DOCUMENT)
     return path
+
+
+# =============================================================================
+# Golden file options (Task 3.3a)
+# =============================================================================
+
+
+def pytest_addoption(parser):
+    """Register pytest CLI options for golden file capture/verification."""
+    parser.addoption(
+        "--golden-capture",
+        action="store_true",
+        default=False,
+        help="Capture golden files (copy actual output to golden dir)",
+    )
+    parser.addoption(
+        "--golden-verify",
+        action="store_true",
+        default=True,
+        help="Verify output against golden files (default: on)",
+    )
+    parser.addoption(
+        "--no-golden-verify",
+        action="store_false",
+        dest="golden_verify",
+        help="Skip golden file verification",
+    )
+    parser.addoption(
+        "--golden-dir",
+        default="tests/golden/xliff2docx",
+        help="Golden file directory (default: tests/golden/xliff2docx)",
+    )
