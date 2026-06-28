@@ -62,14 +62,14 @@ ruff check src/
 ruff check --fix src/
 ```
 
-Configuration: `line-length = 100`, `target-version = "py310"`.
+Configuration: `line-length = 100`, `target-version = "py313"`.
 
 ### MyPy (Type Checking)
 ```bash
 mypy src/
 ```
 
-Configuration: `python_version = "3.10"`, `strict = true`.
+Configuration: `python_version = "3.13"`, `strict = true`.
 
 ## Release Process
 

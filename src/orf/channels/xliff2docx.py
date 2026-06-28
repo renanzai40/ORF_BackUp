@@ -1083,9 +1083,8 @@ class XLIFF2DOCXConverter(BaseConverter):
             # Try to find the best substring match using sequence similarity
             best_ratio = 0.0
             best_pos = -1
-            step = max(1, min(10, len(source_normalized) // 4))
-            # Try matching at different windows of concat
-            for start in range(0, max(1, len(concat) - len(source_normalized) + 10), step):
+            # FIXED: step=1 for sub-character-level accuracy (was step=max(1, len/4) up to 10)
+            for start in range(len(concat) - len(source_normalized) + 1):
                 window = concat[start:start + len(source_normalized) + 5]
                 import difflib
                 ratio = difflib.SequenceMatcher(None, source_normalized, window[:len(source_normalized)]).ratio()

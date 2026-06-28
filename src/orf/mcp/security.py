@@ -11,8 +11,8 @@ SYSTEM_DIRS: set = {
     '/var',
     '/System',
     '/Library',
-    '/C:/Windows',
-    'C:\\Windows',
+    r'/C:/Windows',
+    r'C:\Windows',
 }
 
 # Blocked file extensions (executables and scripts)

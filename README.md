@@ -17,7 +17,7 @@ ORF is the final step in the Omni document localization ecosystem, responsible f
 - ICML (InDesign), SRT (subtitles)
 
 ### XLIFF Backfill
-- DOCX, PPTX, EPUB, HTML, ODF
+- DOCX, PPTX, EPUB, HTML, ODT
 
 ### Cloud Storage
 - AWS S3, Azure Blob Storage
@@ -253,7 +253,7 @@ src/orf/
 └── error_handlers/   # Error handling and recovery strategies
 ```
 
-## Project Status (v0.4.1)
+## Project Status (v0.4.16)
 
 - **Agent-Oriented Architecture**: MCP Server + Foreman/Specialist + HITL approval
 - **Precise Image Positioning**: supports position-based image backfill for DOCX/PPTX/HTML/EPUB
@@ -261,8 +261,8 @@ src/orf/
 - **Path Security**: PathValidator prevents directory traversal
 - **Audit Logs**: correlation_id + agent_id full-chain tracing
 - 400+ test cases (including MCP integration tests + end-to-end pipeline tests)
-- MD backfill: 9 formats (DOCX, ODT, EPUB, HTML, RTF, PDF, PPTX, ICML, SRT)
-- XLIFF backfill: 5 formats (DOCX, PPTX, EPUB, HTML, ODF)
+- MD backfill: 16 formats (DOCX, ODT, EPUB, HTML, RTF, PDF, PPTX, ICML, SRT, XLSX, CSV, JSON, XML, IPYNB, EML, MSG)
+- XLIFF backfill: 5 formats (DOCX, PPTX, EPUB, HTML, ODT)
 - Cloud storage: S3 + Azure Blob integration
 - AI: Layout overflow detection and correction
 - Data formats: XLSX, CSV, JSON

@@ -18,7 +18,7 @@ from orf.error_handlers.conversion_error import FormatDetectionError
 from orf.logging import get_logger
 from orf.parsers.manifest import find_manifest, parse_manifest
 
-from orf.detection.magic_bytes import MAGIC_SIGNATURES
+from orf.detection.magic_bytes import MAGIC_SIGNATURES, _ZIP_MAGIC, _disambiguate_zip_format
 
 logger = get_logger("detection.format_detector")
 
@@ -100,6 +100,18 @@ class FormatDetector:
                 header = f.read(16)
         except OSError as e:
             raise FormatDetectionError(str(file_path), f"Cannot read file: {e}")
+
+        if header.startswith(_ZIP_MAGIC):
+            fmt = _disambiguate_zip_format(file_path)
+            if fmt != "zip/unknown":
+                logger.debug(
+                    "Detected format '%s' via ZIP disambiguation in '%s'",
+                    fmt, file_path,
+                )
+                return fmt.upper()
+            raise FormatDetectionError(
+                str(file_path), "Unknown ZIP-based format (no matching internal structure)"
+            )
 
         for fmt_name, magic in MAGIC_SIGNATURES.items():
             if header.startswith(magic):
