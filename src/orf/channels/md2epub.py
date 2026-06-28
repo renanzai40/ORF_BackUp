@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
@@ -32,6 +32,19 @@ class MD2EPUBConverter(BaseConverter):
     def validate_input(self, input_path: Path | str) -> bool:
         input_path = Path(input_path)
         return input_path.exists() and input_path.suffix.lower() == ".md"
+
+    def inject_images(
+        self,
+        skeleton_path: Path | str,
+        images: list[Any],
+        output_path: Path | str,
+    ) -> tuple[list[Any], list[Any]]:
+        """EPUB format does not support external image injection.
+        Images are embedded by pandoc during conversion.
+
+        Returns empty embedded list and unchanged images list.
+        """
+        return [], images
 
     def convert(
         self,

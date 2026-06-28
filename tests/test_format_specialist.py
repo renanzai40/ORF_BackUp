@@ -3,7 +3,7 @@
 Covers:
 - supported_formats
 - happy paths for docx / odt / epub
-- UNSUPPORTED_FORMAT for pptx (despite listed in supported_formats) and unknown formats
+- UNSUPPORTED_FORMAT for pptx and unknown formats
 - Generic Exception → CONVERSION_ERROR wrapping
 - output_path defaulting behavior
 - BaseSpecialist hooks (can_handle, category, get_capabilities)
@@ -52,9 +52,9 @@ def _ok(output: Path) -> ConversionResult:
 
 class TestFormatSpecialistInterface:
     def test_supported_formats(self, specialist: FormatSpecialist):
-        assert specialist.supported_formats == ["docx", "odt", "epub", "pptx"]
+        assert specialist.supported_formats == ["docx", "odt", "epub"]
 
-    @pytest.mark.parametrize("fmt", ["docx", "odt", "epub", "pptx"])
+    @pytest.mark.parametrize("fmt", ["docx", "odt", "epub"])
     def test_can_handle_supported(self, specialist: FormatSpecialist, fmt: str):
         assert specialist.can_handle(fmt) is True
 
@@ -67,7 +67,7 @@ class TestFormatSpecialistInterface:
     def test_get_capabilities(self, specialist: FormatSpecialist):
         caps = specialist.get_capabilities()
         assert caps["category"] == "format"
-        assert caps["formats"] == ["docx", "odt", "epub", "pptx"]
+        assert caps["formats"] == ["docx", "odt", "epub"]
         assert caps["supports_batch"] is True
 
 

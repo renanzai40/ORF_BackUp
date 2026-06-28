@@ -152,9 +152,9 @@ class HITLApproval:
             ApprovalResult with decision (auto-approved by default; a
             real notification backend would block until human review).
         """
-        logger.info(
-            "Auto-approving %s operation '%s' on %s (%.1fMB) — HITL notification "
-            "system not configured; all operations auto-approved with log trail.",
+        logger.warning(
+            "HITL auto-approved: no notification channel configured — "
+            "%s operation '%s' on %s (%.1fMB)",
             request.risk_level.name,
             request.operation.operation_type,
             request.operation.file_path,

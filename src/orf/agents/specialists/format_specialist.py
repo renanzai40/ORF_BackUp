@@ -1,4 +1,4 @@
-"""Format Specialist - handles DOCX, PPTX, ODT, EPUB conversions."""
+"""Format Specialist - handles DOCX, ODT, EPUB conversions."""
 
 from pathlib import Path
 from typing import Optional
@@ -14,12 +14,12 @@ from orf.channels.md2epub import MD2EPUBConverter
 class FormatSpecialist(BaseSpecialist):
     """Handles office format conversions with skeleton backfill.
 
-    Formats: docx, pptx, odt, epub
+    Formats: docx, odt, epub
     """
 
     @property
     def supported_formats(self) -> list[str]:
-        return ["docx", "odt", "epub", "pptx"]
+        return ["docx", "odt", "epub"]
 
     def convert(
         self,

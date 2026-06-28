@@ -260,11 +260,41 @@ class DOCXInlineApplier(InlineFormattingApplier):
             if not sub_types:
                 continue
 
+            # Collect all <w:r> runs whose <w:t> text matches target_text
+            matching_runs = []
             for run in root.findall(f".//{self.W_PREFIX}r"):
                 t_elem = run.find(f"{self.W_PREFIX}t")
                 if t_elem is None or t_elem.text != target_text:
                     continue
+                matching_runs.append(run)
 
+            if not matching_runs:
+                continue
+
+            # Group matching runs by parent paragraph index to avoid
+            # formatting the same text in unrelated paragraphs (R-C7).
+            para_groups = {}
+            for run in matching_runs:
+                parent = run.getparent()
+                para_idx = 0
+                if parent is not None and parent.tag == f"{self.W_PREFIX}p":
+                    prev = parent.getprevious()
+                    while prev is not None:
+                        if prev.tag == f"{self.W_PREFIX}p":
+                            para_idx += 1
+                        prev = prev.getprevious()
+                para_groups.setdefault(para_idx, []).append(run)
+
+            if len(para_groups) > 1:
+                logger.warning(
+                    "DOCXInlineApplier: target_text=%r matched %d runs across %d paragraphs "
+                    "(formatting only the first paragraph's matches; check paragraph context)",
+                    target_text, len(matching_runs), len(para_groups),
+                )
+
+            # Only format runs in the first matching paragraph
+            first_para_idx = min(para_groups)
+            for run in para_groups[first_para_idx]:
                 rpr = lxml.etree.Element(f"{self.W_PREFIX}rPr")
                 for sub_type in sub_types:
                     tag_name = self.TYPE_TO_TAG.get(sub_type.lower(), sub_type.lower())

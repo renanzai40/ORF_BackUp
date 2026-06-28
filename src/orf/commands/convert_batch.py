@@ -60,7 +60,11 @@ def _convert_single(
 @click.option(
     "--target-format",
     "-t",
-    type=click.Choice(["docx", "odt", "epub", "html"]),
+    type=click.Choice([
+        "docx", "odt", "epub", "html", "rtf", "pdf", "pptx",
+        "icml", "srt", "csv", "xlsx", "json", "ipynb", "eml",
+        "msg", "xml",
+    ]),
 )
 @click.option("--output-dir", "-o", type=click.Path(), help="输出目录")
 @click.option("--pattern", "-p", default="*.md", help="文件匹配模式")
@@ -115,7 +119,7 @@ def convert_batch(
                 )
                 raise SystemExit(1)
 
-    # Lazy imports from orf.cli for test patch compat
+    # Lazy imports from orf.channels for test patch compat
     from orf.cli import MD2DOCXConverter, MD2ODTConverter, MD2EPUBConverter, MD2HTMLConverter
 
     if target_format == "docx":
@@ -126,10 +130,67 @@ def convert_batch(
         converter_class = MD2EPUBConverter
     elif target_format == "html":
         converter_class = MD2HTMLConverter
+    elif target_format == "rtf":
+        from orf.channels.md2rtf import MD2RTFConverter
+        converter_class = MD2RTFConverter
+    elif target_format == "pdf":
+        from orf.channels.md2pdf import MD2PDFConverter
+        converter_class = MD2PDFConverter
+    elif target_format == "pptx":
+        from orf.channels.md2pptx import MD2PPTXConverter
+        converter_class = MD2PPTXConverter
+    elif target_format == "icml":
+        from orf.channels.md2icml import MD2ICMLConverter
+        converter_class = MD2ICMLConverter
+    elif target_format == "srt":
+        from orf.channels.md2srt import MD2SRTConverter
+        converter_class = MD2SRTConverter
+    elif target_format == "csv":
+        from orf.channels.md2csv import MD2CSVConverter
+        converter_class = MD2CSVConverter
+    elif target_format == "xlsx":
+        try:
+            from orf.channels.md2xlsx import MD2XLSXConverter
+            converter_class = MD2XLSXConverter
+        except ImportError as e:
+            raise click.ClickException(
+                f"XLSX conversion requires openpyxl.\n"
+                f"Install with: pip install omni-re-formatter[office]\n"
+                f"Error: {e}"
+            )
+    elif target_format == "json":
+        from orf.channels.md2json import MD2JSONConverter
+        converter_class = MD2JSONConverter
+    elif target_format == "ipynb":
+        try:
+            from orf.channels.md2ipynb import MD2IPYNBConverter
+            converter_class = MD2IPYNBConverter
+        except ImportError as e:
+            raise click.ClickException(
+                f"IPYNB conversion requires nbformat.\n"
+                f"Install with: pip install omni-re-formatter[notebook]\n"
+                f"Error: {e}"
+            )
+    elif target_format == "eml":
+        from orf.channels.md2eml import MD2EMLConverter
+        converter_class = MD2EMLConverter
+    elif target_format == "msg":
+        try:
+            from orf.channels.md2msg import MD2MSGConverter
+            converter_class = MD2MSGConverter
+        except ImportError as e:
+            raise click.ClickException(
+                f"MSG conversion requires aspose-email-foss.\n"
+                f"Install with: pip install omni-re-formatter[email-output]\n"
+                f"Error: {e}"
+            )
+    elif target_format == "xml":
+        from orf.channels.md2xml import MD2XMLConverter
+        converter_class = MD2XMLConverter
     else:
         raise click.ClickException(
             f"Unsupported format '{target_format}'\n"
-            f"Hint: Valid formats are: docx, odt, epub, html\n"
+            f"Hint: Valid formats are: docx, odt, epub, html, rtf, pdf, pptx, icml, srt, csv, xlsx, json, ipynb, eml, msg, xml\n"
             f"       Use --target-format <format> to specify"
         )
 

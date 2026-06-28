@@ -40,7 +40,6 @@ class SkeletonLoader:
         self.xml: str | None = None
         self.files: dict[str, Any] = {}
         self.compress_types: dict[str, int] = {}
-        self.bytes: bytes = b""
 
     def load_skeleton(self, path: str, max_file_size_mb: int | None = None) -> dict[str, Any]:
         """Load a DOCX file and extract its contents.
@@ -50,12 +49,11 @@ class SkeletonLoader:
             max_file_size_mb: Maximum allowed file size in MB. Raises ValueError if exceeded.
 
         Returns:
-            dict with keys: xml (str), files (dict), bytes (bytes)
+            dict with keys: xml (str), files (dict)
         """
         self.files = {}
         self.compress_types = {}
         self.xml = None
-        self.bytes = b""
 
         if max_file_size_mb is not None:
             file_size_mb = Path(path).stat().st_size / (1024 * 1024)
@@ -69,7 +67,6 @@ class SkeletonLoader:
             for name in zf.namelist():
                 self._validate_zip_entry_name(name)
             # Read entire ZIP into memory
-            self.bytes = zf.read(zf.namelist()[0])  # Read first file as representative
             for name in zf.namelist():
                 self.files[name] = zf.read(name)
                 self.compress_types[name] = zf.getinfo(name).compress_type
@@ -77,7 +74,7 @@ class SkeletonLoader:
         if "word/document.xml" in self.files:
             self.xml = self.files["word/document.xml"].decode("utf-8")
 
-        return {"xml": self.xml, "files": self.files, "bytes": self.bytes}
+        return {"xml": self.xml, "files": self.files}
 
     def extract_document_xml(self) -> str:
         """Extract word/document.xml as a string.
