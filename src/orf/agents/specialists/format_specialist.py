@@ -9,6 +9,9 @@ from orf.converters.options import ConverterOptions
 from orf.channels.md2docx import MD2DOCXConverter
 from orf.channels.md2odt import MD2ODTConverter
 from orf.channels.md2epub import MD2EPUBConverter
+from orf.logging import get_logger
+
+logger = get_logger("agents.format_specialist")
 
 
 class FormatSpecialist(BaseSpecialist):
@@ -52,6 +55,7 @@ class FormatSpecialist(BaseSpecialist):
             return converter.convert(input_path, output_path, ConverterOptions(**options))
 
         except Exception as e:
+            logger.warning("FormatSpecialist conversion failed: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,

@@ -8,6 +8,9 @@ from orf.converters.base import ConversionResult, ErrorDetail
 from orf.converters.options import ConverterOptions
 from orf.channels.md2eml import MD2EMLConverter
 from orf.channels.md2msg import MD2MSGConverter
+from orf.logging import get_logger
+
+logger = get_logger("agents.email_specialist")
 
 
 class EmailSpecialist(BaseSpecialist):
@@ -58,6 +61,7 @@ class EmailSpecialist(BaseSpecialist):
                 )]
             )
         except Exception as e:
+            logger.warning("EmailSpecialist conversion failed: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,

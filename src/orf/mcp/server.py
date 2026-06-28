@@ -328,6 +328,7 @@ async def _call_tool(name: str, arguments: dict) -> list[types.ContentBlock]:
             try:
                 payload = json.loads(result)
             except Exception:
+                logger.debug("Failed to parse result JSON for traceparent injection", exc_info=True)
                 payload = None
             if isinstance(payload, dict):
                 tp = _orf_tracing_inject_traceparent(_span)
@@ -337,6 +338,7 @@ async def _call_tool(name: str, arguments: dict) -> list[types.ContentBlock]:
         try:
             payload = json.loads(result) if isinstance(result, str) else {}
         except Exception:
+            logger.debug("Failed to parse result payload JSON", exc_info=True)
             payload = {}
         status = _orf_classify_status(payload)
         record_request_from_arguments(

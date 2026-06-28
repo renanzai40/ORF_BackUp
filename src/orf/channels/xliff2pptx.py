@@ -115,6 +115,7 @@ class XLIFF2PPTXConverter(BaseConverter):
             slide_files = skeleton_data["files"]
             logger.info(f"Loaded PPTX skeleton with {len(slide_files)} files")
         except Exception as e:
+            logger.warning("Failed to load PPTX skeleton: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,
@@ -150,6 +151,7 @@ class XLIFF2PPTXConverter(BaseConverter):
             self._repack_pptx(output_path, modified_slides, slide_files)
             logger.info(f"Repacked PPTX to {output_path}")
         except Exception as e:
+            logger.warning("Failed to repack PPTX: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,

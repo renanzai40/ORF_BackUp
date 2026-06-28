@@ -52,6 +52,7 @@ def _convert_single(
             return False, str(result.errors)
 
     except Exception as e:
+        logger.warning("Batch conversion failed for %s: %s", md_file, e, exc_info=True)
         return False, str(e)
 
 

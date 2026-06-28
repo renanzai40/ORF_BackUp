@@ -14,6 +14,7 @@ Wired from ``server._call_tool`` via ``start_call_tool_span`` +
 """
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from contextlib import contextmanager
@@ -34,6 +35,7 @@ from orf.mcp._tracing_exporter import _JsonlFileSpanExporter
 MODULE_NAME = "orf"
 SPAN_NAME_CALL_TOOL = "orf.call_tool"
 _TRACER_NAME = "orf"
+_logger = logging.getLogger(__name__)
 
 ATTR_TOOL_NAME = "tool.name"
 ATTR_TOOL_STATUS = "tool.status"
@@ -81,6 +83,7 @@ def _version() -> str:
         from orf import __version__
         return str(__version__)
     except Exception:
+        _logger.debug("Failed to get __version__", exc_info=True)
         return "unknown"
 
 
@@ -97,6 +100,7 @@ def _extract_traceparent_context(traceparent: str) -> Context | None:
     try:
         return TraceContextTextMapPropagator().extract({"traceparent": traceparent})
     except Exception:
+        _logger.debug("Failed to extract traceparent context", exc_info=True)
         return None
 
 
@@ -112,6 +116,7 @@ def inject_traceparent(span: Span | None) -> str | None:
     try:
         ctx = span.get_span_context()
     except Exception:
+        _logger.debug("Failed to get span context", exc_info=True)
         return None
     if ctx is None or not ctx.is_valid:
         return None

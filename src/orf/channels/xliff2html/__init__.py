@@ -122,6 +122,7 @@ class XLIFF2HTMLConverter(BaseConverter):
         try:
             html_content = html_template.read_text(encoding=opts.encoding)
         except Exception as e:
+            logger.warning("Failed to read HTML template: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,
@@ -139,6 +140,7 @@ class XLIFF2HTMLConverter(BaseConverter):
         try:
             xliff_content = xliff_path.read_text(encoding=opts.encoding)
         except Exception as e:
+            logger.warning("Failed to read XLIFF file: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,
@@ -173,6 +175,7 @@ class XLIFF2HTMLConverter(BaseConverter):
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(result_content, encoding="utf-8")
         except Exception as e:
+            logger.warning("Failed to write output HTML: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,

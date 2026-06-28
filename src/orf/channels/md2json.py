@@ -151,6 +151,7 @@ class MD2JSONConverter(BaseConverter):
         try:
             content = input_path.read_text(encoding="utf-8")
         except Exception as e:
+            logger.error("Failed to read input file: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,
@@ -184,6 +185,7 @@ class MD2JSONConverter(BaseConverter):
                 try:
                     data = _apply_opp_kv_translations(base_data, translations)
                 except Exception as e:
+                    logger.error("Failed to apply json_field translations: %s", e, exc_info=True)
                     return ConversionResult(
                         output_path=output_path,
                         success=False,
@@ -214,6 +216,7 @@ class MD2JSONConverter(BaseConverter):
             with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
+            logger.error("Failed to write output file: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,

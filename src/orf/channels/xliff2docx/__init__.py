@@ -474,6 +474,7 @@ class XLIFF2DOCXConverter(BaseConverter):
                     ],
                 )
         except Exception as e:
+            logger.warning("Failed to load skeleton: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,
@@ -619,6 +620,7 @@ class XLIFF2DOCXConverter(BaseConverter):
         try:
             self.skeleton_loader.repack_docx(str(output_path), final_xml)
         except Exception as e:
+            logger.warning("Failed to repack DOCX: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,

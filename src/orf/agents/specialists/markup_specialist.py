@@ -8,6 +8,9 @@ from orf.converters.base import ConversionResult, ErrorDetail
 from orf.converters.options import ConverterOptions
 from orf.channels.md2html import MD2HTMLConverter
 from orf.channels.md2xml import MD2XMLConverter
+from orf.logging import get_logger
+
+logger = get_logger("agents.markup_specialist")
 
 
 class MarkupSpecialist(BaseSpecialist):
@@ -49,6 +52,7 @@ class MarkupSpecialist(BaseSpecialist):
             return converter.convert(input_path, output_path, ConverterOptions(**options))
 
         except Exception as e:
+            logger.warning("MarkupSpecialist conversion failed: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,

@@ -21,6 +21,7 @@ or other deps, to honor the no-new-deps rule).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import time
@@ -30,6 +31,7 @@ from typing import Any
 MODULE_NAME = "orf"
 DEFAULT_HEALTH_PORT = 8766
 _start_time: float = time.monotonic()
+_logger = logging.getLogger(__name__)
 
 
 def _version() -> str:
@@ -37,6 +39,7 @@ def _version() -> str:
         from orf import __version__
         return str(__version__)
     except Exception:
+        _logger.debug("Failed to import __version__", exc_info=True)
         return "unknown"
 
 

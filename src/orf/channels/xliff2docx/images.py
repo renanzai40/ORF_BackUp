@@ -480,7 +480,7 @@ def add_image_to_zip(
                     if target.replace("\\", "/").endswith(media_filename):
                         return rel.get("Id")
             except Exception:
-                pass
+                logger.debug("Failed to extract media filename from existing rels", exc_info=True)
         return existing_rid.replace("word/media/", "rId")
 
     media_name = f"word/media/{dedup_name}"

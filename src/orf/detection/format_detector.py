@@ -64,6 +64,7 @@ class FormatDetector:
         try:
             manifest = parse_manifest(manifest_path)
         except Exception as e:
+            logger.debug("Failed to parse manifest %s: %s", manifest_path, e, exc_info=True)
             raise FormatDetectionError(
                 str(manifest_path), f"Failed to parse manifest: {e}"
             )

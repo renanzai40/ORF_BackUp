@@ -9,6 +9,9 @@ from orf.converters.options import ConverterOptions
 from orf.channels.md2xlsx import MD2XLSXConverter
 from orf.channels.md2csv import MD2CSVConverter
 from orf.channels.md2json import MD2JSONConverter
+from orf.logging import get_logger
+
+logger = get_logger("agents.data_specialist")
 
 
 class DataSpecialist(BaseSpecialist):
@@ -61,6 +64,7 @@ class DataSpecialist(BaseSpecialist):
                 )]
             )
         except Exception as e:
+            logger.warning("DataSpecialist conversion failed: %s", e, exc_info=True)
             return ConversionResult(
                 output_path=output_path,
                 success=False,

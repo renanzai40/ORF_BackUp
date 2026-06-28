@@ -7,11 +7,15 @@ import doesn't run when tracing is disabled.
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from pathlib import Path
 
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+
+
+_logger = logging.getLogger(__name__)
 
 
 class _JsonlFileSpanExporter(SpanExporter):
@@ -60,8 +64,10 @@ class _JsonlFileSpanExporter(SpanExporter):
                             }
                             fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
                         except Exception:
+                            _logger.debug("Failed to serialize span, skipping", exc_info=True)
                             continue
         except Exception:
+            _logger.debug("Failed to export spans", exc_info=True)
             return SpanExportResult.FAILURE
         return SpanExportResult.SUCCESS
 

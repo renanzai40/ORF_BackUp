@@ -172,6 +172,7 @@ class XLIFF2EPUBConverter(BaseConverter):
             with open(xliff_path, "rb") as f:
                 content = f.read()
         except Exception as e:
+            logger.debug("Failed to read XLIFF file: %s", e, exc_info=True)
             raise XLIFFParseError(str(xliff_path), f"Cannot read file: {e}")
 
         try:
