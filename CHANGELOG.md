@@ -5,6 +5,9 @@
 ### 🛠️ 修复 / Fixed
 
 - **(AGENTS.md, README.md, docs/TROUBLESHOOTING.md)**: rewrite env var table (12 wrong ORG_* → ORG_MCP_*/OMNI_*); fix tool count 5→6 (add ping); document WeasyPrint system C-lib deps (libpango/libcairo/libgdk-pixbuf) for Debian/Ubuntu/macOS/python:3.13-slim
+- **(md2xlsx.py)**: `_parse_table_rows()` now robustly handles OPP-extracted markdown table formats. Previously only GFM-style tables (with outer `|` pipes) worked; simplified tables caused empty `<sheetData>` in XLSX output. Fixed by normalizing leading/trailing `|` and tolerating more flexible row formats.
+- **(md2html.py)**: `convert()` now strips YAML frontmatter via `orf.parsers.frontmatter.strip_frontmatter()` before passing to `python-markdown`. Previously the `---` separator was interpreted as `<hr>` and frontmatter fields rendered as visible `<p>`.
+- **(src/orf/cli.py)**: `_load_dotenv_for_orf()` now handles `export KEY=val` prefix via `line.removeprefix("export ").lstrip()`. Previously `export FOO=bar` would set `export FOO` instead of `FOO`.
 
 ### 📝 文档 / Docs
 
@@ -13,6 +16,7 @@
 ### ✨ 新功能 / Added
 
 - **(src/orf/cli.py, .env.example, AGENTS.md)**: add opt-in .env auto-loading via `--load-dotenv` flag and `ORF_AUTOLOAD_DOTENV=1` env var. Mirrors OPP/OL pattern (no python-dotenv dependency)
+- **`tests/test_env_autoload.py`** (110 lines): comprehensive tests for `_load_dotenv_for_orf()`. Covers empty file, comments-only, simple KEY=value, double-quoted values, single-quoted values, malformed line tolerance. Verifies the `setdefault` precedence (shell env wins over .env file).
 
 ## v0.4.8 (2026-06-25)
 
