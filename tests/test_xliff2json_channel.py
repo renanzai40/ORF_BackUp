@@ -218,6 +218,130 @@ class TestApplyXliffToJson:
         assert "user.profile.bio" in ids
         assert "user.profile.location" in ids
 
+    # ── RED phase tests (will fail until original_json_path is implemented) ──
+
+    def test_xliff_to_json_reconstructs_nested(self, tmp_path: Path):
+        """Reconstruct nested JSON structure from dot-notation XLIFF trans-units."""
+        xliff_content = """<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file original="test.json" source-language="en" target-language="zh-CN">
+    <body>
+      <trans-unit id="user.name">
+        <source>Alice</source>
+        <target>爱丽丝</target>
+      </trans-unit>
+      <trans-unit id="user.profile.bio">
+        <source>Developer</source>
+        <target>开发者</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>"""
+        xliff_file = tmp_path / "nested.xlf"
+        xliff_file.write_text(xliff_content, encoding="utf-8")
+
+        original_json = {"user": {"name": "Alice", "profile": {"bio": "Developer"}}}
+        json_path = tmp_path / "original.json"
+        json_path.write_text(
+            json.dumps(original_json, ensure_ascii=False), encoding="utf-8"
+        )
+
+        output = tmp_path / "output.json"
+        result = apply_xliff_to_json(
+            xliff_file, output, original_json_path=json_path
+        )
+        assert result["success"] is True
+
+        data = json.loads(output.read_text(encoding="utf-8"))
+        assert "reconstructed" in data
+        assert data["reconstructed"]["user"]["name"] == "爱丽丝"
+        assert data["reconstructed"]["user"]["profile"]["bio"] == "开发者"
+
+    def test_xliff_to_json_reconstructs_arrays(self, tmp_path: Path):
+        """Reconstruct JSON with array indexing from dot-notation XLIFF trans-units."""
+        xliff_content = """<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file original="test.json" source-language="en" target-language="zh-CN">
+    <body>
+      <trans-unit id="items.0.title">
+        <source>First Item</source>
+        <target>第一项</target>
+      </trans-unit>
+      <trans-unit id="items.1.title">
+        <source>Second Item</source>
+        <target>第二项</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>"""
+        xliff_file = tmp_path / "array.xlf"
+        xliff_file.write_text(xliff_content, encoding="utf-8")
+
+        original_json = {
+            "items": [
+                {"title": "First Item"},
+                {"title": "Second Item"},
+            ]
+        }
+        json_path = tmp_path / "original.json"
+        json_path.write_text(
+            json.dumps(original_json, ensure_ascii=False), encoding="utf-8"
+        )
+
+        output = tmp_path / "output.json"
+        result = apply_xliff_to_json(
+            xliff_file, output, original_json_path=json_path
+        )
+        assert result["success"] is True
+
+        data = json.loads(output.read_text(encoding="utf-8"))
+        assert "reconstructed" in data
+        assert data["reconstructed"]["items"][0]["title"] == "第一项"
+        assert data["reconstructed"]["items"][1]["title"] == "第二项"
+
+    def test_xliff_to_json_reconstructs_deep_nesting(self, tmp_path: Path):
+        """Reconstruct deeply nested JSON from dot-notation XLIFF trans-units."""
+        xliff_content = """<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file original="test.json" source-language="en" target-language="zh-CN">
+    <body>
+      <trans-unit id="a.b.c.d.e">
+        <source>deep_value</source>
+        <target>深层值</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>"""
+        xliff_file = tmp_path / "deep.xlf"
+        xliff_file.write_text(xliff_content, encoding="utf-8")
+
+        original_json = {"a": {"b": {"c": {"d": {"e": "deep_value"}}}}}
+        json_path = tmp_path / "original.json"
+        json_path.write_text(
+            json.dumps(original_json, ensure_ascii=False), encoding="utf-8"
+        )
+
+        output = tmp_path / "output.json"
+        result = apply_xliff_to_json(
+            xliff_file, output, original_json_path=json_path
+        )
+        assert result["success"] is True
+
+        data = json.loads(output.read_text(encoding="utf-8"))
+        assert "reconstructed" in data
+        assert data["reconstructed"]["a"]["b"]["c"]["d"]["e"] == "深层值"
+
+    def test_xliff_to_json_without_original_returns_flat(self, sample_xliff: Path, tmp_path: Path):
+        """Without original_json_path, output has no 'reconstructed' key (backward compat)."""
+        output = tmp_path / "output.json"
+        result = apply_xliff_to_json(sample_xliff, output)
+        assert result["success"] is True
+
+        data = json.loads(output.read_text(encoding="utf-8"))
+        assert "reconstructed" not in data
+        assert "xliff_units" in data
+        assert "unit_count" in data
+
 
 class TestApplyXliffJsonRouting:
     """Tests that apply-xliff CLI correctly routes to xliff2json."""

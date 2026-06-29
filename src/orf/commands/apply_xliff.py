@@ -65,6 +65,13 @@ logger = get_logger("cli")
     help="Bypass skeleton format validation (may produce broken output). Use with caution.",
 )
 @click.option(
+    "--original-json",
+    "original_json",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to original JSON file for structure reconstruction (json format only)",
+)
+@click.option(
     "--skeleton-html",
     "skeleton_html_param",
     type=str,
@@ -83,6 +90,7 @@ def apply_xliff(
     clear_cache: bool,
     max_file_size_mb: float | None = None,
     force: bool = False,
+    original_json: str | None = None,
     skeleton_html_param: str | None = None,
 ) -> None:
     # Lazy imports from orf.cli to avoid circular imports
@@ -246,10 +254,14 @@ def apply_xliff(
     elif format == "json":
         from orf.channels.xliff2json import apply_xliff_to_json
 
+        orig_json_path: Path | None = None
+        if original_json is not None:
+            orig_json_path = Path(original_json)
         conv_result = apply_xliff_to_json(
             xliff_path=xliff_path,
             output_path=output_path,
             skeleton_path=input_path,
+            original_json_path=orig_json_path,
         )
         if conv_result.get("success", True):
             _write_cache(cache_key, output_path, ".json", no_cache=no_cache)

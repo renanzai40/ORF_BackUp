@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
+from orf.channels._json_kv import apply_opp_kv_translations, unflatten_opp_kv
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.converters.options import ConverterOptions
 from orf.logging import get_logger
@@ -24,94 +25,6 @@ JSON_BLOCK_PATTERN = re.compile(r"```json\s*(.*?)\s*(?:```|$)", re.DOTALL)
 OPP_KV_PATTERN = re.compile(
     r"^json_field:([A-Za-z_\u4e00-\u9fff0-9][\w.\u3002\[\]0-9]*)\s*=\s*(.*)$"
 )
-
-
-def _unflatten_opp_kv(pairs: list[tuple[str, str]]) -> dict[str, Any]:
-    """Unflatten OPP-style `key.path = value` pairs back to nested JSON.
-
-    OPP's JSONExtractor flattens with `_flatten()` which produces dot-paths
-    for dict keys and `.0`, `.1`, ... for list indices. Example:
-        "root.0.Model" = "BCD-500WD"
-    becomes
-        {"root": [{"Model": "BCD-500WD"}]}
-
-    Values that look like numbers (int/float) or booleans are coerced to
-    their JSON-native types. Everything else stays a string.
-    """
-    def _coerce(value: str) -> Any:
-        s = value.strip()
-        if s.lower() in ("true", "false"):
-            return s.lower() == "true"
-        if s.lower() in ("null", "none"):
-            return None
-        try:
-            if "." in s:
-                return float(s)
-            return int(s)
-        except ValueError:
-            return s
-
-    def _set_path(root: Any, path: list[str], value: Any) -> None:
-        cur = root
-        for i, key in enumerate(path):
-            is_last = i == len(path) - 1
-            next_key = path[i + 1] if not is_last else None
-            if isinstance(cur, list):
-                idx = int(key)
-                # Grow list with None placeholders if needed.
-                # OPP's flatten skips None/empty values, so list indices
-                # can have gaps (e.g. root.0, root.2 with root.1 missing).
-                while len(cur) <= idx:
-                    cur.append(None)
-                if is_last:
-                    cur[idx] = value
-                    return
-                if cur[idx] is None or not isinstance(cur[idx], (dict, list)):
-                    cur[idx] = [] if (next_key or "").isdigit() else {}
-                cur = cur[idx]
-            else:
-                if is_last:
-                    cur[key] = value
-                    return
-                if next_key and next_key.isdigit():
-                    if key not in cur or not isinstance(cur[key], list):
-                        cur[key] = []
-                else:
-                    if key not in cur or not isinstance(cur[key], dict):
-                        cur[key] = {}
-                cur = cur[key]
-
-    # Detect the container type from the first key path.
-    first_parts = re.split(r"[.\u3002]", pairs[0][0]) if pairs else []
-    if first_parts and first_parts[0].isdigit():
-        root: Any = []
-    else:
-        root = {}
-
-    for path, raw in pairs:
-        parts = re.split(r"[.\u3002]", path)
-        _set_path(root, parts, _coerce(raw))
-
-    return root
-
-
-def _apply_opp_kv_translations(base: Any, translations: dict[str, str]) -> Any:
-    """Walk base structure, substitute string leaves with translations where available.
-
-    Non-string values (numbers, bools, nulls) are preserved from base — only
-    string leaves are looked up in the translations dict. If a path is not
-    found in translations, the original base value is kept (partial translation
-    support).
-    """
-    def _walk(node, path):
-        if isinstance(node, dict):
-            return {k: _walk(v, f"{path}.{k}" if path else k) for k, v in node.items()}
-        elif isinstance(node, list):
-            return [_walk(v, f"{path}.{i}" if path else str(i)) for i, v in enumerate(node)]
-        elif isinstance(node, str):
-            return translations.get(path, node)
-        return node
-    return _walk(base, "")
 
 
 class MD2JSONConverter(BaseConverter):
@@ -183,7 +96,7 @@ class MD2JSONConverter(BaseConverter):
         if base_data is not None:
             if translations:
                 try:
-                    data = _apply_opp_kv_translations(base_data, translations)
+                    data = apply_opp_kv_translations(base_data, translations)
                 except Exception as e:
                     logger.error("Failed to apply json_field translations: %s", e, exc_info=True)
                     return ConversionResult(
@@ -197,7 +110,7 @@ class MD2JSONConverter(BaseConverter):
             # Fallback: kv lines only, no fence — use legacy unflatten (loses non-strings)
             pairs = [(k, v) for k, v in translations.items()]
             try:
-                data = _unflatten_opp_kv(pairs)
+                data = unflatten_opp_kv(pairs)
             except Exception as e:
                 logger.warning(f"OPP-KV unflatten failed ({e})")
                 return ConversionResult(

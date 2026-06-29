@@ -63,6 +63,21 @@ pip install -e ".[office]"      # XLSX support
 pip install -e ".[notebook]"    # IPYNB support
 pip install -e ".[email-output]" # MSG support
 pip install -e ".[mcp]"         # MCP Server (AI Agent integration)
+
+> **System dependencies required for `[weasyprint]`**: WeasyPrint needs C
+> libraries for PDF rendering. Without them, the import succeeds but PDF
+> generation crashes at runtime.
+> 
+> ```bash
+> # Debian / Ubuntu:
+> sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libpangocairo-1.0-0 \
+>   libcairo2 libcairo-gobject2 libgdk-pixbuf2.0-0 shared-mime-info
+> # macOS (Homebrew):
+> brew install pango cairo gdk-pixbuf
+> ```
+> 
+> See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for the Docker
+> setup and other platform-specific notes.
 ```
 
 ## Quick Start
