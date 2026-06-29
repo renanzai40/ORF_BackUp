@@ -227,7 +227,10 @@ def _maybe_install_fake_pandoc() -> None:
     _suite_root = _SeamPath(__file__).resolve().parents[3]
     if str(_suite_root) not in sys.path:
         sys.path.insert(0, str(_suite_root))
-    from tests.test_e2e_pipeline_fixtures import _FakePandocRunner
+    try:
+        from tests.test_e2e_pipeline_fixtures import _FakePandocRunner
+    except ImportError:
+        return
 
     _fake_runner = _FakePandocRunner()
     _original_run = _subprocess.run
