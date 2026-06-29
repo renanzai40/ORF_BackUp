@@ -125,3 +125,60 @@ class TestMD2HTMLConverter:
         assert '<strong>' in content, "Missing bold text"
         assert '<li>' in content, "Missing list item"
         assert '<code' in content, "Missing code block"
+
+    def test_no_raw_html_tags_leak_into_md_conversion(self, tmp_path):
+        """CI-G5: When MD source contains `<html>` / `<body>` / `<head>`
+        markers inside a code block, the HTML output must NOT double-nest
+        these as raw structural tags.
+
+        Regression guard for ORF's MD→HTML pipeline: prior coverage
+        only existed on OPP's HTMLExtractor side (`test_opp36_*`).
+        If ORF's MD2HTMLConverter ever re-introduced raw HTML
+        structure tags into the rendered output (e.g. via a markdown
+        extension that interprets HTML), this test catches it.
+        """
+        md_file = tmp_path / "html_leak.md"
+        # The structural tags are inside a fenced code block — they
+        # are NOT part of the document body. The HTML output should
+        # render them as escaped/encoded text, not as live tags.
+        md_file.write_text(
+            "# Page\n"
+            "\n"
+            "Below is a snippet of HTML shown as text:\n"
+            "\n"
+            "```html\n"
+            "<html>\n"
+            "  <body>\n"
+            "    <p>example</p>\n"
+            "  </body>\n"
+            "</html>\n"
+            "```\n",
+            encoding="utf-8",
+        )
+
+        output_file = tmp_path / "out.html"
+        converter = MD2HTMLConverter()
+        result = converter.convert(str(md_file), str(output_file))
+        assert result.success, f"convert failed: {result.errors}"
+
+        content = output_file.read_text(encoding="utf-8")
+        # The output should have exactly ONE <html> and ONE <body> tag
+        # (the wrapper the converter adds), not multiple from a leak.
+        # Count occurrences outside the code-fence escape (which the
+        # markdown lib encodes as &lt;html&gt; etc.).
+        live_html = content.count("<html")
+        live_body_open = content.count("<body")
+        live_body_close = content.count("</body")
+        assert live_html <= 1, (
+            f"CI-G5: leaked <html> tags: {live_html} occurrences in output:\n"
+            f"{content!r}"
+        )
+        assert live_body_open <= 1, (
+            f"CI-G5: leaked <body> tags: {live_body_open} occurrences in output"
+        )
+        assert live_body_close <= 1, (
+            f"CI-G5: leaked </body> tags: {live_body_close} occurrences in output"
+        )
+        # The code-block content should be present (escaped), confirming
+        # we didn't accidentally drop the user's HTML example.
+        assert "example" in content, "Code-block example text missing"

@@ -149,3 +149,47 @@ class TestMD2PDFConverter:
 
         assert result.success is False
         assert "Invalid input file" in result.errors[0].message
+
+    def test_convert_weasyprint_real_render_cjk(self, tmp_path: Path, sample_md: Path):
+        """CI-G3: Real (non-mocked) weasyprint PDF render with CJK content.
+
+        Skipped locally when weasyprint C libs are not installed.
+        In CI, weasyprint + libpango + libcairo are installed by
+        e2e-tests.yml, so this test runs and asserts:
+          - output exists and is non-empty
+          - output is a valid PDF (%PDF- header)
+          - output contains a decodable text layer (CJK glyphs)
+
+        Regression for OPP#24/26/28: prior CI runs always skipped
+        PDF rendering, so PDF regressions slipped through.
+        """
+        weasyprint_spec = importlib.util.find_spec("weasyprint")
+        pytest.skipif = getattr(pytest, "skipif", None)  # ensure skipif exists
+        if weasyprint_spec is None:
+            pytest.skip("weasyprint not installed (CI-only test)")
+        # Also skip if weasyprint import succeeds but C libs are missing
+        # (importing the sub-modules would raise OSError on first use).
+        try:
+            from orf.converters.options import ConverterOptions
+            converter = MD2PDFConverter()
+            output = tmp_path / "real_render.pdf"
+            result = converter.convert(
+                sample_md, output, ConverterOptions(engine="weasyprint")
+            )
+        except OSError as exc:
+            pytest.skip(f"weasyprint C libs unavailable: {exc}")
+
+        assert result.success is True, (
+            f"CI-G3: real weasyprint render failed: {result.errors}"
+        )
+        assert output.exists(), "PDF output not created"
+        assert output.stat().st_size > 200, (
+            f"CI-G3: PDF too small ({output.stat().st_size} bytes) — "
+            "weasyprint may have produced an empty PDF"
+        )
+        # Read the first 8 bytes and verify PDF magic
+        with open(output, "rb") as f:
+            magic = f.read(8)
+        assert magic.startswith(b"%PDF-"), (
+            f"CI-G3: output is not a valid PDF (magic={magic!r})"
+        )

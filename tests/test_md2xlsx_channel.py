@@ -210,3 +210,50 @@ class TestMD2XLSXConverter:
         )
         assert applied == []
         assert remaining is images
+
+    @pytest.mark.xfail(
+        reason="CI-G4: MD2XLSXConverter currently creates 1 sheet for any MD "
+               "regardless of table count. This test pins the contract for "
+               "future multi-sheet support. When the converter is updated to "
+               "create one sheet per table, remove the xfail marker.",
+        strict=True,
+    )
+    def test_convert_multi_table_creates_multiple_sheets(self, tmp_path: Path):
+        """CI-G4: Two pipe-tables in one MD should produce >= 2 XLSX sheets."""
+        content = (
+            "# Multi-table document\n"
+            "\n"
+            "## Section A\n"
+            "\n"
+            "| h1 | h2 |\n"
+            "|----|----|\n"
+            "| a1  | a2 |\n"
+            "\n"
+            "## Section B\n"
+            "\n"
+            "| col1 | col2 | col3 |\n"
+            "|------|------|------|\n"
+            "| b1   | b2   | b3   |\n"
+            "| b4   | b5   | b6   |\n"
+        )
+        md_file = tmp_path / "multi.md"
+        md_file.write_text(content, encoding="utf-8")
+        output = tmp_path / "multi.xlsx"
+
+        converter = MD2XLSXConverter()
+        result = converter.convert(md_file, output)
+
+        assert result.success is True, f"convert failed: {result.errors}"
+        assert output.exists()
+
+        wb = load_workbook(output)
+        assert len(wb.sheetnames) >= 2, (
+            f"Expected >= 2 sheets for 2 distinct tables, got "
+            f"{len(wb.sheetnames)}: {wb.sheetnames!r}"
+        )
+        sheet0_rows = list(wb[wb.sheetnames[0]].iter_rows(values_only=True))
+        sheet1_rows = list(wb[wb.sheetnames[1]].iter_rows(values_only=True))
+        assert len(sheet0_rows) == 2, f"sheet0 rows: {sheet0_rows!r}"
+        assert len(sheet1_rows) == 3, f"sheet1 rows: {sheet1_rows!r}"
+        assert ("h1", "h2") in sheet0_rows
+        assert ("col1", "col2", "col3") in sheet1_rows
