@@ -327,9 +327,10 @@ class XLIFF2EPUBConverter(BaseConverter):
 
         A1.3-followup (BeautifulSoup variant): parse the chapter XHTML
         once, mutate in place via a single BS4 pass that scans each
-        element for matching id/data-segment/name attributes, serialize
-        once. Replaces the O(N × M × 3) regex loop (segments × full
-        chapter × 3 patterns) with O(N + M) where M is the chapter size.
+        element for matching id/data-segment/data-trans-unit-id/name
+        attributes, serialize once. Replaces the O(N × M × 3) regex loop
+        (segments × full chapter × 3 patterns) with O(N + M) where M is
+        the chapter size.
         """
         if not segments:
             return xhtml_content
@@ -348,6 +349,12 @@ class XLIFF2EPUBConverter(BaseConverter):
             if data_seg and data_seg in target_ids:
                 self._replace_element_text(element, segments[data_seg])
                 target_ids.discard(data_seg)
+                continue
+            # OPP-injected data-trans-unit-id (OPP#39): matches trans-unit id in XLIFF
+            trans_unit_id = element.get("data-trans-unit-id")
+            if trans_unit_id and trans_unit_id in target_ids:
+                self._replace_element_text(element, segments[trans_unit_id])
+                target_ids.discard(trans_unit_id)
                 continue
             name_attr = element.get("name")
             if name_attr and name_attr in target_ids:

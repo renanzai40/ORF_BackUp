@@ -221,3 +221,124 @@ class TestXLIFF2EPUBParseOnceSpeedup:
             f"Pre-A1.3 baseline was O(N x M x 3) = minutes; parse-once "
             f"BS4 refactor delivers ~30x+ speedup."
         )
+
+
+class TestXLIFF2EPUBSegmentIdMatch:
+    """Tests for data-trans-unit-id scanning in _apply_segments_to_xhtml.
+
+    OPP#39 injects data-trans-unit-id into EPUB chapter XHTML elements
+    so ORF can match them to XLIFF trans-unit IDs. These tests verify
+    that the new attribute scan works alongside the existing id scan.
+    """
+
+    def test_data_trans_unit_id_match(self):
+        """Verify that elements with data-trans-unit-id get translated."""
+        from orf.channels.xliff2epub import XLIFF2EPUBConverter
+
+        xhtml = (
+            '<html xmlns="http://www.w3.org/1999/xhtml"><body>'
+            '<p data-trans-unit-id="1">Hello world</p>'
+            '<p data-trans-unit-id="2">Goodbye world</p>'
+            '</body></html>'
+        )
+        segments = {
+            "1": "Bonjour le monde",
+            "2": "Au revoir le monde",
+        }
+        converter = XLIFF2EPUBConverter()
+        result = converter._apply_segments_to_xhtml(xhtml, segments)
+
+        assert "Bonjour le monde" in result, "data-trans-unit-id=1 match failed"
+        assert "Au revoir le monde" in result, "data-trans-unit-id=2 match failed"
+        assert "Hello world" not in result, "original text should be replaced"
+        assert "Goodbye world" not in result, "original text should be replaced"
+
+    def test_data_trans_unit_id_partial_match(self):
+        """Verify that only matching data-trans-unit-id elements are translated."""
+        from orf.channels.xliff2epub import XLIFF2EPUBConverter
+
+        xhtml = (
+            '<html xmlns="http://www.w3.org/1999/xhtml"><body>'
+            '<p data-trans-unit-id="1">Translate this</p>'
+            '<p data-trans-unit-id="99">Leave this</p>'
+            '</body></html>'
+        )
+        segments = {"1": "Traduis ceci"}
+        converter = XLIFF2EPUBConverter()
+        result = converter._apply_segments_to_xhtml(xhtml, segments)
+
+        assert "Traduis ceci" in result, "matched segment should be translated"
+        assert "Leave this" in result, "unmatched segment should remain unchanged"
+
+    def test_fallback_id_match_still_works(self):
+        """Verify that traditional id-based matching still works."""
+        from orf.channels.xliff2epub import XLIFF2EPUBConverter
+
+        xhtml = (
+            '<html xmlns="http://www.w3.org/1999/xhtml"><body>'
+            '<p id="seg1">Original text</p>'
+            '</body></html>'
+        )
+        segments = {"seg1": "Translated text"}
+        converter = XLIFF2EPUBConverter()
+        result = converter._apply_segments_to_xhtml(xhtml, segments)
+
+        assert "Translated text" in result, "id-based match failed"
+        assert "Original text" not in result, "original text should be replaced"
+
+    def test_data_segment_match_still_works(self):
+        """Verify that data-segment based matching still works."""
+        from orf.channels.xliff2epub import XLIFF2EPUBConverter
+
+        xhtml = (
+            '<html xmlns="http://www.w3.org/1999/xhtml"><body>'
+            '<p data-segment="segA">Original A</p>'
+            '</body></html>'
+        )
+        segments = {"segA": "Translated A"}
+        converter = XLIFF2EPUBConverter()
+        result = converter._apply_segments_to_xhtml(xhtml, segments)
+
+        assert "Translated A" in result, "data-segment-based match failed"
+        assert "Original A" not in result, "original text should be replaced"
+
+    def test_name_attribute_match_still_works(self):
+        """Verify that name attribute based matching still works."""
+        from orf.channels.xliff2epub import XLIFF2EPUBConverter
+
+        xhtml = (
+            '<html xmlns="http://www.w3.org/1999/xhtml"><body>'
+            '<p name="segB">Original B</p>'
+            '</body></html>'
+        )
+        segments = {"segB": "Translated B"}
+        converter = XLIFF2EPUBConverter()
+        result = converter._apply_segments_to_xhtml(xhtml, segments)
+
+        assert "Translated B" in result, "name-based match failed"
+        assert "Original B" not in result, "original text should be replaced"
+
+    def test_data_trans_unit_id_priority(self):
+        """Verify data-trans-unit-id is checked before name attribute.
+
+        The scan order is: id → data-segment → data-trans-unit-id → name.
+        If an element has both data-trans-unit-id and name, the former
+        should be used and the latter should not consume the segment.
+        """
+        from orf.channels.xliff2epub import XLIFF2EPUBConverter
+
+        xhtml = (
+            '<html xmlns="http://www.w3.org/1999/xhtml"><body>'
+            '<p data-trans-unit-id="1" name="2">Dual attribute element</p>'
+            '</body></html>'
+        )
+        segments = {"1": "Used via data-trans-unit-id", "2": "Should NOT be used"}
+        converter = XLIFF2EPUBConverter()
+        result = converter._apply_segments_to_xhtml(xhtml, segments)
+
+        assert "Used via data-trans-unit-id" in result, (
+            "should match via data-trans-unit-id (higher priority)"
+        )
+        assert "Should NOT be used" not in result, (
+            "name should not consume a different segment"
+        )
