@@ -38,16 +38,18 @@ class _JsonlFileSpanExporter(SpanExporter):
                                 if span.parent is not None
                                 else None
                             )
+                            start_ns = span.start_time or 0
+                            end_ns = span.end_time or 0
                             payload = {
                                 "name": span.name,
                                 "trace_id": format(ctx.trace_id, "032x"),
                                 "span_id": format(ctx.span_id, "016x"),
                                 "parent_span_id": parent_id,
-                                "start_time_ns": span.start_time,
-                                "end_time_ns": span.end_time,
+                                "start_time_ns": start_ns,
+                                "end_time_ns": end_ns,
                                 "duration_ms": max(
                                     0.0,
-                                    (span.end_time - span.start_time) / 1_000_000.0,
+                                    (end_ns - start_ns) / 1_000_000.0,
                                 ),
                                 "status": {
                                     "status_code": span.status.status_code.name

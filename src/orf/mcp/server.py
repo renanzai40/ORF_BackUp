@@ -27,7 +27,7 @@ The module is split into three layers, in order:
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Callable
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -81,7 +81,7 @@ from orf.mcp.security import PathValidator  # noqa: F401
 server: Server = Server("ORF MCP Server")
 
 
-_TOOL_DISPATCH = {
+_TOOL_DISPATCH: dict[str, "Callable[..., str]"] = {
     "apply_md": apply_md,
     "apply_xliff": apply_xliff,
     "batch_convert": batch_convert,
