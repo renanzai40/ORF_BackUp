@@ -14,6 +14,19 @@ import click
 
 # Converter imports kept here for backward compat (tests patch orf.cli.MD2DOCXConverter etc.)
 # Command modules import from orf.channels.* directly and use lazy imports.
+from orf.channels.md2docx import MD2DOCXConverter  # noqa: F401
+from orf.channels.md2odt import MD2ODTConverter  # noqa: F401
+from orf.channels.md2epub import MD2EPUBConverter  # noqa: F401
+from orf.channels.md2html import MD2HTMLConverter  # noqa: F401
+from orf.converters.base import BaseConverter  # noqa: F401
+from orf.converters.options import ConverterOptions  # noqa: F401
+from orf.parsers.manifest import parse_manifest, find_manifest, ManifestParseError  # noqa: F401
+from orf.parsers.frontmatter import (  # noqa: F401
+    parse_frontmatter,
+    FrontmatterParseError,
+    has_frontmatter,
+)
+from orf.error_handlers.conversion_error import FormatDetectionError  # noqa: F401
 from orf.logging import setup_logger, get_logger
 
 logger = get_logger("cli")

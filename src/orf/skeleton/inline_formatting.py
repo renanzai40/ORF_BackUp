@@ -273,7 +273,7 @@ class DOCXInlineApplier(InlineFormattingApplier):
 
             # Group matching runs by parent paragraph index to avoid
             # formatting the same text in unrelated paragraphs (R-C7).
-            para_groups = {}
+            para_groups: dict[int, list] = {}
             for run in matching_runs:
                 parent = run.getparent()
                 para_idx = 0

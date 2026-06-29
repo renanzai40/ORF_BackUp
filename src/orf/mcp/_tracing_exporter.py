@@ -31,6 +31,8 @@ class _JsonlFileSpanExporter(SpanExporter):
                     for span in spans:
                         try:
                             ctx = span.get_span_context()
+                            if ctx is None:
+                                continue
                             parent_id = (
                                 format(span.parent.span_id, "016x")
                                 if span.parent is not None
