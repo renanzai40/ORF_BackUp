@@ -23,6 +23,7 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "lxml>=5.0.0",
     "python-json-logger>=2.0.0",
+    "structlog>=24.0.0",
     "tqdm>=4.66.0",
     "pypandoc-binary>=1.17",
     "markdown>=3.5",
@@ -31,6 +32,8 @@ dependencies = [
     "anyio>=4.0.0",
     "prometheus_client>=0.20.0",
     "translate-toolkit>=3.0.0",
+    "opentelemetry-api>=1.0.0",
+    "opentelemetry-sdk>=1.0.0",
 ]
 
 [project.optional-dependencies]

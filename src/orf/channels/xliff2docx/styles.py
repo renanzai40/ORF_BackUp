@@ -11,7 +11,6 @@ from typing import Any
 
 from lxml import etree
 
-from ._ns import W_NS
 
 
 def apply_inline_formatting_to_run(

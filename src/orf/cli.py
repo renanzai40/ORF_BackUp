@@ -7,7 +7,6 @@ import json
 import os
 import shutil
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Optional
 
@@ -15,19 +14,6 @@ import click
 
 # Converter imports kept here for backward compat (tests patch orf.cli.MD2DOCXConverter etc.)
 # Command modules import from orf.channels.* directly and use lazy imports.
-from orf.channels.md2docx import MD2DOCXConverter
-from orf.channels.md2odt import MD2ODTConverter
-from orf.channels.md2epub import MD2EPUBConverter
-from orf.channels.md2html import MD2HTMLConverter
-from orf.converters.base import BaseConverter
-from orf.converters.options import ConverterOptions
-from orf.parsers.manifest import parse_manifest, find_manifest, ManifestParseError
-from orf.parsers.frontmatter import (
-    parse_frontmatter,
-    FrontmatterParseError,
-    has_frontmatter,
-)
-from orf.error_handlers.conversion_error import FormatDetectionError
 from orf.logging import setup_logger, get_logger
 
 logger = get_logger("cli")
@@ -297,10 +283,10 @@ def _load_env_for_orf() -> None:
 
 # ========== Register commands ==========
 
-from orf.commands.apply_md import apply_md
-from orf.commands.apply_xliff import apply_xliff
-from orf.commands.convert_batch import convert_batch
-from orf.commands.info import info
+from orf.commands.apply_md import apply_md  # noqa: E402
+from orf.commands.apply_xliff import apply_xliff  # noqa: E402
+from orf.commands.convert_batch import convert_batch  # noqa: E402
+from orf.commands.info import info  # noqa: E402
 
 main.add_command(apply_md)
 main.add_command(apply_xliff)

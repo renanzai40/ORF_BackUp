@@ -130,7 +130,6 @@ def backfill_by_position(
         target_run = runs[0]
         parent = target_run.getparent()
         if parent is not None:
-            W_NS_LOCAL = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
             insert_pos = list(parent.getparent()).index(parent) if parent.getparent() is not None else -1
             if insert_pos >= 0:
                 parent_para = parent.getparent()

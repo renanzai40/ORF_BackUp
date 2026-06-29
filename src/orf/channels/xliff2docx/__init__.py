@@ -36,9 +36,9 @@ logger = get_logger("channel.xliff2docx")
 
 
 # ── Re-export shared names for backward compat ──────────────────────
-from ._ns import FUZZY_MATCH_THRESHOLD, A_NS, PIC_NS, W_NS, WP_NS
-from .matcher import _distribute_text_across_runs
-from .parser import _strip_wrapper, _strip_inline_tags
+from ._ns import FUZZY_MATCH_THRESHOLD, A_NS, PIC_NS, WP_NS  # noqa: E402
+from .matcher import _distribute_text_across_runs  # noqa: E402
+from .parser import _strip_wrapper, _strip_inline_tags  # noqa: E402
 
 __all__ = [
     "XLIFF2DOCXConverter",

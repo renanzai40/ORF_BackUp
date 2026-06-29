@@ -361,7 +361,6 @@ class MD2DOCXConverter(BaseConverter):
         # Also try to resolve image file refs in the MD content (fallback).
         # Some OPP outputs write image files to a directory next to the MD.
         for match in IMAGE_REF_PATTERN.finditer(content):
-            alt = match.group(1)
             ref = match.group(2)
 
             # Already handled via base64 from images_json_data — skip.

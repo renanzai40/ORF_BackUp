@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-import shutil
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -17,7 +13,6 @@ from orf.parsers.manifest import parse_manifest, find_manifest, ManifestParseErr
 from orf.parsers.frontmatter import (
     parse_frontmatter,
     FrontmatterParseError,
-    has_frontmatter,
 )
 from orf.error_handlers.conversion_error import FormatDetectionError
 from orf.logging import get_logger

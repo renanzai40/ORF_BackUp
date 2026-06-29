@@ -156,10 +156,6 @@ class SkeletonLoader:
         else:
             raise ValueError("No XML to repack. Call load_skeleton first.")
 
-        doc_compress_type = self.compress_types.get(
-            "word/document.xml", zipfile.ZIP_STORED
-        )
-
         with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for name in self.files:
                 data = self.files[name] if name != "word/document.xml" else xml_bytes

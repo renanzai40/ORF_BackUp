@@ -6,7 +6,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from orf.mcp.auth import auth_failure_response, check_auth
 from orf.mcp.common import (
