@@ -29,7 +29,7 @@ logger = get_logger("cli")
 @click.option(
     "--format",
     "-f",
-    type=click.Choice(["docx", "pptx", "epub", "html", "odt", "pdf"]),
+    type=click.Choice(["docx", "pptx", "epub", "html", "odt", "pdf", "json"]),
     default="docx",
     help="Output format",
 )
@@ -188,6 +188,7 @@ def apply_xliff(
         "html": ".html",
         "odt": ".odt",
         "pdf": ".pdf",
+        "json": ".json",
     }
     _ZIP_FORMATS = {"docx", "pptx", "epub"}
     if format in _FORMAT_EXT:
@@ -242,10 +243,45 @@ def apply_xliff(
         from orf.channels.xliff2pdf import XLIFF2PDFConverter
 
         converter = XLIFF2PDFConverter()
+    elif format == "json":
+        from orf.channels.xliff2json import apply_xliff_to_json
+
+        conv_result = apply_xliff_to_json(
+            xliff_path=xliff_path,
+            output_path=output_path,
+            skeleton_path=input_path,
+        )
+        if conv_result.get("success", True):
+            _write_cache(cache_key, output_path, ".json", no_cache=no_cache)
+            logger.info(f"JSON XLIFF backfill successful: {output_path}")
+            if output_json:
+                click.echo(_safe_json_dumps({
+                    "success": True,
+                    "output_path": str(output_path),
+                    "errors": [],
+                    "warnings": [],
+                    "metadata": {"unit_count": conv_result.get("unit_count", 0)},
+                }))
+            else:
+                click.echo(f"Created {output_path}")
+        else:
+            logger.error("JSON XLIFF backfill failed")
+            err_msg = conv_result.get("error", "Unknown error")
+            if output_json:
+                click.echo(_safe_json_dumps({
+                    "success": False,
+                    "output_path": str(output_path),
+                    "errors": [{"code": "JSON_BACKFILL_ERROR", "message": err_msg}],
+                    "warnings": [],
+                    "metadata": {},
+                }))
+            else:
+                raise click.ClickException(f"JSON XLIFF backfill failed: {err_msg}")
+        return
     else:
         raise click.ClickException(
             f"Unsupported format '{format}'\n"
-            f"Hint: Valid formats are: docx, pptx, epub, html, odt, pdf\n"
+            f"Hint: Valid formats are: docx, pptx, epub, html, odt, pdf, json\n"
             f"       Use --format <format> to specify"
         )
 

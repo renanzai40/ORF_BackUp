@@ -111,7 +111,7 @@ class ApplyXLIFFInput(BaseModel):
         description="Inline XLIFF content (mutually exclusive with xliff_path)"
     )
     output_path: str = Field(..., description="Output file path")
-    format: str = Field(..., description="Output format (docx, pptx, epub, html, odt)")
+    format: str = Field(..., description="Output format (docx, pptx, epub, html, odt, json)")
     images: Optional[list[ImagePlacement]] = Field(
         default=None,
         description="Image placement data from OPP for precise image restoration"

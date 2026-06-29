@@ -193,7 +193,7 @@ async def _list_tools() -> list[types.Tool]:
                     },
                     "format": {
                         "type": "string",
-                        "description": "Output format (docx, pptx, epub, html, odf, ...).",
+                        "description": "Output format (docx, pptx, epub, html, odf, json, ...).",
                     },
                     "xliff_content": {
                         "type": "string",

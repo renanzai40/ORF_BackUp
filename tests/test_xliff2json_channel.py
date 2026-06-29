@@ -7,6 +7,8 @@ unit_id, source, and target fields preserved.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 
 import pytest
 from pathlib import Path
@@ -145,3 +147,177 @@ class TestApplyXliffToJson:
         # Pretty-printed: should contain newlines and spaces
         assert "\n" in raw
         assert "  " in raw
+
+    def test_xliff_to_json_with_arrays(self, tmp_path: Path):
+        """Handle OPP-style flat dot-notation keys (items.0, items.1) from JSON arrays."""
+        xliff_content = """<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file original="test.json" source-language="en" target-language="zh-CN">
+    <body>
+      <trans-unit id="items.0">
+        <source>first</source>
+        <target>第一</target>
+      </trans-unit>
+      <trans-unit id="items.1">
+        <source>second</source>
+        <target>第二</target>
+      </trans-unit>
+      <trans-unit id="items.2">
+        <source>third</source>
+        <target>第三</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>"""
+        xliff_file = tmp_path / "array.xlf"
+        xliff_file.write_text(xliff_content, encoding="utf-8")
+        output = tmp_path / "output.json"
+
+        result = apply_xliff_to_json(xliff_file, output)
+        assert result["success"] is True
+        assert result["unit_count"] == 3
+
+        data = json.loads(output.read_text(encoding="utf-8"))
+        ids = {u["unit_id"] for u in data["xliff_units"]}
+        assert "items.0" in ids
+        assert "items.1" in ids
+        assert "items.2" in ids
+
+    def test_xliff_to_json_nested_keys(self, tmp_path: Path):
+        """Handle OPP-style nested dot-notation keys (user.name, user.profile.bio)."""
+        xliff_content = """<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file original="test.json" source-language="en" target-language="zh-CN">
+    <body>
+      <trans-unit id="user.name">
+        <source>Alice</source>
+        <target>爱丽丝</target>
+      </trans-unit>
+      <trans-unit id="user.profile.bio">
+        <source>Developer</source>
+        <target>开发者</target>
+      </trans-unit>
+      <trans-unit id="user.profile.location">
+        <source>Beijing</source>
+        <target>北京</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>"""
+        xliff_file = tmp_path / "nested.xlf"
+        xliff_file.write_text(xliff_content, encoding="utf-8")
+        output = tmp_path / "output.json"
+
+        result = apply_xliff_to_json(xliff_file, output)
+        assert result["success"] is True
+        assert result["unit_count"] == 3
+
+        data = json.loads(output.read_text(encoding="utf-8"))
+        ids = {u["unit_id"] for u in data["xliff_units"]}
+        assert "user.name" in ids
+        assert "user.profile.bio" in ids
+        assert "user.profile.location" in ids
+
+
+class TestApplyXliffJsonRouting:
+    """Tests that apply-xliff CLI correctly routes to xliff2json."""
+
+    def _run_cli(self, *args: str, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+        """Run ORF apply-xliff as a subprocess."""
+        src_dir = Path(__file__).resolve().parents[1] / "src"
+        cmd = [sys.executable, "-m", "orf", "apply-xliff", *args]
+        env = {"PYTHONPATH": str(src_dir), "OMNI_TEST_FAKE_LLM": "1"}
+        import os
+        merged = {**os.environ, **env}
+        return subprocess.run(
+            cmd, capture_output=True, text=True, env=merged, timeout=30,
+        )
+
+    def test_json_format_routing_produces_output(self, tmp_path: Path):
+        """--format json routes to xliff2json and produces valid JSON output."""
+        xliff_file = tmp_path / "test.xlf"
+        xliff_file.write_text("""<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file original="test.json" source-language="en" target-language="zh-CN">
+    <body>
+      <trans-unit id="greeting">
+        <source>Hello</source>
+        <target>你好</target>
+      </trans-unit>
+      <trans-unit id="farewell">
+        <source>Goodbye</source>
+        <target>再见</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>""")
+        output = tmp_path / "result.json"
+
+        # Input is the XLIFF itself (no skeleton needed for JSON format)
+        result = self._run_cli(
+            str(xliff_file), "--xliff", str(xliff_file),
+            "--output", str(output), "--format", "json",
+            tmp_path=tmp_path,
+        )
+
+        assert result.returncode == 0, (
+            f"CLI failed: stdout={result.stdout}\nstderr={result.stderr}"
+        )
+        assert output.exists(), f"Output {output} not created"
+        data = json.loads(output.read_text(encoding="utf-8"))
+        assert data["unit_count"] == 2
+        assert len(data["xliff_units"]) == 2
+
+    def test_json_format_routing_preserves_units(self, tmp_path: Path):
+        """Translated values are preserved through JSON format routing."""
+        xliff_file = tmp_path / "test.xlf"
+        xliff_file.write_text("""<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file original="test.json" source-language="en" target-language="zh-CN">
+    <body>
+      <trans-unit id="key1">
+        <source>Hello World</source>
+        <target>你好世界</target>
+      </trans-unit>
+      <trans-unit id="key2">
+        <source>Translate me</source>
+        <target>翻译我</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>""")
+        output = tmp_path / "result.json"
+
+        result = self._run_cli(
+            str(xliff_file), "--xliff", str(xliff_file),
+            "--output", str(output), "--format", "json",
+            tmp_path=tmp_path,
+        )
+
+        assert result.returncode == 0
+        data = json.loads(output.read_text(encoding="utf-8"))
+        units = {u["unit_id"]: u for u in data["xliff_units"]}
+        assert units["key1"]["source"] == "Hello World"
+        assert units["key1"]["target"] == "你好世界"
+        assert units["key2"]["source"] == "Translate me"
+        assert units["key2"]["target"] == "翻译我"
+
+    def test_json_format_rejects_invalid_xliff(self, tmp_path: Path):
+        """Invalid XLIFF produces error, not crash."""
+        bad_xliff = tmp_path / "bad.xlf"
+        bad_xliff.write_text("not xml", encoding="utf-8")
+        output = tmp_path / "result.json"
+
+        result = self._run_cli(
+            str(bad_xliff), "--xliff", str(bad_xliff),
+            "--output", str(output), "--format", "json",
+            tmp_path=tmp_path,
+        )
+
+        assert result.returncode != 0, (
+            f"Expected failure for invalid XLIFF; got stdout={result.stdout}"
+        )
+        combined = (result.stdout + result.stderr).lower()
+        assert any(w in combined for w in ("error", "fail", "invalid")), (
+            f"Expected error message; got: {combined}"
+        )
