@@ -74,10 +74,19 @@ jobs:
           pip install -e ".[dev]"
           pip install lxml weasyprint boto3 azure-storage-blob openai build fastmcp openpyxl moto
 
-      - name: Create .venv_ol symlink (tests hardcode this path)
+      - name: Create .venv_ol symlinks (tests hardcode the parent path)
         run: |
-          mkdir -p .venv_ol/bin
-          ln -sf "$(which python)" .venv_ol/bin/python
+          # tests/test_apply_md_target_format.py:20 uses
+          #   _OL_ROOT = parents[1] (= repo root) → _VENV = _OL_ROOT.parent/.venv_ol/bin/python
+          # i.e. the path one level ABOVE the repo root. In CI the repo
+          # lives at ${GITHUB_WORKSPACE}, so the parent is
+          # $(dirname "$GITHUB_WORKSPACE").
+          _real="$PWD/.venv_ol"
+          mkdir -p "$_real/bin"
+          ln -sfn "$(which python)" "$_real/bin/python"
+          if [ -n "$GITHUB_WORKSPACE" ]; then
+            ln -sfn "$GITHUB_WORKSPACE/.venv_ol" "$(dirname "$GITHUB_WORKSPACE")/.venv_ol" 2>/dev/null || true
+          fi
 
       - name: Run tests with coverage
         run: pytest tests/ -v --cov=src/orf/ --cov-report=xml --cov-fail-under=50 --ignore=tests/test_orf_mcp_server.py --ignore=tests/test_e2e_omni_pipeline.py
