@@ -33,7 +33,8 @@ def apply_xliff_to_json(
     Returns:
         Dict with ``success``, ``output_path``, and ``unit_count`` keys.
     """
-    tree = etree.parse(str(xliff_path))
+    _parser = etree.XMLParser(resolve_entities=False, no_network=True)
+    tree = etree.parse(str(xliff_path), _parser)
     units: list[dict[str, str]] = []
     for trans_unit in tree.xpath("//x:trans-unit", namespaces=_NS):
         source = trans_unit.findtext("x:source", "", namespaces=_NS)
