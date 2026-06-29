@@ -8,6 +8,9 @@
 - **(md2xlsx.py)**: `_parse_table_rows()` now robustly handles OPP-extracted markdown table formats. Previously only GFM-style tables (with outer `|` pipes) worked; simplified tables caused empty `<sheetData>` in XLSX output. Fixed by normalizing leading/trailing `|` and tolerating more flexible row formats.
 - **(md2html.py)**: `convert()` now strips YAML frontmatter via `orf.parsers.frontmatter.strip_frontmatter()` before passing to `python-markdown`. Previously the `---` separator was interpreted as `<hr>` and frontmatter fields rendered as visible `<p>`.
 - **(src/orf/cli.py)**: `_load_dotenv_for_orf()` now handles `export KEY=val` prefix via `line.removeprefix("export ").lstrip()`. Previously `export FOO=bar` would set `export FOO` instead of `FOO`.
+- **(src/orf/channels/xliff2epub.py)**: `_apply_segments_to_xhtml()` now scans for `data-trans-unit-id` attribute in addition to the existing `id`, `data-segment`, `name` scans. Scan order: `id` → `data-segment` → `data-trans-unit-id` → `name`. Enables matching of OPP#39's segment ID injection. (Resolves OPP#39 ORF side)
+- **(src/orf/commands/apply_xliff.py)**: wired up the `xliff2json` channel for the JSON XLIFF pipeline. Added `"json"` to `click.Choice` for `--format`, `"json": ".json"` to `_FORMAT_EXT` dict, and `elif format == "json":` routing branch that calls `apply_xliff_to_json()`. (Resolves OPP#42 ORF side)
+- **(src/orf/mcp/schemas.py + src/orf/mcp/server.py)**: Updated `ApplyXLIFFInput.format` field description and `apply_xliff` tool schema description to include `json` in the list of valid formats.
 
 ### 📝 文档 / Docs
 
@@ -17,6 +20,8 @@
 
 - **(src/orf/cli.py, .env.example, AGENTS.md)**: add opt-in .env auto-loading via `--load-dotenv` flag and `ORF_AUTOLOAD_DOTENV=1` env var. Mirrors OPP/OL pattern (no python-dotenv dependency)
 - **`tests/test_env_autoload.py`** (110 lines): comprehensive tests for `_load_dotenv_for_orf()`. Covers empty file, comments-only, simple KEY=value, double-quoted values, single-quoted values, malformed line tolerance. Verifies the `setdefault` precedence (shell env wins over .env file).
+- **`tests/test_xliff2epub_channel.py`** (6 new tests): `TestXLIFF2EPUBSegmentIdMatch` class covering `data-trans-unit-id` matching, partial matches, priority over `name`, and fallback to legacy `id`/`data-segment`/`name` attributes. Locks in the OPP#39 fix.
+- **`tests/test_xliff2json_channel.py`** (5 new tests): OPP-style dot-notation keys (`items.0`, `items.1`), nested keys (`user.name`, `user.profile.bio`), CLI routing produces valid JSON, translated values preserved through CLI, invalid XLIFF rejected gracefully.
 
 ## v0.4.8 (2026-06-25)
 
