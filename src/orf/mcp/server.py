@@ -42,6 +42,7 @@ from orf.mcp.tools import (  # noqa: F401
     detect_format,
     info,
     ping,
+    get_capabilities,
 )
 # Re-export common helpers for backward compat (README imports
 # ``_run_cli_command`` for inline testing).
@@ -88,6 +89,7 @@ _TOOL_DISPATCH: dict[str, Any] = {
     "detect_format": detect_format,
     "info": info,
     "ping": ping,
+    "get_capabilities": get_capabilities,
 }
 
 
@@ -280,6 +282,20 @@ async def _list_tools() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {},
+            },
+        ),
+        types.Tool(
+            name="get_capabilities",
+            description=(
+                "Return ORF module capabilities: supported MD output formats (16), "
+                "XLIFF backfill formats (7), input formats, and the list of available "
+                "MCP tools. Use this to discover what the server can do at runtime."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "auth_token": {"type": "string"},
+                },
             },
         ),
     ]

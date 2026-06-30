@@ -1,6 +1,6 @@
 """ORF MCP tools package.
 
-Exports all 6 tool functions for use by the MCP server and for backward-compat
+Exports all 7 tool functions for use by the MCP server and for backward-compat
 direct imports from ``orf.mcp.server``.
 """
 
@@ -10,6 +10,7 @@ from orf.mcp.tools.batch_convert import batch_convert
 from orf.mcp.tools.detect_format import detect_format
 from orf.mcp.tools.info import info
 from orf.mcp.tools.ping import ping
+from orf.mcp.tools.get_capabilities import get_capabilities
 
 __all__ = [
     "apply_md",
@@ -18,4 +19,5 @@ __all__ = [
     "detect_format",
     "info",
     "ping",
+    "get_capabilities",
 ]
