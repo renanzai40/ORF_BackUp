@@ -211,13 +211,6 @@ class TestMD2XLSXConverter:
         assert applied == []
         assert remaining is images
 
-    @pytest.mark.xfail(
-        reason="CI-G4: MD2XLSXConverter currently creates 1 sheet for any MD "
-               "regardless of table count. This test pins the contract for "
-               "future multi-sheet support. When the converter is updated to "
-               "create one sheet per table, remove the xfail marker.",
-        strict=True,
-    )
     def test_convert_multi_table_creates_multiple_sheets(self, tmp_path: Path):
         """CI-G4: Two pipe-tables in one MD should produce >= 2 XLSX sheets."""
         content = (
