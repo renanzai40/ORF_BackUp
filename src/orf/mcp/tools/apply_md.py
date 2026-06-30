@@ -13,6 +13,7 @@ from orf.mcp.common import (
     augment_error,
     logger,
     path_validator,
+    resolve_context_path,
     safe_unlink,
     success_response,
 )
@@ -37,6 +38,7 @@ def apply_md(
     auth_token: Optional[str] = None,
     traceparent: Optional[str] = None,
     content: Optional[str] = None,
+    context_dir: Optional[str] = None,
 ) -> str:
     # H5: token bucket rate limiter
     rate_ok, rate_err = check_rate_limit()
@@ -162,6 +164,21 @@ def apply_md(
                 "warnings": [],
                 "metadata": {}
             }))
+
+        # Resolve relative paths against context_dir (agent convenience)
+        if context_dir:
+            cv = path_validator.validate_path(context_dir)
+            if not cv.success:
+                return json.dumps(augment_error({
+                    "success": False,
+                    "output_path": None,
+                    "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"context_dir: {cv.error}", "recovery_strategy": None}],
+                    "warnings": [],
+                    "metadata": {}
+                }))
+        output_path = resolve_context_path(output_path, context_dir)
+        reference_doc = resolve_context_path(reference_doc, context_dir)
+        template = resolve_context_path(template, context_dir)
 
         if output_path:
             result_out = path_validator.validate_path(output_path, allow_missing=True)

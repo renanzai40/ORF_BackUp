@@ -172,6 +172,30 @@ def safe_unlink(path: str) -> bool:
         return False
 
 
+def resolve_context_path(
+    path: Optional[str], context_dir: Optional[str]
+) -> Optional[str]:
+    """Resolve a relative path against a context_dir.
+
+    Behaviour:
+      - path is None: return None (caller skips the param)
+      - path is absolute: return as-is (absolute paths win over context)
+      - path is relative + context_dir is set: return context_dir/path
+      - path is relative + context_dir is None: return path as-is (current behavior)
+
+    The caller is responsible for validating context_dir through the
+    PathValidator. This helper does NOT do path validation — it only
+    resolves relative paths.
+    """
+    if path is None:
+        return None
+    if context_dir is None:
+        return path
+    if Path(path).is_absolute():
+        return path
+    return str(Path(context_dir) / path)
+
+
 def safe_temp_output(suffix: str, parent: Optional[Path] = None) -> str:
     """Create a tempfile inside parent dir (must be in an allowed dir)."""
     if parent is None:

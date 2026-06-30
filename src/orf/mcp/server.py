@@ -170,6 +170,14 @@ async def _list_tools() -> list[types.Tool]:
                         "type": "string",
                         "description": "Optional W3C Trace Context traceparent header to make this ORF span a child of an upstream trace (e.g. from OL translate_md_text).",
                     },
+                    "context_dir": {
+                        "type": "string",
+                        "description": (
+                            "Optional base directory for resolving relative paths "
+                            "(reference_doc, template, output_path). If omitted, "
+                            "absolute paths are required."
+                        ),
+                    },
                 },
                 "anyOf": [
                     {"required": ["input_md", "target_format"]},
