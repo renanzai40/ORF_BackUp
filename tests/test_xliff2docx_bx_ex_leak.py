@@ -323,9 +323,17 @@ class TestPositionBasedBackfillNoBxExLeak:
                 f"Output XML:\n{out_xml}"
             )
 
-    def test_plain_target_no_bx_ex_is_unchanged(self, tmp_path: Path):
-        """Sanity: when the target has NO bx/ex (LLM dropped them), the
-        text is written verbatim — no formatting is invented.
+    def test_plain_target_no_bx_ex_still_applies_source_formatting(self, tmp_path: Path):
+        """ORF#33: when the LLM drops bx/ex tags, source-side inline formatting
+        must STILL be applied via Phase B.4 post-processing.
+
+        The LLM never sees source formatting — ``parser.py`` strips
+        <bx>/<ex> via ``target_el.itertext()`` before passing the
+        target text to the LLM — so the LLM has no opportunity to
+        "preserve" what it never received. The converter's job is to
+        re-apply source-side <w:rPr> formatting to the runs that now
+        hold the translated text, mirroring the PPTX post-processing
+        pattern at ``xliff2pptx.py:427-440``.
         """
         docx_path = _build_minimal_docx(
             tmp_path / "input.docx", paragraphs=["PLACEHOLDER_BODY"]
@@ -349,9 +357,9 @@ class TestPositionBasedBackfillNoBxExLeak:
         out_xml = _read_docx_xml(output_path)
         _assert_no_bx_ex_in_text(out_xml)
         assert "I Love Shanghai, Er" in out_xml
-        # No bold was applied (LLM dropped the tags).
-        assert "<w:b/>" not in out_xml and "<w:b " not in out_xml, (
-            f"BUG: bold was invented from source when target had no tags.\n"
+        # ORF#33: source bold formatting must be re-applied as <w:b/> in <w:rPr>
+        assert "<w:b/>" in out_xml or "<w:b " in out_xml, (
+            f"BUG: source bold not re-applied to runs containing target text.\n"
             f"Output XML:\n{out_xml}"
         )
 

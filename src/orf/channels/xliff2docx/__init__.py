@@ -299,22 +299,54 @@ class XLIFF2DOCXConverter(BaseConverter):
 
         Delegates to ``orf.channels.xliff2docx.styles.apply_inline_formatting_to_run``.
 
-        NOTE(ORF#33): This method has zero production callers by DESIGN.
-        The current pipeline relies on ``build_formatted_runs`` (System A)
-        which parses ``<bx>``/``<ex>`` tags in the **target** text emitted
-        by the LLM and produces formatted ``<w:r>`` runs. When the LLM
-        preserves these tags, formatting survives. When the LLM drops
-        them, we intentionally do NOT re-invent source-side formatting
-        — the LLM's output is authoritative (see regression test
-        ``test_plain_target_no_bx_ex_is_unchanged``). This method is
-        retained as a utility for a future opt-in "source-driven
-        formatting" mode; it is not a missing call site.
+        NOTE(ORF#33): This per-run formatting method is now USED by
+        the converter via ``DOCXInlineApplier.apply_formatting``
+        (document-level search-and-apply in post-processing Phase B.4).
+        The per-run variant is retained as a utility for future
+        fine-grained formatting control; the main fix path applies
+        source inline formatting at the document level after all
+        backfill writes are complete, mirroring the PPTX pattern
+        (``xliff2pptx.py:427-440``).
         """
         from orf.channels.xliff2docx.styles import apply_inline_formatting_to_run
 
         return apply_inline_formatting_to_run(
             t_elem, inline_elements, target_text, self.docx_applier,
         )
+
+    def _apply_source_formatting(
+        self,
+        root: etree._Element,
+        inline_elements: list[InlineElement],
+        target_text: str,
+    ) -> tuple[etree._Element, bool]:
+        """ORF#33: apply source-side inline formatting when LLM dropped tags.
+
+        Mirrors the PPTX post-processing pattern at
+        ``xliff2pptx.py:427-440``: when ``inline_elements`` is non-empty
+        AND the LLM-emitted target text has no literal ``<bx>``/``<ex>``
+        tags, call ``DOCXInlineApplier.apply_formatting`` to add the
+        source-side ``<w:rPr>`` formatting to the runs that now hold
+        the translated text.
+
+        The ``<bx>``/``<ex>`` guard makes this mutually exclusive with
+        System A (``build_formatted_runs``): when the LLM preserves
+        formatting tags, System A already produced formatted runs; we
+        skip here to avoid double-applying ``<w:rPr>``.
+
+        Returns (possibly replaced root, True if formatting was applied).
+        """
+        if not inline_elements:
+            return root, False
+        if re.search(r'<bx|<ex', target_text, re.IGNORECASE):
+            return root, False
+        xml_str = etree.tostring(root, encoding="unicode")
+        formatted_xml = self.docx_applier.apply_formatting(
+            xml_str, inline_elements, target_text,
+        )
+        if formatted_xml != xml_str:
+            return etree.fromstring(formatted_xml.encode("utf-8")), True
+        return root, False
 
     # ── Image delegation ────────────────────────────────────────────
 
@@ -562,6 +594,10 @@ class XLIFF2DOCXConverter(BaseConverter):
                             tu["para_index"],
                             target_text,
                         )
+                        # ORF#33: apply source inline formatting if LLM dropped bx/ex
+                        root, _applied = self._apply_source_formatting(
+                            root, inline_elements, target_text,
+                        )
                         continue
                     except Exception as e:
                         logger.warning(
@@ -588,6 +624,10 @@ class XLIFF2DOCXConverter(BaseConverter):
                             non_body_idx,
                             target_text,
                         )
+                        # ORF#33: apply source inline formatting if LLM dropped bx/ex
+                        root, _applied = self._apply_source_formatting(
+                            root, inline_elements, target_text,
+                        )
                         continue
                     else:
                         logger.warning(
@@ -605,6 +645,10 @@ class XLIFF2DOCXConverter(BaseConverter):
                         wt_text_map,
                         body_paragraph_text_map,
                         all_paragraph_text_map,
+                    )
+                    # ORF#33: apply source inline formatting if LLM dropped bx/ex
+                    root, _applied = self._apply_source_formatting(
+                        root, inline_elements, target_text,
                     )
                 except Exception as e:
                     logger.warning(f"Failed to backfill trans-unit {tu_id}: {e}")
