@@ -149,6 +149,13 @@ async def _list_tools() -> list[types.Tool]:
                         "type": "string",
                         "description": "Pandoc reference DOCX for style template.",
                     },
+                    "reference_doc_content": {
+                        "type": "string",
+                        "description": (
+                            "Inline base64-encoded DOCX bytes (alternative to "
+                            "reference_doc). Mutually exclusive with reference_doc."
+                        ),
+                    },
                     "template": {
                         "type": "string",
                         "description": "Pandoc template path.",

@@ -26,6 +26,7 @@ def apply_md(
     images: Optional[list[dict]] = None,
     separate_images: bool = True,
     reference_doc: Optional[str] = None,
+    reference_doc_content: Optional[str] = None,
     template: Optional[str] = None,
     title: Optional[str] = None,
     author: Optional[str] = None,
@@ -73,6 +74,19 @@ def apply_md(
             "metadata": {},
         }))
 
+    if reference_doc and reference_doc_content:
+        return json.dumps(augment_error({
+            "success": False,
+            "output_path": None,
+            "errors": [{
+                "code": "MUTUALLY_EXCLUSIVE",
+                "message": "reference_doc and reference_doc_content are mutually exclusive — supply one, not both.",
+                "recovery_strategy": None,
+            }],
+            "warnings": [],
+            "metadata": {},
+        }))
+
     content_temp_path: str | None = None
     if content is not None:
         # PathValidator requires the path to live under an allowed dir;
@@ -100,6 +114,43 @@ def apply_md(
                 "metadata": {},
             }))
         input_md = content_temp_path
+
+    reference_doc_temp_path: str | None = None
+    if reference_doc_content is not None:
+        # Write inline DOCX content to a temp file in cwd (allowed by
+        # PathValidator). Accept either base64-encoded bytes or raw text
+        # (pandoc reference docs are binary .docx — use base64).
+        parent = Path.cwd()
+        try:
+            parent_resolved = parent.resolve()
+            fd, reference_doc_temp_path = tempfile.mkstemp(
+                suffix=".docx", prefix="orf_mcp_refdoc_", dir=str(parent_resolved),
+            )
+            os.close(fd)
+            # Try base64 first; fall back to UTF-8 text bytes if that fails.
+            import base64
+            try:
+                docx_bytes = base64.b64decode(reference_doc_content, validate=True)
+            except Exception:
+                docx_bytes = reference_doc_content.encode("utf-8")
+            with open(reference_doc_temp_path, "wb") as f:
+                f.write(docx_bytes)
+        except Exception as e:
+            logger.error("Failed to write reference_doc_content to tempfile: %s", e)
+            if reference_doc_temp_path:
+                safe_unlink(reference_doc_temp_path)
+            return json.dumps(augment_error({
+                "success": False,
+                "output_path": None,
+                "errors": [{
+                    "code": "INLINE_REFERENCE_DOC_WRITE_FAILED",
+                    "message": f"Failed to materialize inline reference_doc: {e}",
+                    "recovery_strategy": None,
+                }],
+                "warnings": [],
+                "metadata": {},
+            }))
+        reference_doc = reference_doc_temp_path
 
     try:
         result = path_validator.validate_path(input_md)
@@ -182,3 +233,5 @@ def apply_md(
     finally:
         if content_temp_path:
             safe_unlink(content_temp_path)
+        if reference_doc_temp_path:
+            safe_unlink(reference_doc_temp_path)
