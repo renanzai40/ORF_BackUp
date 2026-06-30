@@ -57,6 +57,17 @@ logger = get_logger("cli")
     type=click.Path(exists=True),
     help="Reference DOCX for document styles (maps to pandoc --reference-doc)",
 )
+@click.option(
+    "--reference-doc-content",
+    "reference_doc_content",
+    type=str,
+    default=None,
+    help=(
+        "Inline base64-encoded DOCX bytes (alternative to --reference-doc). "
+        "Mutually exclusive with --reference-doc. "
+        "Prefix with '@' to read from a file: e.g. '@ref.docx.b64'."
+    ),
+)
 @click.option("--title", type=str, help="EPUB 标题")
 @click.option("--author", type=str, help="EPUB 作者")
 @click.option("--lang", type=str, default="zh", help="EPUB 语言")
@@ -105,6 +116,7 @@ def apply_md(
     output: str | None,
     template: str | None,
     reference_doc: str | None,
+    reference_doc_content: str | None,
     title: str | None,
     author: str | None,
     lang: str,
@@ -148,7 +160,42 @@ def apply_md(
             )
             raise SystemExit(1)
 
-    effective_template = template or reference_doc
+    # Handle --reference-doc-content: write inline content to a temp file
+    # and use that as the effective_template. Mutually exclusive with
+    # --reference-doc. Supports '@' prefix to read from a file.
+    if reference_doc_content is not None and reference_doc is not None:
+        click.echo(
+            "Error: --reference-doc and --reference-doc-content are mutually exclusive",
+            err=True,
+        )
+        raise SystemExit(1)
+    inline_ref_temp: str | None = None
+    if reference_doc_content is not None:
+        import base64
+        import tempfile
+        from orf.cli import _scrub_dotenv_for_subprocess  # not strictly needed
+        try:
+            content_str = reference_doc_content
+            if content_str.startswith("@"):
+                content_str = Path(content_str[1:]).read_text(encoding="utf-8")
+            try:
+                docx_bytes = base64.b64decode(content_str, validate=True)
+            except Exception:
+                docx_bytes = content_str.encode("utf-8")
+            parent = Path.cwd().resolve()
+            fd, inline_ref_temp = tempfile.mkstemp(
+                suffix=".docx", prefix="orf_cli_refdoc_", dir=str(parent),
+            )
+            os.close(fd)
+            with open(inline_ref_temp, "wb") as f:
+                f.write(docx_bytes)
+        except Exception as e:
+            click.echo(f"Error: failed to write inline reference doc: {e}", err=True)
+            if inline_ref_temp and Path(inline_ref_temp).exists():
+                Path(inline_ref_temp).unlink()
+            raise SystemExit(1)
+
+    effective_template = template or reference_doc or inline_ref_temp
 
     if target_format == "auto" or auto_detect:
         from orf.detection import FormatDetector

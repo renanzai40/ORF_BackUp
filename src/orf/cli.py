@@ -303,10 +303,14 @@ from orf.commands.apply_md import apply_md  # noqa: E402
 from orf.commands.apply_xliff import apply_xliff  # noqa: E402
 from orf.commands.convert_batch import convert_batch  # noqa: E402
 from orf.commands.info import info  # noqa: E402
+from orf.commands.capabilities import capabilities  # noqa: E402
+from orf.commands.detect_format import detect_format  # noqa: E402
 
 main.add_command(apply_md)
 main.add_command(apply_xliff)
 main.add_command(convert_batch)
+main.add_command(capabilities)
+main.add_command(detect_format)
 main.add_command(info)
 
 if __name__ == "__main__":
