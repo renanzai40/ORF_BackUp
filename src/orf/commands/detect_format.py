@@ -24,14 +24,14 @@ def detect_format(input_file: str, output_json: bool) -> None:
     """
     detector = FormatDetector()
     try:
-        fmt, confidence = detector.detect(Path(input_file))
+        fmt = detector.detect(Path(input_file))
     except FormatDetectionError as e:
         raise click.ClickException(f"Format detection failed: {e}")
 
     if output_json:
         click.echo(json.dumps(
-            {"file": str(input_file), "format": str(fmt), "confidence": round(confidence, 4)},
+            {"file": str(input_file), "format": str(fmt), "confidence": None},
             indent=2,
         ))
     else:
-        click.echo(f"Format: {fmt}  (confidence: {confidence:.2%})")
+        click.echo(f"Format: {fmt}")
