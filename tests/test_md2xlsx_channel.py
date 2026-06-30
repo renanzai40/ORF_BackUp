@@ -250,3 +250,57 @@ class TestMD2XLSXConverter:
         assert len(sheet1_rows) == 3, f"sheet1 rows: {sheet1_rows!r}"
         assert ("h1", "h2") in sheet0_rows
         assert ("col1", "col2", "col3") in sheet1_rows
+
+    def test_convert_strips_frontmatter_with_pipes(self, tmp_path: Path):
+        """CI-G4: YAML frontmatter with pipe chars must not corrupt table parsing."""
+        content = (
+            "---\n"
+            'title: "A | B | C"\n'
+            "---\n"
+            "| h1 | h2 |\n"
+            "|----|----|\n"
+            "| a1 | a2 |\n"
+        )
+        md = tmp_path / "frontmatter.md"
+        md.write_text(content, encoding="utf-8")
+        output = tmp_path / "out.xlsx"
+
+        converter = MD2XLSXConverter()
+        result = converter.convert(md, output)
+
+        assert result.success, f"convert failed: {result.errors}"
+        wb = load_workbook(output)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        assert len(rows) == 2, f"Expected 2 rows, got {len(rows)}: {rows!r}"
+        assert rows[0] == ("h1", "h2")
+        assert rows[1] == ("a1", "a2")
+
+    def test_empty_cell_row_not_consumed_as_separator(self, tmp_path: Path):
+        """CI-G4: `|  |  |` must NOT be treated as a separator row."""
+        content = (
+            "| h1 | h2 |\n"
+            "|----|-----|\n"
+            "|  a  |  b |\n"
+            "|  |  |\n"
+            "|  c  |  d |\n"
+        )
+        md = tmp_path / "empty.md"
+        md.write_text(content, encoding="utf-8")
+        output = tmp_path / "out.xlsx"
+
+        converter = MD2XLSXConverter()
+        result = converter.convert(md, output)
+
+        assert result.success, f"convert failed: {result.errors}"
+        wb = load_workbook(output)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        assert len(rows) == 4, f"Expected 4 rows, got {len(rows)}: {rows!r}"
+        assert rows[0] == ("h1", "h2")
+        assert rows[1] == ("a", "b")
+        # openpyxl returns None for empty cells, not "" — the row is
+        # preserved (length-2 tuple of empty values) but as None.
+        assert rows[2] is not None, f"Empty row dropped: {rows!r}"
+        assert len(rows[2]) == 2, f"Empty row wrong width: {rows[2]!r}"
+        assert rows[3] == ("c", "d")

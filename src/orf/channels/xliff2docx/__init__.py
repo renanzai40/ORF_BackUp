@@ -298,6 +298,17 @@ class XLIFF2DOCXConverter(BaseConverter):
         """Apply inline formatting to a text run element.
 
         Delegates to ``orf.channels.xliff2docx.styles.apply_inline_formatting_to_run``.
+
+        NOTE(ORF#33): This method has zero production callers by DESIGN.
+        The current pipeline relies on ``build_formatted_runs`` (System A)
+        which parses ``<bx>``/``<ex>`` tags in the **target** text emitted
+        by the LLM and produces formatted ``<w:r>`` runs. When the LLM
+        preserves these tags, formatting survives. When the LLM drops
+        them, we intentionally do NOT re-invent source-side formatting
+        — the LLM's output is authoritative (see regression test
+        ``test_plain_target_no_bx_ex_is_unchanged``). This method is
+        retained as a utility for a future opt-in "source-driven
+        formatting" mode; it is not a missing call site.
         """
         from orf.channels.xliff2docx.styles import apply_inline_formatting_to_run
 

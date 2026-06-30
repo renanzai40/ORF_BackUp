@@ -83,7 +83,7 @@ class MD2XLSXConverter(BaseConverter):
         for raw_line in lines:
             line = raw_line.strip()
             is_table_row = bool(line) and "|" in line and line.count("|") >= 2
-            is_separator = bool(re.match(r"^\|[\s\-:|]+\|$", line)) if is_table_row else False
+            is_separator = bool(re.match(r"^\|[\s]*:?-+:?[\s]*(?:\|[\s]*:?-+:?[\s]*)+\|$", line)) if is_table_row else False
 
             if not is_table_row:
                 # Blank line / heading / paragraph ends the current table.
@@ -132,6 +132,11 @@ class MD2XLSXConverter(BaseConverter):
 
         try:
             content = input_path.read_text(encoding="utf-8")
+            # ORG/ORF#34: strip YAML frontmatter before table parsing
+            # so frontmatter fields containing '|' don't pollute the
+            # table parse. Mirrors md2html.py:61-62.
+            from orf.parsers.frontmatter import strip_frontmatter
+            content = strip_frontmatter(content)
             tables = self._parse_tables(content)
 
             if not tables:
