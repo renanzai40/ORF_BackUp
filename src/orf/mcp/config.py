@@ -29,7 +29,7 @@ class MCPConfig:
     max_file_size_mb: int = 100
     timeout_seconds: int = 30
     allowed_formats: Optional[List[str]] = None
-    allowed_directories: Optional[List[Path]] = None
+    allowed_directories: List[Path] = None  # type: ignore[assignment]
     metrics_dir: str = "/tmp/omni-metrics"
 
     def __post_init__(self) -> None:
@@ -50,8 +50,6 @@ class MCPConfig:
                 "msg",
                 "pptx",
             ]
-        if self.allowed_directories is None:
-            self.allowed_directories = [Path.cwd()]
 
 
 def _parse_allowed_dirs(value: str) -> List[Path]:
@@ -95,13 +93,13 @@ def _load_from_env() -> dict:
     if allowed_dirs:
         config["allowed_directories"] = _parse_allowed_dirs(allowed_dirs)
 
-    max_file_size = os.environ.get("ORF_MCP_MAX_FILE_SIZE")
+    max_file_size = os.environ.get("ORF_MCP_MAX_FILE_SIZE_MB")
     if max_file_size:
         try:
             config["max_file_size_mb"] = int(max_file_size)
         except ValueError:
             logger.warning(
-                "Invalid ORF_MCP_MAX_FILE_SIZE=%r; falling back to default", max_file_size
+                "Invalid ORF_MCP_MAX_FILE_SIZE_MB=%r; falling back to default", max_file_size
             )
 
     timeout = os.environ.get("ORF_MCP_TIMEOUT")
@@ -139,13 +137,16 @@ def load_config(config_path: Optional[Path] = None) -> MCPConfig:
     Resolution order:
       1. Environment variable ``ORF_MCP_ALLOWED_DIRS`` (colon/semicolon separated).
       2. YAML config file (optional, with ``security.allowed_directories`` key).
-      3. Falls back to ``[Path.cwd()]`` if neither provides a value.
+      3. Raises ``ValueError`` if neither provides a value (fail-CLOSED).
 
     Args:
         config_path: Optional path to YAML configuration file.
 
     Returns:
         MCPConfig instance with loaded configuration.
+
+    Raises:
+        ValueError: If ``ORF_MCP_ALLOWED_DIRS`` is unset or empty.
     """
     config_data: dict = {}
 
@@ -172,6 +173,14 @@ def load_config(config_path: Optional[Path] = None) -> MCPConfig:
     ):
         config_data["allowed_directories"] = _normalize_allowed_directories(
             config_data["allowed_directories"]
+        )
+
+    # P0-T2: fail-CLOSED — allowed_directories must be explicitly provided
+    allowed_dirs = config_data.get("allowed_directories")
+    if not allowed_dirs:
+        raise ValueError(
+            "ORF_MCP_ALLOWED_DIRS must be set (fail-CLOSED security policy). "
+            "Export it as a colon-separated list of allowed directories."
         )
 
     # Build MCPConfig; __post_init__ fills defaults for any omitted fields

@@ -22,11 +22,13 @@ _VENV = _OL_ROOT.parent / ".venv_ol" / "bin" / "python"
 
 def _run_apply_md_help() -> str:
     """Capture `orf apply-md --help` output."""
+    import os
     result = subprocess.run(
         [str(_VENV), "-m", "orf", "apply-md", "--help"],
         capture_output=True, text=True, env={
             "PYTHONPATH": str(_OL_SRC),
-            "PATH": str(_VENV.parent) + ":" + __import__("os").environ.get("PATH", ""),
+            "PATH": str(_VENV.parent) + ":" + os.environ.get("PATH", ""),
+            "ORF_MCP_ALLOWED_DIRS": os.environ.get("ORF_MCP_ALLOWED_DIRS", "/tmp"),
         },
         timeout=15,
     )
@@ -72,6 +74,7 @@ class TestApplyMdTargetFormatChoice:
 
     def test_invalid_format_rejected(self):
         """A bogus target format must be rejected (click BadParameter)."""
+        import os
         result = subprocess.run(
             [str(_VENV), "-m", "orf", "apply-md",
              "test_fixtures/zh/haier.epub",
@@ -79,7 +82,8 @@ class TestApplyMdTargetFormatChoice:
              "--output", "/tmp/bogus.out"],
             capture_output=True, text=True, env={
                 "PYTHONPATH": str(_OL_SRC),
-                "PATH": str(_VENV.parent) + ":" + __import__("os").environ.get("PATH", ""),
+                "PATH": str(_VENV.parent) + ":" + os.environ.get("PATH", ""),
+                "ORF_MCP_ALLOWED_DIRS": os.environ.get("ORF_MCP_ALLOWED_DIRS", "/tmp"),
             },
             timeout=15,
         )
