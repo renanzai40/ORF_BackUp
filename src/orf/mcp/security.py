@@ -1,5 +1,6 @@
 """Path validation with directory allowlist and file size limits."""
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -75,6 +76,15 @@ class PathValidator:
     ):
         self.allowed_directories = [Path(d).resolve() for d in allowed_directories]
         self.max_file_size_bytes = max_file_size_bytes
+
+        # P2-T4: MCP_ALLOWED_EXTENSIONS env var overrides the default set
+        custom_exts = os.environ.get("MCP_ALLOWED_EXTENSIONS")
+        if custom_exts:
+            self.ALLOWED_EXTENSIONS = {
+                ext.strip() if ext.strip().startswith(".") else f".{ext.strip()}"
+                for ext in custom_exts.split(",")
+                if ext.strip()
+            }
 
     def validate_path(self, path: str, allow_missing: bool = False) -> ValidationResult:
         """Validate a file path against security rules.

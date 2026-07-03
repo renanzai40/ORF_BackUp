@@ -79,7 +79,7 @@ from orf.mcp.security import PathValidator  # noqa: F401
 # ─── Standard MCP server (mcp 1.27.2) ─────────────────────────────────
 
 
-server: Server = Server("ORF MCP Server")
+server: Server = Server("orf-mcp")
 
 
 _TOOL_DISPATCH: dict[str, Any] = {
