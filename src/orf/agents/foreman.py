@@ -101,10 +101,11 @@ class ForemanAgent:
     def route_to_specialist(self, job: JobRequest) -> str:
         """Route job to appropriate specialist based on target format."""
         format_to_category = {
-            # Format specialists
+            # Format specialists (office / document / publishing)
             "docx": "format", "odt": "format", "epub": "format", "pptx": "format",
+            "rtf": "format", "pdf": "format", "icml": "format", "srt": "format",
             # Data specialists
-            "xlsx": "data", "csv": "data", "json": "data",
+            "xlsx": "data", "csv": "data", "json": "data", "ipynb": "data",
             # Markup specialists
             "xml": "markup", "html": "markup",
             # Email specialists

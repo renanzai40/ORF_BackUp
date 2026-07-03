@@ -22,7 +22,10 @@ class FormatSpecialist(BaseSpecialist):
 
     @property
     def supported_formats(self) -> list[str]:
-        return ["docx", "odt", "epub"]
+        return [
+            "docx", "odt", "epub", "pptx", "rtf", "pdf", "icml", "srt",
+            "csv", "xlsx", "json", "ipynb", "eml", "msg", "html", "xml",
+        ]
 
     def convert(
         self,

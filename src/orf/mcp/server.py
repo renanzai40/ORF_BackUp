@@ -303,7 +303,7 @@ async def _list_tools() -> list[types.Tool]:
             name="get_capabilities",
             description=(
                 "Return ORF module capabilities: supported MD output formats (16), "
-                "XLIFF backfill formats (7), input formats, and the list of available "
+                "XLIFF backfill formats (5), input formats, and the list of available "
                 "MCP tools. Use this to discover what the server can do at runtime."
             ),
             inputSchema={

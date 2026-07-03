@@ -92,6 +92,7 @@ src/orf/
 | `detect_format` | Magic-bytes format detection |
 | `info` | Document format + size + resource count + manifest status |
 | `ping` | Health check (returns version) |
+| `get_capabilities` | Return ORF module capabilities: supported MD output formats (16), XLIFF backfill formats (5), input formats, and available MCP tools |
 
 For full per-tool parameter reference, see the suite-level
 [AGENTS.md → MCP Tool Reference](https://github.com/1StepMore/e2e-test-suite/blob/main/AGENTS.md) table,
