@@ -50,7 +50,7 @@ class TestToolsPackageImports:
     def test_tools_all_exports(self) -> None:
         from orf.mcp.tools import __all__
         expected = {"apply_md", "apply_xliff", "batch_convert",
-                     "detect_format", "info", "ping"}
+                     "detect_format", "info", "ping", "get_capabilities"}
         assert set(__all__) == expected
 
 
@@ -146,14 +146,14 @@ class TestServerWiring:
 
     def test_server_instance(self) -> None:
         from orf.mcp.server import server
-        assert server.name == "ORF MCP Server"
+        assert server.name == "orf-mcp"
 
     def test_tool_dispatch_size(self) -> None:
         from orf.mcp.server import _TOOL_DISPATCH
-        assert len(_TOOL_DISPATCH) == 6
+        assert len(_TOOL_DISPATCH) == 7
         assert set(_TOOL_DISPATCH.keys()) == {
             "apply_md", "apply_xliff", "batch_convert",
-            "detect_format", "info", "ping",
+            "detect_format", "info", "ping", "get_capabilities",
         }
 
     def test_tool_dispatch_functions_are_callable(self) -> None:
@@ -213,12 +213,12 @@ class TestFunctionSignatures:
         from orf.mcp.server import apply_md
         sig = inspect.signature(apply_md)
         params = list(sig.parameters.keys())
-        # The original signature has these parameters (in order)
         expected_params = [
             "input_md", "target_format", "output_path", "images",
-            "separate_images", "reference_doc", "template", "title",
-            "author", "lang", "embed_images", "text_only",
-            "max_file_size_mb", "auth_token", "traceparent", "content",
+            "separate_images", "reference_doc", "reference_doc_content",
+            "template", "title", "author", "lang", "embed_images",
+            "text_only", "max_file_size_mb", "auth_token", "traceparent",
+            "content", "context_dir",
         ]
         assert params == expected_params, f"Got {params}"
 

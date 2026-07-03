@@ -51,10 +51,15 @@ def _ok(output: Path) -> ConversionResult:
 
 
 class TestFormatSpecialistInterface:
-    def test_supported_formats(self, specialist: FormatSpecialist):
-        assert specialist.supported_formats == ["docx", "odt", "epub"]
+    EXPECTED_FORMATS = [
+        "docx", "odt", "epub", "pptx", "rtf", "pdf", "icml", "srt",
+        "csv", "xlsx", "json", "ipynb", "eml", "msg", "html", "xml",
+    ]
 
-    @pytest.mark.parametrize("fmt", ["docx", "odt", "epub"])
+    def test_supported_formats(self, specialist: FormatSpecialist):
+        assert specialist.supported_formats == self.EXPECTED_FORMATS
+
+    @pytest.mark.parametrize("fmt", EXPECTED_FORMATS)
     def test_can_handle_supported(self, specialist: FormatSpecialist, fmt: str):
         assert specialist.can_handle(fmt) is True
 
@@ -67,7 +72,7 @@ class TestFormatSpecialistInterface:
     def test_get_capabilities(self, specialist: FormatSpecialist):
         caps = specialist.get_capabilities()
         assert caps["category"] == "format"
-        assert caps["formats"] == ["docx", "odt", "epub"]
+        assert caps["formats"] == self.EXPECTED_FORMATS
         assert caps["supports_batch"] is True
 
 
