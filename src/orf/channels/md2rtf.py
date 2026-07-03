@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -13,6 +14,8 @@ from orf.logging import get_logger
 from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.md2rtf")
+
+_CONVERSION_TIMEOUT = int(os.environ.get("ORF_CONVERSION_TIMEOUT", "300"))
 
 
 class MD2RTFConverter(BaseConverter):
@@ -65,6 +68,7 @@ class MD2RTFConverter(BaseConverter):
                 text=True,
                 check=True,
                 cwd=str(input_path.parent),
+                timeout=_CONVERSION_TIMEOUT,
             )
 
             logger.debug(f"Pandoc output: {result.stdout}")
@@ -77,6 +81,13 @@ class MD2RTFConverter(BaseConverter):
                 metadata={"tool": "pandoc", "cmd": " ".join(cmd)},
             )
 
+        except subprocess.TimeoutExpired:
+            logger.error(f"Pandoc timed out after {_CONVERSION_TIMEOUT}s")
+            return ConversionResult(
+                output_path=output_path,
+                success=False,
+                errors=[f"Pandoc timed out after {_CONVERSION_TIMEOUT}s"],
+            )
         except subprocess.CalledProcessError as e:
             logger.error(f"Pandoc failed: {e.stderr}")
             return ConversionResult(

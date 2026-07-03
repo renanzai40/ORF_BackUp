@@ -514,7 +514,17 @@ def add_image_to_zip(
 
         return new_rid
     else:
-        return "rId1"
+        # Create the rels file since it was missing — this is a valid skeleton
+        # that was produced without a rels entry (unusual but possible).
+        rels_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+        root = etree.Element(f"{{{rels_ns}}}Relationships")
+        new_rid = "rId1"
+        new_rel = etree.SubElement(root, f"{{{rels_ns}}}Relationship")
+        new_rel.set("Id", new_rid)
+        new_rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image")
+        new_rel.set("Target", f"media/{dedup_name}")
+        files[rels_name] = etree.tostring(root, encoding="unicode").encode("utf-8")
+        return new_rid
 
 
 def create_drawing_xml(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -21,6 +22,8 @@ from orf.logging import get_logger
 from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.md2docx")
+
+_CONVERSION_TIMEOUT = int(os.environ.get("ORF_CONVERSION_TIMEOUT", "300"))
 
 IMAGE_PATTERN = re.compile(r'!\[([^\]]*)\]\((data:image/([^;]+);base64,([^)]+))\)')
 IMAGE_REF_PATTERN = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
@@ -141,6 +144,7 @@ class MD2DOCXConverter(BaseConverter):
                 text=True,
                 check=True,
                 cwd=str(md_path.parent),
+                timeout=_CONVERSION_TIMEOUT,
             )
 
             logger.debug(f"Pandoc output: {result.stdout}")
@@ -156,6 +160,13 @@ class MD2DOCXConverter(BaseConverter):
                 metadata={"tool": "pandoc", "cmd": " ".join(cmd)},
             )
 
+        except subprocess.TimeoutExpired:
+            logger.error(f"Pandoc timed out after {_CONVERSION_TIMEOUT}s")
+            return ConversionResult(
+                output_path=output_path,
+                success=False,
+                errors=[f"Pandoc timed out after {_CONVERSION_TIMEOUT}s"],
+            )
         except subprocess.CalledProcessError as e:
             logger.error(f"Pandoc failed: {e.stderr}")
             return ConversionResult(
@@ -220,7 +231,7 @@ class MD2DOCXConverter(BaseConverter):
                     cmd.extend(["--reference-doc", str(template)])
 
                 logger.info("Running chunk %d: %s", chunk.index, " ".join(cmd))
-                subprocess.run(cmd, capture_output=True, text=True, check=True)
+                subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=_CONVERSION_TIMEOUT)
                 docx_chunks.append(chunk_docx)
 
             merge_cmd = ["pandoc"] + [str(p) for p in docx_chunks] + [
@@ -230,7 +241,7 @@ class MD2DOCXConverter(BaseConverter):
                 "Merging %d DOCX chunks: %s",
                 len(docx_chunks), " ".join(merge_cmd),
             )
-            subprocess.run(merge_cmd, capture_output=True, text=True, check=True)
+            subprocess.run(merge_cmd, capture_output=True, text=True, check=True, timeout=_CONVERSION_TIMEOUT)
 
             return ConversionResult(
                 output_path=output_path,
@@ -243,6 +254,13 @@ class MD2DOCXConverter(BaseConverter):
                 },
             )
 
+        except subprocess.TimeoutExpired:
+            logger.error(f"Chunked pandoc timed out after {_CONVERSION_TIMEOUT}s")
+            return ConversionResult(
+                output_path=output_path,
+                success=False,
+                errors=[f"Pandoc timed out after {_CONVERSION_TIMEOUT}s"],
+            )
         except subprocess.CalledProcessError as e:
             logger.error("Chunked pandoc conversion failed: %s", e.stderr)
             return ConversionResult(

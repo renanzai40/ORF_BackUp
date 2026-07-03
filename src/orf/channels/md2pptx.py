@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -15,6 +16,8 @@ from orf.logging import get_logger
 from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.md2pptx")
+
+_CONVERSION_TIMEOUT = int(os.environ.get("ORF_CONVERSION_TIMEOUT", "300"))
 
 _TIP_MD2PPTX_FALLBACK = (
     "💡 Tip: For higher-quality PPTX output, install md2pptx:\n"
@@ -178,6 +181,7 @@ class MD2PPTXConverter(BaseConverter):
                 capture_output=True,
                 text=True,
                 check=True,
+                timeout=_CONVERSION_TIMEOUT,
             )
 
             logger.debug(f"md2pptx output: {result.stdout}")
@@ -190,6 +194,13 @@ class MD2PPTXConverter(BaseConverter):
                 metadata={"tool": "md2pptx", "cmd": " ".join(cmd)},
             )
 
+        except subprocess.TimeoutExpired:
+            logger.error(f"md2pptx timed out after {_CONVERSION_TIMEOUT}s")
+            return ConversionResult(
+                output_path=output_path,
+                success=False,
+                errors=[f"md2pptx timed out after {_CONVERSION_TIMEOUT}s"],
+            )
         except subprocess.CalledProcessError as e:
             logger.error(f"md2pptx failed: {e.stderr}")
             return ConversionResult(

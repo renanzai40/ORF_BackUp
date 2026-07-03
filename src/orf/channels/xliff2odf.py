@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Any, Optional
@@ -11,6 +12,8 @@ from orf.logging import get_logger
 from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.xliff2odf")
+
+_CONVERSION_TIMEOUT = int(os.environ.get("ORF_CONVERSION_TIMEOUT", "300"))
 
 # Supported ODF extensions
 ODF_EXTENSIONS = {".odt", ".ods", ".odg", ".odi", ".odm", ".odp", ".otp", ".ots", ".ott"}
@@ -135,11 +138,20 @@ class XLIFF2ODFConverter(BaseConverter):
                 capture_output=True,
                 text=True,
                 check=True,
+                timeout=_CONVERSION_TIMEOUT,
             )
             logger.debug(f"xliff2odf stdout: {result.stdout}")
             if result.stderr:
                 logger.debug(f"xliff2odf stderr: {result.stderr}")
 
+        except subprocess.TimeoutExpired:
+            error_msg = f"xliff2odf timed out after {_CONVERSION_TIMEOUT}s"
+            logger.error(error_msg)
+            return ConversionResult(
+                output_path=output_path,
+                success=False,
+                errors=[error_msg],
+            )
         except subprocess.CalledProcessError as e:
             error_msg = f"xliff2odf failed: {e.stderr}" if e.stderr else f"xliff2odf failed with code {e.returncode}"
             logger.error(error_msg)

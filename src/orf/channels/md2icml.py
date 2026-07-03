@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -13,6 +14,8 @@ from orf.logging import get_logger
 from orf.converters.options import ConverterOptions
 
 logger = get_logger("channel.md2icml")
+
+_CONVERSION_TIMEOUT = int(os.environ.get("ORF_CONVERSION_TIMEOUT", "300"))
 
 
 class MD2ICMLConverter(BaseConverter):
@@ -63,6 +66,7 @@ class MD2ICMLConverter(BaseConverter):
                 capture_output=True,
                 text=True,
                 check=True,
+                timeout=_CONVERSION_TIMEOUT,
             )
 
             logger.debug(f"Pandoc output: {result.stdout}")
@@ -75,6 +79,13 @@ class MD2ICMLConverter(BaseConverter):
                 metadata={"tool": "pandoc", "cmd": " ".join(cmd)},
             )
 
+        except subprocess.TimeoutExpired:
+            logger.error(f"Pandoc timed out after {_CONVERSION_TIMEOUT}s")
+            return ConversionResult(
+                output_path=output_path,
+                success=False,
+                errors=[f"Pandoc timed out after {_CONVERSION_TIMEOUT}s"],
+            )
         except subprocess.CalledProcessError as e:
             logger.error(f"Pandoc failed: {e.stderr}")
             return ConversionResult(
