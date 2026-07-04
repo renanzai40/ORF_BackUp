@@ -348,6 +348,69 @@ class XLIFF2DOCXConverter(BaseConverter):
             return etree.fromstring(formatted_xml.encode("utf-8")), True
         return root, False
 
+    def _rebuild_indexes(
+        self,
+        root: etree._Element,
+    ) -> tuple[
+        list[etree._Element],
+        list[etree._Element],
+        dict[str, etree._Element],
+        dict[str, etree._Element],
+        dict[str, etree._Element],
+    ]:
+        """FIX-#9: rebuild all paragraph lookup tables from a fresh root.
+
+        When ``_apply_source_formatting`` returns a brand-new lxml tree
+        (the ``etree.fromstring()`` path), all the lookup references
+        previously built (body_paragraphs, all_paragraphs, wt_text_map,
+        body_paragraph_text_map, all_paragraph_text_map) point to elements
+        in the discarded old tree. Subsequent backfills modify stale
+        elements that never make it into the output document.
+
+        This helper recomputes all 5 lookup references from a fresh
+        ``root`` so the next backfill iteration operates on the current
+        tree state.
+
+        Returns (body_paragraphs, all_paragraphs, wt_text_map,
+        body_paragraph_text_map, all_paragraph_text_map).
+        """
+        from orf.channels.xliff2docx.matcher import collect_all_paragraphs
+
+        body = root.find("w:body", WORD_NS_MAP)
+        body_paragraphs = body.xpath("./w:p", namespaces=WORD_NS_MAP) if body is not None else []
+        all_paragraphs = collect_all_paragraphs(root)
+
+        wt_text_map: dict[str, etree._Element] = {}
+        for t_elem in root.xpath("//w:t", namespaces=WORD_NS_MAP):
+            if t_elem.text:
+                t_norm = re.sub(r"\s+", " ", t_elem.text).strip()
+                if t_norm:
+                    wt_text_map[t_norm] = t_elem
+
+        body_paragraph_text_map: dict[str, etree._Element] = {}
+        for p in body_paragraphs:
+            text_runs = p.xpath(".//w:t", namespaces=WORD_NS_MAP)
+            text_content = "".join(t.text or "" for t in text_runs)
+            normalized = re.sub(r"\s+", " ", text_content).strip()
+            if normalized:
+                body_paragraph_text_map[normalized] = p
+
+        all_paragraph_text_map: dict[str, etree._Element] = {}
+        for p in root.xpath("//w:p", namespaces=WORD_NS_MAP):
+            text_runs = p.xpath(".//w:t", namespaces=WORD_NS_MAP)
+            text_content = "".join(t.text or "" for t in text_runs)
+            normalized = re.sub(r"\s+", " ", text_content).strip()
+            if normalized:
+                all_paragraph_text_map[normalized] = p
+
+        return (
+            body_paragraphs,
+            all_paragraphs,
+            wt_text_map,
+            body_paragraph_text_map,
+            all_paragraph_text_map,
+        )
+
     # ── Image delegation ────────────────────────────────────────────
 
     def inject_images(
@@ -598,6 +661,11 @@ class XLIFF2DOCXConverter(BaseConverter):
                         root, _applied = self._apply_source_formatting(
                             root, inline_elements, target_text,
                         )
+                        if _applied and root is not None:
+                            # FIX-#9: rebuild lookup indexes from the new root
+                            (body_paragraphs, all_paragraphs,
+                             wt_text_map, body_paragraph_text_map,
+                             all_paragraph_text_map) = self._rebuild_indexes(root)
                         continue
                     except Exception as e:
                         logger.warning(
@@ -628,6 +696,11 @@ class XLIFF2DOCXConverter(BaseConverter):
                         root, _applied = self._apply_source_formatting(
                             root, inline_elements, target_text,
                         )
+                        if _applied and root is not None:
+                            # FIX-#9: rebuild lookup indexes from the new root
+                            (body_paragraphs, all_paragraphs,
+                             wt_text_map, body_paragraph_text_map,
+                             all_paragraph_text_map) = self._rebuild_indexes(root)
                         continue
                     else:
                         logger.warning(
@@ -650,6 +723,11 @@ class XLIFF2DOCXConverter(BaseConverter):
                     root, _applied = self._apply_source_formatting(
                         root, inline_elements, target_text,
                     )
+                    if _applied and root is not None:
+                        # FIX-#9: rebuild lookup indexes from the new root
+                        (body_paragraphs, all_paragraphs,
+                         wt_text_map, body_paragraph_text_map,
+                         all_paragraph_text_map) = self._rebuild_indexes(root)
                 except Exception as e:
                     logger.warning(f"Failed to backfill trans-unit {tu_id}: {e}")
                     warnings.append(f"Failed to backfill unit {tu_id}: {e}")
