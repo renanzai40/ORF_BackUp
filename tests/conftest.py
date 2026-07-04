@@ -1,8 +1,22 @@
 """Pytest configuration and shared fixtures for ORF tests."""
 
+import os
+
 import pytest
 from pathlib import Path
 
+
+# MUST run before any orf.mcp.* import: path_validator is a module-level
+# singleton in orf.mcp.common that reads ORF_MCP_ALLOWED_DIRS at import.
+SUITE_ROOT = "/mnt/d/贯维/Omni_Suite"
+if "ORF_MCP_ALLOWED_DIRS" not in os.environ:
+    os.environ["ORF_MCP_ALLOWED_DIRS"] = SUITE_ROOT
+
+# Disable MCP rate limiting for the test suite. Default burst is 10
+# requests; tests calling apply_md/apply_xliff in sequence exhaust it
+# and subsequent calls return RATE_LIMITED (no `errors` key) instead
+# of PATH_NOT_ALLOWED, breaking C5 + context_dir assertions.
+os.environ.setdefault("OMNI_RATE_LIMIT_RPM", "0")
 
 MINIMAL_DOCX_DOCUMENT = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">

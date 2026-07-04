@@ -13,6 +13,11 @@ import sys
 # Ensure tests are run from the suite root (where ORF PathValidator allows writes)
 EXPECTED_CWD = "/mnt/d/贯维/Omni_Suite"
 
+# MUST run before any orf.mcp.* import: path_validator is a module-level
+# singleton in orf.mcp.common that reads ORF_MCP_ALLOWED_DIRS at import.
+if "ORF_MCP_ALLOWED_DIRS" not in os.environ:
+    os.environ["ORF_MCP_ALLOWED_DIRS"] = EXPECTED_CWD
+
 
 def test_context_dir_resolves_relative_reference_doc():
     """When context_dir is set, a relative reference_doc path is resolved
