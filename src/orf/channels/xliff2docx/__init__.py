@@ -678,15 +678,17 @@ class XLIFF2DOCXConverter(BaseConverter):
                 non_body_idx = tu.get("non_body_index")
                 if non_body_idx is not None:
                     if 0 <= non_body_idx < len(all_paragraphs):
-                        if non_body_idx >= 9:
-                            para_txbx = all_paragraphs[non_body_idx]
-                            orig_zh = "".join(
-                                t.text or "" for t in para_txbx.iter(
-                                    f"{{{W_NS}}}t"
-                                )
-                            ).strip()
-                            if orig_zh and orig_zh not in chinese_to_target:
-                                chinese_to_target[orig_zh] = target_text
+                        # Bug #37: removed idx >= 9 guard — with textbox dedup
+                        # removed from collect_all_paragraphs(), non_body indices
+                        # now correctly align with OPP's paragraph list.
+                        para_txbx = all_paragraphs[non_body_idx]
+                        orig_zh = "".join(
+                            t.text or "" for t in para_txbx.iter(
+                                f"{{{W_NS}}}t"
+                            )
+                        ).strip()
+                        if orig_zh and orig_zh not in chinese_to_target:
+                            chinese_to_target[orig_zh] = target_text
                         self._backfill_by_non_body_position(
                             all_paragraphs,
                             non_body_idx,

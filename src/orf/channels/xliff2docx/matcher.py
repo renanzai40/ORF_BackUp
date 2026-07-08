@@ -48,7 +48,8 @@ def collect_all_paragraphs(root: etree._Element) -> list[etree._Element]:
     OPP's ``extract_paragraphs`` builds ``result.paragraphs`` in this exact order:
       1. Body-level ``<w:p>`` (via ``doc.paragraphs``, non-empty only)
       2. Table cell ``<w:p>`` (via ``body//w:tc//w:p``)
-      3. Textbox ``<w:p>`` (via ``body//w:txbxContent//w:p``, deduplicated by text)
+      3. Textbox ``<w:p>`` (via ``body//w:txbxContent//w:p``, all entries kept)
+         (Bug #37: removed text-based dedup that broke non_body index ordering)
 
     ``non_body_N`` in the XLIFF resname is the GLOBAL index into this flat
     list, NOT an index into non-body-only paragraphs.
@@ -58,7 +59,6 @@ def collect_all_paragraphs(root: etree._Element) -> list[etree._Element]:
     """
     paragraphs: list[etree._Element] = []
     w_tag = f"{{{W_NS}}}"
-    seen_texts: set[str] = set()
     body = root.find("w:body", WORD_NS_MAP)
 
     # 1. Body-level <w:p> — non-empty only
@@ -79,14 +79,14 @@ def collect_all_paragraphs(root: etree._Element) -> list[etree._Element]:
         for p in tc.iter(f"{w_tag}p"):
             paragraphs.append(p)
 
-    # 3. Textbox paragraphs — deduplicated by text content
+    # 3. Textbox paragraphs — each w:p is kept regardless of text content
+    #    (Bug #37: text-based dedup broke non_body index ordering)
     for txbx in root.iter(f"{w_tag}txbxContent"):
         for p in txbx.iter(f"{w_tag}p"):
             text = "".join(
                 t.text or "" for t in p.iter(f"{w_tag}t")
             ).strip()
-            if text and text not in seen_texts:
-                seen_texts.add(text)
+            if text:
                 paragraphs.append(p)
 
     return paragraphs
