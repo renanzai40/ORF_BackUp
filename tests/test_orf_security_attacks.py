@@ -155,9 +155,12 @@ class TestC4RejectsImageFilePathArbitraryRead:
                     # points to a tempfile.
                     pass
 
-    @pytest.mark.xfail(strict=False, reason="Fails in full suite due to PathValidator singleton state from prior tests")
     def test_apply_xliff_accepts_data_base64_only(self, tmp_path):
         """C4: valid data_base64 images must still work."""
+        import os
+        from orf.mcp.common import reset_config_and_validator
+        os.environ["ORF_MCP_ALLOWED_DIRS"] = str(tmp_path)
+        reset_config_and_validator()
         from orf.mcp import server as orf_mcp
 
         input_file = tmp_path / "input.docx"
@@ -237,9 +240,12 @@ class TestC5OutputPathValidation:
             f"C5 BUG: should reject dangerous output_path, got errors: {err_codes}"
         )
 
-    @pytest.mark.xfail(strict=False, reason="Fails in full suite due to PathValidator singleton state from prior tests")
     def test_apply_xliff_accepts_safe_output_path(self, tmp_path):
         """C5: a safe output path inside the input dir must still work."""
+        import os
+        from orf.mcp.common import reset_config_and_validator
+        os.environ["ORF_MCP_ALLOWED_DIRS"] = str(tmp_path)
+        reset_config_and_validator()
         from orf.mcp import server as orf_mcp
 
         input_file = tmp_path / "input.docx"
