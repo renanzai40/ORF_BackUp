@@ -118,12 +118,8 @@ class MD2PDFConverter(BaseConverter):
         # Check WeasyPrint availability using importlib (avoids ruff false positive)
         import importlib.util
         if importlib.util.find_spec("weasyprint") is None:
-            logger.error("WeasyPrint is not installed. Install with: pip install weasyprint")
-            return ConversionResult(
-                output_path=output_path,
-                success=False,
-                errors=["WeasyPrint not installed. Use 'pandoc' engine or pip install weasyprint"],
-            )
+            logger.warning("WeasyPrint not installed, falling back to pandoc engine")
+            return self._convert_pandoc(input_path, output_path, options)
 
         # Import WeasyPrint for actual use
         from weasyprint import HTML  # noqa: F401

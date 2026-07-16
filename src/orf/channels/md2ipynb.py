@@ -6,9 +6,6 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import nbformat
-from nbformat.v4 import new_notebook, new_code_cell, new_markdown_cell
-
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
@@ -89,6 +86,33 @@ class MD2IPYNBConverter(BaseConverter):
                 success=False,
                 errors=[f"Invalid input file: {input_path}"],
             )
+
+        try:
+            import nbformat
+            from nbformat.v4 import new_notebook, new_code_cell, new_markdown_cell
+        except ImportError:
+            import subprocess
+
+            logger.warning(
+                "nbformat not installed, falling back to pandoc for IPYNB conversion"
+            )
+            result = subprocess.run(
+                ["pandoc", str(input_path), "-o", str(output_path), "--to", "ipynb"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                return ConversionResult(
+                    output_path=output_path,
+                    success=True,
+                    metadata={"tool": "pandoc", "format": "IPYNB"},
+                )
+            else:
+                return ConversionResult(
+                    output_path=output_path,
+                    success=False,
+                    errors=[f"pandoc failed: {result.stderr}"],
+                )
 
         kernel_name = opts.kernel
 
