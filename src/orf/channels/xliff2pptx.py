@@ -83,7 +83,7 @@ class XLIFF2PPTXConverter(BaseConverter):
             True if valid PPTX file exists.
         """
         input_path = Path(input_path)
-        return input_path.exists() and input_path.suffix.lower() == ".pptx"
+        return input_path.exists() and input_path.suffix.lower() in (".pptx", ".zip")
 
     def convert(  # type: ignore[override]
         self,

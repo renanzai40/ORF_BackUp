@@ -216,6 +216,42 @@ def apply_xliff(
                     f"--format '{format}'. Continuing with --force flag — output may be broken."
                 )
 
+    # Skeleton content-level format validation for ZIP-based skeletons
+    # Peek inside .skeleton.zip files to detect actual format and compare
+    # with --format. This catches mismatches that the extension check
+    # cannot (e.g., a DOCX skeleton renamed to .zip with --format=pptx).
+    if format in _ZIP_FORMATS and input_path.suffix.lower() == ".zip":
+        from orf.detection.format_detector import FormatDetector
+
+        detected = None
+        try:
+            detector = FormatDetector()
+            detected = detector.detect_from_skeleton(str(input_path))
+        except Exception:
+            logger.debug(
+                f"Could not detect format from skeleton {input_path}, "
+                f"skipping content-level validation"
+            )
+
+        if detected is not None:
+            detected_lower = detected.lower()
+            if detected_lower != format:
+                msg = (
+                    f"Skeleton ZIP contains '{detected}' format content, "
+                    f"but --format is '{format}'. "
+                    f"XLIFF backfill is format-preserving; use the MD path for "
+                    f"cross-format conversion, or pass --force to attempt anyway "
+                    f"(output may be incomplete or invalid)."
+                )
+                if not force:
+                    raise click.BadParameter(msg)
+                else:
+                    logger.warning(
+                        f"FORCE MODE: Skeleton ZIP contains '{detected}' format, "
+                        f"but --format is '{format}'. Continuing with --force flag — "
+                        f"output may be broken."
+                    )
+
     from orf.converters.options import ConverterOptions
 
     opts = ConverterOptions()
@@ -291,6 +327,12 @@ def apply_xliff(
             f"Unsupported format '{format}'\n"
             f"Hint: Valid formats are: docx, pptx, epub, html, odt, pdf, json\n"
             f"       Use --format <format> to specify"
+        )
+
+    if not converter.validate_input(input_path):
+        raise click.ClickException(
+            f"Input file '{input_path}' is not valid for {format} format. "
+            f"Skeleton file must have a valid extension (.{format} or .zip)."
         )
 
     result = converter.convert(input_path, xliff_path, output_path, options=opts)

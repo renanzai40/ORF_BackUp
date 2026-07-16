@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-_ORF_SRC = Path(__file__).resolve().parents[1] / "Omni_Re_Formatter" / "src"
+_ORF_SRC = Path(__file__).resolve().parents[1] / "src"
 _VENV_PYTHON = Path(__file__).resolve().parents[2] / ".venv_ol" / "bin" / "python"
 
 
@@ -225,4 +225,160 @@ class TestForceFlag:
         combined = result.stdout + result.stderr
         assert "FORCE MODE" in combined or "force" in combined.lower(), (
             f"--force warning not produced; got:\n{combined}"
+        )
+
+
+# ── Helpers for skeleton content-level validation tests ────────────────
+
+_DOCX_SKELETON_DOCUMENT = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:r>
+        <w:t>Hello World</w:t>
+      </w:r>
+    </w:p>
+  </w:body>
+</w:document>
+"""
+
+
+def _create_docx_skeleton_zip(path: Path) -> None:
+    """Create a minimal DOCX skeleton ZIP for testing."""
+    import zipfile
+
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("word/document.xml", _DOCX_SKELETON_DOCUMENT)
+        zf.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n'
+            '  <Default Extension="xml" ContentType="application/xml"/>\n'
+            '</Types>',
+        )
+
+
+def _create_pptx_skeleton_zip(path: Path) -> None:
+    """Create a minimal PPTX skeleton ZIP for testing."""
+    import zipfile
+
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "ppt/presentation.xml",
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>',
+        )
+
+
+def _create_xliff(path: Path, source: str = "Hello World", target: str = "Hello World") -> None:
+    """Create a minimal XLIFF file for testing."""
+    path.write_text(
+        f'<?xml version="1.0" encoding="UTF-8"?>\n'
+        f'<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">\n'
+        f'  <file source-language="en" target-language="zh" datatype="plaintext">\n'
+        f'    <body>\n'
+        f'      <trans-unit id="1">\n'
+        f'        <source>{source}</source>\n'
+        f'        <target>{target}</target>\n'
+        f'      </trans-unit>\n'
+        f'    </body>\n'
+        f'  </file>\n'
+        f'</xliff>'
+    )
+
+
+class TestSkeletonContentValidation:
+    """Content-level validation for ZIP skeletons.
+
+    Peek inside .skeleton.zip files via FormatDetector.detect_from_skeleton()
+    to verify the actual format matches --format, not just the file extension.
+    """
+
+    def test_docx_skeleton_rejects_pptx_format_without_force(self, tmp_path):
+        """DOCX skeleton .zip with --format pptx must fail with skeleton error."""
+        skeleton = tmp_path / "input.skeleton.zip"
+        _create_docx_skeleton_zip(skeleton)
+        xlf = tmp_path / "translation.xlf"
+        _create_xliff(xlf)
+        output = tmp_path / "out.pptx"
+
+        result = _run_orf_cli(
+            "apply-xliff", str(skeleton),
+            "--xliff", str(xlf),
+            "--output", str(output),
+            "--format", "pptx",
+        )
+        assert result.returncode != 0, (
+            f"Expected non-zero exit on format mismatch; got {result.returncode}\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        combined = result.stdout + result.stderr
+        assert "Skeleton" in combined, (
+            f"Error message should contain 'Skeleton'; got:\n{combined}"
+        )
+
+    def test_docx_skeleton_accepts_docx_format(self, tmp_path):
+        """DOCX skeleton .zip with --format docx must succeed."""
+        skeleton = tmp_path / "input.skeleton.zip"
+        _create_docx_skeleton_zip(skeleton)
+        xlf = tmp_path / "translation.xlf"
+        _create_xliff(xlf, source="Hello World", target="Hello World")
+        output = tmp_path / "out.docx"
+
+        result = _run_orf_cli(
+            "apply-xliff", str(skeleton),
+            "--xliff", str(xlf),
+            "--output", str(output),
+            "--format", "docx",
+        )
+        assert result.returncode == 0, (
+            f"Expected exit code 0 for matching format; got {result.returncode}\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+    def test_docx_skeleton_accepts_pptx_with_force(self, tmp_path):
+        """DOCX skeleton .zip with --format pptx --force must succeed with warning."""
+        skeleton = tmp_path / "input.skeleton.zip"
+        _create_docx_skeleton_zip(skeleton)
+        xlf = tmp_path / "translation.xlf"
+        _create_xliff(xlf, source="Hello World", target="Hello World")
+        output = tmp_path / "out.pptx"
+
+        result = _run_orf_cli(
+            "apply-xliff", str(skeleton),
+            "--xliff", str(xlf),
+            "--output", str(output),
+            "--format", "pptx",
+            "--force",
+        )
+        combined = result.stdout + result.stderr
+        assert "FORCE MODE" in combined, (
+            f"--force should produce FORCE MODE warning; got:\n{combined}"
+        )
+        # BadParameter produces "Error: Invalid value:" — must be absent
+        assert "Invalid value" not in combined, (
+            f"--force should bypass BadParameter; got:\n{combined}"
+        )
+
+    def test_ppt_skeleton_rejects_docx_format(self, tmp_path):
+        """PPTX skeleton .zip with --format docx must fail with skeleton error."""
+        skeleton = tmp_path / "input.skeleton.zip"
+        _create_pptx_skeleton_zip(skeleton)
+        xlf = tmp_path / "translation.xlf"
+        _create_xliff(xlf)
+        output = tmp_path / "out.docx"
+
+        result = _run_orf_cli(
+            "apply-xliff", str(skeleton),
+            "--xliff", str(xlf),
+            "--output", str(output),
+            "--format", "docx",
+        )
+        assert result.returncode != 0, (
+            f"Expected non-zero exit on format mismatch; got {result.returncode}\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        combined = result.stdout + result.stderr
+        assert "Skeleton" in combined, (
+            f"Error message should contain 'Skeleton'; got:\n{combined}"
         )
