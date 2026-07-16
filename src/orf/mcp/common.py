@@ -35,13 +35,57 @@ MCP_SCRUB_ENV_KEYS = frozenset({
 
 logger = get_logger("mcp.server")
 
-# Config & validator (module-level singletons; tests patch the validator
-# via ``_path_validator`` but the underlying config is read once at import).
-orf_config: MCPConfig = load_config()
-path_validator = PathValidator(
-    allowed_directories=orf_config.allowed_directories or [Path.cwd()],
-    max_file_size_bytes=orf_config.max_file_size_mb * 1024 * 1024,
-)
+# Config & validator (lazy-initialized singletons).
+# Previously these were created at module-import time, which meant tests that
+# changed ORF_MCP_ALLOWED_DIRS after import saw stale config (ORF #40).
+# Now they are loaded on first access via get_path_validator()/get_config().
+_path_validator: PathValidator | None = None
+_config: MCPConfig | None = None
+
+
+def get_config() -> MCPConfig:
+    """Load MCPConfig lazily — reads env vars on first call, not at import."""
+    global _config
+    if _config is None:
+        _config = load_config()
+    return _config
+
+
+def get_path_validator() -> PathValidator:
+    """Lazy-initialized PathValidator singleton.
+
+    Unlike the previous module-level singleton, this reads config (and thus
+    env vars) on first call, not at import time. Tests that set
+    ``ORF_MCP_ALLOWED_DIRS`` before the first call will see the correct config.
+    """
+    global _path_validator
+    if _path_validator is None:
+        cfg = get_config()
+        _path_validator = PathValidator(
+            allowed_directories=cfg.allowed_directories or [Path.cwd()],
+            max_file_size_bytes=cfg.max_file_size_mb * 1024 * 1024,
+        )
+    return _path_validator
+
+
+def reset_config_and_validator() -> None:
+    """Reset cached config and validator (for testing — e.g. between tests)."""
+    global _config, _path_validator
+    _config = None
+    _path_validator = None
+
+
+def __getattr__(name: str):
+    """Backward-compat attribute access for module-level ``orf_config`` and ``path_validator``.
+
+    ``from orf.mcp.common import path_validator`` triggers this on first
+    access, returning the lazy-initialized instance.
+    """
+    if name == "orf_config":
+        return get_config()
+    if name == "path_validator":
+        return get_path_validator()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def error_response(code: str, message: str, **extra: Any) -> dict:
@@ -51,6 +95,7 @@ def error_response(code: str, message: str, **extra: Any) -> dict:
         "error": {"code": code, "message": message},
         "error_code": code,
         "message": message,
+        "errors": [{"code": code, "message": message, "recovery_strategy": None}],
     }
     resp.update(extra)
     return resp
@@ -65,7 +110,8 @@ def augment_error(resp: dict) -> dict:
     """Add top-level ``error: {code, message}`` to an existing error dict.
 
     Extracts code/message from ``errors[0]`` if present, preserving all
-    existing fields (backward compat).
+    existing fields (backward compat). Also adds flat ``error_code`` and
+    ``message`` fields for consistency with ``error_response()``.
     """
     if resp.get("success") is True:
         return resp
@@ -78,6 +124,10 @@ def augment_error(resp: dict) -> dict:
             }
         else:
             resp["error"] = {"code": "ORF_ERROR", "message": "Unknown error"}
+    if "error_code" not in resp:
+        resp["error_code"] = resp["error"].get("code", "ORF_ERROR")
+    if "message" not in resp:
+        resp["message"] = resp["error"].get("message", "Unknown error")
     return resp
 
 
@@ -162,7 +212,7 @@ def safe_unlink(path: str) -> bool:
         return False
     if Path(path).is_symlink():
         return False
-    result = path_validator.validate_path(str(resolved), allow_missing=True)
+    result = get_path_validator().validate_path(str(resolved), allow_missing=True)
     if not result.success:
         return False
     try:
