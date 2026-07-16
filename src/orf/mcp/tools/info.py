@@ -9,7 +9,7 @@ from orf.mcp.auth import auth_failure_response, check_auth
 from orf.mcp.common import (
     augment_error,
     error_response,
-    path_validator,
+    get_path_validator,
     success_response,
 )
 from orf.mcp.rate_limiter import check_rate_limit, rate_limit_failure_response
@@ -25,7 +25,7 @@ def info(file_path: str, auth_token: Optional[str] = None) -> str:
     auth_ok, _ = check_auth(auth_token)
     if not auth_ok:
         return json.dumps(auth_failure_response(), ensure_ascii=False)
-    result_info = path_validator.validate_path(file_path)
+    result_info = get_path_validator().validate_path(file_path)
     if not result_info.success:
         return json.dumps(error_response(
             "PATH_NOT_ALLOWED", result_info.error or "Path validation failed",

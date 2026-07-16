@@ -11,8 +11,8 @@ from typing import Optional
 from orf.mcp.auth import auth_failure_response, check_auth
 from orf.mcp.common import (
     augment_error,
+    get_path_validator,
     logger,
-    path_validator,
     resolve_context_path,
     safe_unlink,
     success_response,
@@ -155,7 +155,7 @@ def apply_md(
         reference_doc = reference_doc_temp_path
 
     try:
-        result = path_validator.validate_path(input_md)
+        result = get_path_validator().validate_path(input_md)
         if not result.success:
             return json.dumps(augment_error({
                 "success": False,
@@ -167,7 +167,7 @@ def apply_md(
 
         # Resolve relative paths against context_dir (agent convenience)
         if context_dir:
-            cv = path_validator.validate_path(context_dir)
+            cv = get_path_validator().validate_path(context_dir)
             if not cv.success:
                 return json.dumps(augment_error({
                     "success": False,
@@ -181,7 +181,7 @@ def apply_md(
         template = resolve_context_path(template, context_dir)
 
         if output_path:
-            result_out = path_validator.validate_path(output_path, allow_missing=True)
+            result_out = get_path_validator().validate_path(output_path, allow_missing=True)
             if not result_out.success:
                 return json.dumps(augment_error({
                     "success": False,
@@ -193,7 +193,7 @@ def apply_md(
 
         for path_param, path_value in (("reference_doc", reference_doc), ("template", template)):
             if path_value:
-                pv = path_validator.validate_path(path_value, allow_missing=True)
+                pv = get_path_validator().validate_path(path_value, allow_missing=True)
                 if not pv.success:
                     return json.dumps(augment_error({
                         "success": False,

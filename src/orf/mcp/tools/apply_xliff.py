@@ -12,8 +12,8 @@ from typing import Optional
 from orf.mcp.auth import auth_failure_response, check_auth
 from orf.mcp.common import (
     augment_error,
+    get_path_validator,
     logger,
-    path_validator,
     safe_unlink,
     success_response,
 )
@@ -62,7 +62,7 @@ def apply_xliff(
                     "metadata": {},
                 }))
     # C5 fix: validate output_path against allowlist before subprocess
-    result_out = path_validator.validate_path(output_path, allow_missing=True)
+    result_out = get_path_validator().validate_path(output_path, allow_missing=True)
     if not result_out.success:
         return json.dumps(augment_error({
             "success": False,
@@ -90,7 +90,7 @@ def apply_xliff(
         xliff_to_use = xliff_temp_path
 
     for p in [input_file, xliff_to_use]:
-        result_p = path_validator.validate_path(p)
+        result_p = get_path_validator().validate_path(p)
         if not result_p.success:
             if xliff_temp_path:
                 safe_unlink(xliff_temp_path)
@@ -115,7 +115,7 @@ def apply_xliff(
     if max_file_size_mb is not None:
         args.extend(["--max-file-size-mb", str(max_file_size_mb)])
     if skeleton_html:
-        sh_result = path_validator.validate_path(skeleton_html)
+        sh_result = get_path_validator().validate_path(skeleton_html)
         if not sh_result.success:
             return json.dumps(augment_error({
                 "success": False,

@@ -8,7 +8,7 @@ from typing import Optional
 from orf.mcp.auth import auth_failure_response, check_auth
 from orf.mcp.common import (
     error_response,
-    path_validator,
+    get_path_validator,
     success_response,
 )
 from orf.mcp.rate_limiter import check_rate_limit, rate_limit_failure_response
@@ -24,7 +24,7 @@ def detect_format(file_path: str, auth_token: Optional[str] = None) -> str:
     auth_ok, _ = check_auth(auth_token)
     if not auth_ok:
         return json.dumps(auth_failure_response(), ensure_ascii=False)
-    result_df = path_validator.validate_path(file_path)
+    result_df = get_path_validator().validate_path(file_path)
     if not result_df.success:
         return json.dumps(error_response(
             "PATH_NOT_ALLOWED", result_df.error or "Path validation failed",
