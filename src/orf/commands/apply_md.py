@@ -72,6 +72,7 @@ logger = get_logger("cli")
 @click.option("--author", type=str, help="EPUB 作者")
 @click.option("--lang", type=str, default="zh", help="EPUB 语言")
 @click.option("--embed-images", is_flag=True, help="EPUB 嵌入图片")
+@click.option("--css", type=click.Path(exists=True), help="EPUB CSS 样式表路径（传递给 pandoc --css）")
 @click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
 @click.option(
     "--text-only",
@@ -121,6 +122,7 @@ def apply_md(
     author: str | None,
     lang: str,
     embed_images: bool,
+    css: str | None,
     output_json: bool,
     text_only: bool,
     separate_images: bool | None,
@@ -375,6 +377,8 @@ def apply_md(
         options["lang"] = lang
     if embed_images:
         options["embed_images"] = True
+    if css:
+        options["css"] = css
     if text_only:
         options["text_only"] = True
     if separate_images is not None:

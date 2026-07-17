@@ -73,6 +73,8 @@ class MD2EPUBConverter(BaseConverter):
             "--to", "epub",
         ]
 
+        if opts.css:
+            cmd.extend(["--css", opts.css])
         if opts.title:
             cmd.extend(["--metadata", f"title={opts.title}"])
         if opts.author:
