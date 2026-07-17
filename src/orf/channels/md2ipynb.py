@@ -94,7 +94,7 @@ class MD2IPYNBConverter(BaseConverter):
             import subprocess
 
             logger.warning(
-                "nbformat not installed, falling back to pandoc for IPYNB conversion"
+                "nbformat not installed, falling back to pandoc for IPYNB conversion. Install with: pip install omni-re-formatter[notebook]"
             )
             result = subprocess.run(
                 ["pandoc", str(input_path), "-o", str(output_path), "--to", "ipynb"],

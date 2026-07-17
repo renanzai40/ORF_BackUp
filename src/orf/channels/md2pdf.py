@@ -118,7 +118,7 @@ class MD2PDFConverter(BaseConverter):
         # Check WeasyPrint availability using importlib (avoids ruff false positive)
         import importlib.util
         if importlib.util.find_spec("weasyprint") is None:
-            logger.warning("WeasyPrint not installed, falling back to pandoc engine")
+            logger.warning("WeasyPrint not installed, falling back to pandoc engine. Install with: pip install omni-re-formatter[weasyprint]")
             return self._convert_pandoc(input_path, output_path, options)
 
         # Import WeasyPrint for actual use
