@@ -347,6 +347,30 @@ orf apply-xliff document.docx --xliff translated/document.xlf --output result.do
 - [OPP (Omni-Pre-Processor)](https://github.com/1StepMore/Omni_Pre_Processor) - **PREREQUISITE**. Produces skeleton.zip and manifest.json that ORF uses.
 - [OL (Omni-Localizer)](https://github.com/1StepMore/Omni_Localizer) - **PREREQUISITE**. Produces translated MD/XLIFF that ORF backfills.
 
+---
+
+## Validation Master Plan
+
+A comprehensive validation master plan for ORF is available in the Omni Suite docs at `../docs/ORF_VALIDATION_MASTER_PLAN.md`. It covers **14 user questions** across **68 executable scenarios** in AutoInfo-style format:
+
+| Part | Focus | Questions |
+|------|-------|-----------|
+| 1 | Core Backfill Pipeline (MD path, 16 formats) | Q1-ORF — Q5-ORF |
+| 2 | XLIFF Backfill | Q6-ORF — Q7-ORF |
+| 3 | MCP Surface Mastery (6 MCP tools) | Q8-ORF |
+| 4 | Agent-as-User Workflows | Q9-ORF |
+| 5 | CLI Surface Mastery | Q10-ORF |
+| 6 | Error & Boundary Matrix | Q11-ORF — Q12-ORF |
+| 7 | Production Validation | Q13-ORF — Q14-ORF |
+
+**How to use:**
+1. Open `../docs/ORF_VALIDATION_MASTER_PLAN.md` (from the Suite root)
+2. Pick a user question (e.g. "Can I backfill MD to DOCX?")
+3. Execute the scenario as a CLI command or Python script
+4. Compare actual vs. expected result and mark the verdict
+
+Each scenario includes prerequisites, expected output, and a `**PASS / FAIL:**` verdict box. Run through all scenarios to validate production readiness.
+
 ## License
 
 MIT
