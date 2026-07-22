@@ -8,6 +8,13 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from orf.mcp._errors import (
+    INLINE_CONTENT_WRITE_FAILED,
+    INLINE_REFERENCE_DOC_WRITE_FAILED,
+    MISSING_INPUT,
+    MUTUALLY_EXCLUSIVE,
+    PATH_NOT_ALLOWED,
+)
 from orf.mcp.auth import auth_failure_response, check_auth
 from orf.mcp.common import (
     augment_error,
@@ -56,7 +63,7 @@ def apply_md(
             "success": False,
             "output_path": None,
             "errors": [{
-                "code": "MISSING_INPUT",
+                "code": MISSING_INPUT,
                 "message": "Either input_md (path) or content (inline markdown) is required.",
                 "recovery_strategy": None,
             }],
@@ -68,7 +75,7 @@ def apply_md(
             "success": False,
             "output_path": None,
             "errors": [{
-                "code": "MUTUALLY_EXCLUSIVE",
+                "code": MUTUALLY_EXCLUSIVE,
                 "message": "input_md and content are mutually exclusive — supply one, not both.",
                 "recovery_strategy": None,
             }],
@@ -81,7 +88,7 @@ def apply_md(
             "success": False,
             "output_path": None,
             "errors": [{
-                "code": "MUTUALLY_EXCLUSIVE",
+                "code": MUTUALLY_EXCLUSIVE,
                 "message": "reference_doc and reference_doc_content are mutually exclusive — supply one, not both.",
                 "recovery_strategy": None,
             }],
@@ -108,7 +115,7 @@ def apply_md(
                 "success": False,
                 "output_path": None,
                 "errors": [{
-                    "code": "INLINE_CONTENT_WRITE_FAILED",
+                    "code": INLINE_CONTENT_WRITE_FAILED,
                     "message": f"Failed to materialize inline content: {e}",
                     "recovery_strategy": None,
                 }],
@@ -145,7 +152,7 @@ def apply_md(
                 "success": False,
                 "output_path": None,
                 "errors": [{
-                    "code": "INLINE_REFERENCE_DOC_WRITE_FAILED",
+                    "code": INLINE_REFERENCE_DOC_WRITE_FAILED,
                     "message": f"Failed to materialize inline reference_doc: {e}",
                     "recovery_strategy": None,
                 }],
@@ -160,7 +167,7 @@ def apply_md(
             return json.dumps(augment_error({
                 "success": False,
                 "output_path": None,
-                "errors": [{"code": "PATH_NOT_ALLOWED", "message": result.error, "recovery_strategy": None}],
+                "errors": [{"code": PATH_NOT_ALLOWED, "message": result.error, "recovery_strategy": None}],
                 "warnings": [],
                 "metadata": {}
             }))
@@ -172,7 +179,7 @@ def apply_md(
                 return json.dumps(augment_error({
                     "success": False,
                     "output_path": None,
-                    "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"context_dir: {cv.error}", "recovery_strategy": None}],
+                    "errors": [{"code": PATH_NOT_ALLOWED, "message": f"context_dir: {cv.error}", "recovery_strategy": None}],
                     "warnings": [],
                     "metadata": {}
                 }))
@@ -186,7 +193,7 @@ def apply_md(
                 return json.dumps(augment_error({
                     "success": False,
                     "output_path": None,
-                    "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"output_path: {result_out.error}", "recovery_strategy": None}],
+                    "errors": [{"code": PATH_NOT_ALLOWED, "message": f"output_path: {result_out.error}", "recovery_strategy": None}],
                     "warnings": [],
                     "metadata": {}
                 }))
@@ -198,7 +205,7 @@ def apply_md(
                     return json.dumps(augment_error({
                         "success": False,
                         "output_path": None,
-                        "errors": [{"code": "PATH_NOT_ALLOWED",
+                        "errors": [{"code": PATH_NOT_ALLOWED,
                                     "message": f"{path_param}: {pv.error}",
                                     "recovery_strategy": None}],
                         "warnings": [],

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.17 (2026-07-22)
+
+### ✨ 新增 / Added
+
+- **Centralized error code map** (`src/orf/mcp/_errors.py`): 14 named error code constants (`AUTH_FAILED`, `RATE_LIMITED`, `ORF_ERROR`, `ORF_UNKNOWN_TOOL`, `ORF_INTERNAL_ERROR`, `EMPTY_OUTPUT`, `JSON_PARSE_ERROR`, `CLI_ERROR`, `MISSING_INPUT`, `MUTUALLY_EXCLUSIVE`, `INLINE_CONTENT_WRITE_FAILED`, `INLINE_REFERENCE_DOC_WRITE_FAILED`, `PATH_NOT_ALLOWED`, `FILE_PATH_NOT_ALLOWED`), `SAFE_USER_MESSAGES` dict mapping code→user-friendly message, `get_safe_message()` lookup function, and lazy re-exports of `error_response()`/`augment_error()` from `common.py`. Matches the same pattern already used by OPP and OL. (Resolves ORF#44)
+
+### Changed
+
+- **9 source files** in `src/orf/mcp/` (auth.py, rate_limiter.py, common.py, server.py, tools/apply_md.py, tools/apply_xliff.py, tools/batch_convert.py, tools/info.py, tools/detect_format.py): all inline error code string literals replaced with named constants from `_errors.py`. No behavioral change — 216/216 ORF tests all pass, response shapes unchanged.
+
 ## v0.4.16 (2026-06-28)
 
 ### 🛠️ 修复 / Fixed

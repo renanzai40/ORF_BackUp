@@ -13,6 +13,8 @@ import os
 import threading
 import time
 
+from orf.mcp._errors import RATE_LIMITED
+
 __all__ = ["TokenBucket", "check_rate_limit", "rate_limit_failure_response"]
 
 
@@ -71,13 +73,13 @@ def check_rate_limit() -> tuple[bool, str | None]:
         burst = int(os.environ.get("OMNI_RATE_LIMIT_BURST", "10"))
         _bucket = TokenBucket(rpm=rpm, burst=burst)
     if not _bucket.consume():
-        return False, "RATE_LIMITED: too many requests."
+        return False, f"{RATE_LIMITED}: too many requests."
     return True, None
 
 
 def rate_limit_failure_response() -> dict:
     return {
         "success": False,
-        "error_code": "RATE_LIMITED",
+        "error_code": RATE_LIMITED,
         "message": "Rate limit exceeded.",
     }

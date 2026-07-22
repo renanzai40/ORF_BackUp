@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from orf.logging import get_logger
+from orf.mcp._errors import CLI_ERROR, EMPTY_OUTPUT, JSON_PARSE_ERROR, ORF_ERROR
 from orf.mcp.config import MCPConfig, load_config
 from orf.mcp.security import PathValidator
 
@@ -119,13 +120,13 @@ def augment_error(resp: dict) -> dict:
         errors = resp.get("errors", [])
         if errors and isinstance(errors[0], dict):
             resp["error"] = {
-                "code": errors[0].get("code", "ORF_ERROR"),
+                "code": errors[0].get("code", ORF_ERROR),
                 "message": errors[0].get("message", "Unknown error"),
             }
         else:
-            resp["error"] = {"code": "ORF_ERROR", "message": "Unknown error"}
+            resp["error"] = {"code": ORF_ERROR, "message": "Unknown error"}
     if "error_code" not in resp:
-        resp["error_code"] = resp["error"].get("code", "ORF_ERROR")
+        resp["error_code"] = resp["error"].get("code", ORF_ERROR)
     if "message" not in resp:
         resp["message"] = resp["error"].get("message", "Unknown error")
     return resp
@@ -160,7 +161,7 @@ def run_cli_command(args: list[str]) -> dict:
             "success": False,
             "output_path": None,
             "errors": [{
-                "code": "EMPTY_OUTPUT",
+                "code": EMPTY_OUTPUT,
                 "message": f"CLI returned empty. stderr: {result.stderr[:500]}",
                 "recovery_strategy": None
             }],
@@ -176,7 +177,7 @@ def run_cli_command(args: list[str]) -> dict:
             "success": False,
             "output_path": None,
             "errors": [{
-                "code": "JSON_PARSE_ERROR",
+                "code": JSON_PARSE_ERROR,
                 "message": f"JSON decode failed: {e}. Output: {result.stdout[:500]}",
                 "recovery_strategy": None
             }],
@@ -192,7 +193,7 @@ def run_cli_command(args: list[str]) -> dict:
             "success": False,
             "output_path": None,
             "errors": [{
-                "code": "CLI_ERROR",
+                "code": CLI_ERROR,
                 "message": result.stderr or "Unknown error",
                 "recovery_strategy": None
             }],

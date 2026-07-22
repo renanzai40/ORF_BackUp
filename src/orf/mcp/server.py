@@ -46,6 +46,7 @@ from orf.mcp.tools import (  # noqa: F401
 )
 # Re-export common helpers for backward compat (README imports
 # ``_run_cli_command`` for inline testing).
+from orf.mcp._errors import AUTH_FAILED, ORF_INTERNAL_ERROR, ORF_UNKNOWN_TOOL, RATE_LIMITED
 from orf.mcp.common import (  # noqa: F401
     MCP_SCRUB_ENV_KEYS as _MCP_SCRUB_ENV_KEYS,
     augment_error as _augment_error,
@@ -339,7 +340,7 @@ async def _call_tool(name: str, arguments: dict) -> list[types.ContentBlock]:
             name, arguments, _ORF_STATUS_ERROR, 0.0,
         )
         with _orf_tracing_start_span(name, arguments) as _span:
-            _orf_tracing_set_status(_span, "error", error_code="ORF_UNKNOWN_TOOL")
+            _orf_tracing_set_status(_span, "error", error_code=ORF_UNKNOWN_TOOL)
         raise ValueError(f"Unknown tool: {name}")
     fn = _TOOL_DISPATCH[name]
     timer = _orf_metrics_timer()
@@ -353,7 +354,7 @@ async def _call_tool(name: str, arguments: dict) -> list[types.ContentBlock]:
             )
             _orf_tracing_set_status(
                 _span, "error",
-                error_code="ORF_INTERNAL_ERROR",
+                error_code=ORF_INTERNAL_ERROR,
                 duration_ms=timer.seconds() * 1000.0,
             )
             raise
@@ -395,9 +396,9 @@ def _orf_classify_status(payload: Any) -> str:
         err = payload.get("error")
         if isinstance(err, dict):
             code = err.get("code")
-    if code == "RATE_LIMITED":
+    if code == RATE_LIMITED:
         return _ORF_STATUS_RATE_LIMITED
-    if code == "AUTH_FAILED":
+    if code == AUTH_FAILED:
         return _ORF_STATUS_AUTH_FAILED
     return _ORF_STATUS_ERROR
 

@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from orf.mcp._errors import FILE_PATH_NOT_ALLOWED, MUTUALLY_EXCLUSIVE, PATH_NOT_ALLOWED
 from orf.mcp.auth import auth_failure_response, check_auth
 from orf.mcp.common import (
     augment_error,
@@ -52,7 +53,7 @@ def apply_xliff(
                     "success": False,
                     "output_path": None,
                     "errors": [{
-                        "code": "FILE_PATH_NOT_ALLOWED",
+                        "code": FILE_PATH_NOT_ALLOWED,
                         "message": (
                             f"image[{idx}].file_path is not allowed via MCP; "
                             "supply data_base64 instead."
@@ -67,7 +68,7 @@ def apply_xliff(
         return json.dumps(augment_error({
             "success": False,
             "output_path": None,
-            "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"output_path: {result_out.error}"}],
+            "errors": [{"code": PATH_NOT_ALLOWED, "message": f"output_path: {result_out.error}"}],
             "warnings": [],
             "metadata": {},
         }))
@@ -75,7 +76,7 @@ def apply_xliff(
         return json.dumps(augment_error({
             "success": False,
             "output_path": None,
-            "errors": [{"code": "MUTUALLY_EXCLUSIVE", "message": "xliff_path and xliff_content are mutually exclusive"}],
+            "errors": [{"code": MUTUALLY_EXCLUSIVE, "message": "xliff_path and xliff_content are mutually exclusive"}],
             "warnings": [],
             "metadata": {}
         }))
@@ -97,7 +98,7 @@ def apply_xliff(
             return json.dumps(augment_error({
                 "success": False,
                 "output_path": None,
-                "errors": [{"code": "PATH_NOT_ALLOWED", "message": result_p.error}],
+                "errors": [{"code": PATH_NOT_ALLOWED, "message": result_p.error}],
                 "warnings": [],
                 "metadata": {}
             }))
@@ -120,7 +121,7 @@ def apply_xliff(
             return json.dumps(augment_error({
                 "success": False,
                 "output_path": None,
-                "errors": [{"code": "PATH_NOT_ALLOWED", "message": f"skeleton_html: {sh_result.error}"}],
+                "errors": [{"code": PATH_NOT_ALLOWED, "message": f"skeleton_html: {sh_result.error}"}],
                 "warnings": [],
                 "metadata": {},
             }))

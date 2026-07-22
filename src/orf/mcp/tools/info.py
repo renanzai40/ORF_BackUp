@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Optional
 
+from orf.mcp._errors import PATH_NOT_ALLOWED
 from orf.mcp.auth import auth_failure_response, check_auth
 from orf.mcp.common import (
     augment_error,
@@ -28,7 +29,7 @@ def info(file_path: str, auth_token: Optional[str] = None) -> str:
     result_info = get_path_validator().validate_path(file_path)
     if not result_info.success:
         return json.dumps(error_response(
-            "PATH_NOT_ALLOWED", result_info.error or "Path validation failed",
+            PATH_NOT_ALLOWED, result_info.error or "Path validation failed",
             content={
                 "format": "UNKNOWN",
                 "size_mb": 0.0,
