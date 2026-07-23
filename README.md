@@ -268,7 +268,7 @@ src/orf/
 └── error_handlers/   # Error handling and recovery strategies
 ```
 
-## Project Status (v0.4.16)
+## Project Status (v0.4.17)
 
 - **Agent-Oriented Architecture**: MCP Server + Foreman/Specialist + HITL approval
 - **Precise Image Positioning**: supports position-based image backfill for DOCX/PPTX/HTML/EPUB
