@@ -285,3 +285,32 @@ for the complete decision tree and format support matrix.
 - MCP tool full parameter reference: [agent-pipeline-guide.md](https://github.com/1StepMore/e2e-test-suite/blob/main/docs/agent-pipeline-guide.md)
 - Pre-commit hooks: [.pre-commit-config.yaml](https://github.com/1StepMore/e2e-test-suite/blob/main/.pre-commit-config.yaml)
 - Compatibility matrix: [COMPATIBILITY.md](https://github.com/1StepMore/e2e-test-suite/blob/main/COMPATIBILITY.md)
+
+## How to validate this module
+
+ORF ships its own validation scenarios in the Omni Suite validation
+framework (`scenarios/orf-md/` = 16 output formats + `scenarios/orf-xliff/`
+= 7 XLIFF backfill formats + cross-format `--force` + `tool-orf-*` = 7 MCP
+tools). Any agent or the human director can validate ORF in isolation with
+the suite's per-module filter:
+
+```bash
+# From the Omni Suite root (clone: https://github.com/1StepMore/e2e-test-suite)
+source .venv_ol/bin/activate
+
+# List ORF's scenarios
+python scripts/validation/run_validation.py --list --module orf
+
+# Run ORF's hermetic scenarios (tier 1 = no LLM keys needed)
+python scripts/validation/run_validation.py --module orf --tier 1
+
+# Coverage: every ORF MCP tool must be scenario-exercised
+python scripts/validation/coverage_audit.py   # orf row must show 7/7, 0 missing
+```
+
+The standards bar is `scenarios/STANDARDS.md` (AGENT-SURFACE family:
+tool-contract, json-parseable, error-clarity, path-security, exit-codes;
+plus the format-structure anchors the orf-md/orf-xliff scenarios assert).
+Director loop + 10-minute checklist: `docs/dev/validation-director-loop.md`
+in the suite repo. Scenario fixes live in the suite repo, NOT here —
+ORF product-code fixes go through the normal fix cycle in this repo.
