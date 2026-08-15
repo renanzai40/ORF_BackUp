@@ -182,7 +182,7 @@ def apply_md(
                 content_str = Path(content_str[1:]).read_text(encoding="utf-8")
             try:
                 docx_bytes = base64.b64decode(content_str, validate=True)
-            except Exception:
+            except Exception:  # expected
                 docx_bytes = content_str.encode("utf-8")
             parent = Path.cwd().resolve()
             fd, inline_ref_temp = tempfile.mkstemp(
@@ -191,7 +191,7 @@ def apply_md(
             os.close(fd)
             with open(inline_ref_temp, "wb") as f:
                 f.write(docx_bytes)
-        except Exception as e:
+        except Exception as e:  # expected
             click.echo(f"Error: failed to write inline reference doc: {e}", err=True)
             if inline_ref_temp and Path(inline_ref_temp).exists():
                 Path(inline_ref_temp).unlink()

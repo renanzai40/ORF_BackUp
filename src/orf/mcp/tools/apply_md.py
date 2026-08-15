@@ -140,7 +140,7 @@ def apply_md(
             import base64
             try:
                 docx_bytes = base64.b64decode(reference_doc_content, validate=True)
-            except Exception:
+            except Exception:  # expected
                 docx_bytes = reference_doc_content.encode("utf-8")
             with open(reference_doc_temp_path, "wb") as f:
                 f.write(docx_bytes)

@@ -54,7 +54,7 @@ def get_capabilities(auth_token: Optional[str] = None) -> str:
     try:
         from orf import __version__ as _v  # type: ignore
         version = _v
-    except Exception:
+    except Exception:  # expected
         pass
 
     return json.dumps(
