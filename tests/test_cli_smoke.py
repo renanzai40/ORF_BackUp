@@ -37,10 +37,10 @@ from pathlib import Path
 import pytest
 
 
-VENV_PY = "/mnt/d/贯维/Omni_Suite/.venv_ol/bin/python"
-ORF_DIR = Path("/mnt/d/贯维/Omni_Suite/Omni_Re_Formatter")
-OPP_DIR = Path("/mnt/d/贯维/Omni_Suite/Omni_Pre_Processor")
-REPO_ROOT = Path("/mnt/d/贯维/Omni_Suite")
+ORF_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = ORF_DIR.parent
+OPP_DIR = REPO_ROOT / "Omni_Pre_Processor"
+VENV_PY = str(REPO_ROOT / ".venv_ol" / "bin" / "python")
 
 HAIER_DOCX = REPO_ROOT / "爱上海尔_第二章_全球创牌 - E2E测试专用.docx"
 MERIDIAN_DOCX = REPO_ROOT / "Meridian_Robotics_Product_Overview_E2E.docx"

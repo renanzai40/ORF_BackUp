@@ -8,10 +8,12 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 
 
-# Ensure tests are run from the suite root (where ORF PathValidator allows writes)
-EXPECTED_CWD = "/mnt/d/贯维/Omni_Suite"
+# Ensure tests are run from a dir where ORF PathValidator allows writes
+# (tests exercise context_dir against the CWD).
+EXPECTED_CWD = str(Path.cwd())
 
 # MUST run before any orf.mcp.* import: path_validator is a module-level
 # singleton in orf.mcp.common that reads ORF_MCP_ALLOWED_DIRS at import.

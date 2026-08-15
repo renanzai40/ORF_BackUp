@@ -8,7 +8,9 @@ from pathlib import Path
 
 # MUST run before any orf.mcp.* import: path_validator is a module-level
 # singleton in orf.mcp.common that reads ORF_MCP_ALLOWED_DIRS at import.
-SUITE_ROOT = "/mnt/d/贯维/Omni_Suite"
+# Allow the CWD (the repo the tests run from) so tests that write to
+# Path.cwd() pass on any checkout, not just the author's machine.
+SUITE_ROOT = str(Path.cwd())
 if "ORF_MCP_ALLOWED_DIRS" not in os.environ:
     os.environ["ORF_MCP_ALLOWED_DIRS"] = SUITE_ROOT
 
