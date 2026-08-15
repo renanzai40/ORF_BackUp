@@ -96,16 +96,19 @@ class TestMD2PPTXConverter:
         assert "md2pptx error" in result.errors[0].message
 
     @_md2pptx_skip
-    @patch("subprocess.run")
-    def test_convert_md2pptx_not_found(self, mock_run, sample_md: Path, tmp_path: Path):
-        output = tmp_path / "output.pptx"
-        mock_run.side_effect = FileNotFoundError()
+    @patch("shutil.which")
+    def test_convert_md2pptx_not_found(self, mock_which, sample_md: Path, tmp_path: Path):
+        # Simulate the md2pptx binary being absent: the converter's
+        # pre-flight check (shutil.which) surfaces the actionable install
+        # hint before any subprocess runs.
+        mock_which.side_effect = lambda name: None
 
+        output = tmp_path / "output.pptx"
         converter = MD2PPTXConverter()
         result = converter.convert(sample_md, output)
 
         assert result.success is False
-        assert "not in PATH" in result.errors[0].message
+        assert "not found in PATH" in result.errors[0].message
 
     def test_convert_invalid_input(self, tmp_path: Path):
         invalid_file = tmp_path / "nonexistent.md"
