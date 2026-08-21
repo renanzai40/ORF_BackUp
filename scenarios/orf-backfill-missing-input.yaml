@@ -1,0 +1,45 @@
+name: orf-backfill-missing-input
+description: >-
+  ORF apply-md edge case: a nonexistent input file is refused gracefully by
+  the real `orf apply-md` CLI — click path validation exits 2 with a clear
+  error naming the offending path on stderr (no traceback, no crash, no
+  partial output). Also asserts the MCP surface returns the structured
+  MISSING_INPUT error when neither input_md nor content is supplied.
+category: orf-backfill
+tier: 1
+requires_env: [MCP_ALLOWED_DIRECTORIES]
+instructions: |-
+  Prove ORF apply-md handles missing input gracefully on both surfaces.
+  1) CLI step: `orf apply-md /tmp/omni_val/orf-backfill-missing-input/nope.md
+  --target-format html` must exit 2 (click path validation) with the clear
+  message 'Invalid value for 'INPUT_MD'' on stderr naming the nonexistent
+  path — never a traceback. 2) MCP step: call the real apply_md tool function
+  with neither input_md nor content; it must return a structured error
+  carrying code MISSING_INPUT and the contract message (apply_md.py:61-72),
+  never an exception. Both are hermetic and deterministic (tier 1): no LLM,
+  no pandoc. Requires MCP_ALLOWED_DIRECTORIES (ORF is fail-closed on the MCP
+  allowlist, orf/mcp/config.py:179-186).
+steps:
+  - name: Nonexistent input is refused by the CLI
+    kind: cli
+    command: orf apply-md /tmp/omni_val/orf-backfill-missing-input/nope.md --target-format html -o /tmp/omni_val/orf-backfill-missing-input/out.html
+    timeout_seconds: 120
+    expect:
+      exit_code: 2
+      stderr_has: ["Invalid value for 'INPUT_MD'"]
+      stderr_not_has: ["Traceback (most recent call last)"]
+    standard: STANDARDS.md#exit-codes
+    instructions: |-
+      Run the REAL orf CLI with a nonexistent input path. Check: exit code 2 (click path validation — the nonzero-exit contract of STANDARDS.md#exit-codes), stderr names the failing parameter 'Invalid value for 'INPUT_MD'', and no Traceback frame leaks (STANDARDS.md#error-clarity). A zero exit or a raw traceback means the guard is broken.
+  - name: apply_md MCP tool refuses missing input cleanly
+    kind: mcp
+    tool: orf.mcp.tools.apply_md
+    arguments:
+      target_format: html
+    timeout_seconds: 120
+    expect:
+      success: false
+      data_has: ["MISSING_INPUT", "Either input_md (path) or content"]
+    standard: STANDARDS.md#error-clarity
+    instructions: |-
+      Call the REAL apply_md tool function with neither input_md nor content. Check: success false with a structured error carrying code MISSING_INPUT and the contract message 'Either input_md (path) or content (inline markdown) is required.' (apply_md.py:61-72) — no exception, no traceback (STANDARDS.md#error-clarity).

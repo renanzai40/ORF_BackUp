@@ -1,0 +1,102 @@
+name: orf-backfill-format-matrix
+description: >-
+  ORF apply-md format-matrix subset: run the real `orf apply-md` CLI on the
+  committed translated-MD fixture to JSON, CSV, and XML in one scenario, and
+  verify each output's structural signature — JSON parses with json.loads
+  to a dict/list, CSV parses with csv.reader to >= 1 row, XML is well-formed
+  under ElementTree. All three are tier-1 hermetic (json stdlib / pandas /
+  lxml — no pandoc, no network).
+category: orf-backfill
+tier: 1
+requires_env: [MCP_ALLOWED_DIRECTORIES]
+instructions: |-
+  Prove ORF apply-md backfills a translated MD to three hermetic data
+  formats with the real surface. 1) the provision step copies the committed
+  fixture Omni_Re_Formatter/scenarios/_fixtures/translated_md.md into
+  /tmp/omni_val/orf-backfill-format-matrix/in.md (ORF does not create output
+  parent dirs, so the dir is created up front); 2) the CLI steps run the real
+  backfill to /tmp/omni_val/orf-backfill-format-matrix/out.{json,csv,xml},
+  each exiting 0 with 'Created <path>' on stdout; 3) the assert step reads
+  all three outputs and checks: json.loads yields a dict or list (json
+  stdlib combined mode — the ```json fence is the base structure, CHANGELOG
+  v0.4.7), csv.reader yields >= 1 row, and xml.etree.ElementTree.parse
+  succeeds (well-formed). Hermetic and deterministic (tier 1): no LLM, no
+  pandoc. Requires MCP_ALLOWED_DIRECTORIES (ORF is fail-closed on the MCP
+  allowlist, orf/mcp/config.py:179-186).
+steps:
+  - name: Provision fixture into the scenario dir
+    kind: python
+    command: |-
+      import pathlib, shutil
+      src = pathlib.Path("Omni_Re_Formatter/scenarios/_fixtures/translated_md.md")
+      d = pathlib.Path("/tmp/omni_val/orf-backfill-format-matrix")
+      d.mkdir(parents=True, exist_ok=True)
+      shutil.copy(src, d / "in.md")
+      print("PROVISIONED /tmp/omni_val/orf-backfill-format-matrix/in.md")
+    expect:
+      exit_code: 0
+      stdout_has: ["PROVISIONED /tmp/omni_val/orf-backfill-format-matrix/in.md"]
+    standard: STANDARDS.md#exit-codes
+    instructions: |-
+      Copy the committed fixture Omni_Re_Formatter/scenarios/_fixtures/translated_md.md to /tmp/omni_val/orf-backfill-format-matrix/in.md, creating the output dir (ORF's channels do not create parent dirs). The snippet exits 0 and prints the PROVISIONED marker.
+  - name: Backfill MD to JSON with orf apply-md
+    kind: cli
+    command: orf apply-md /tmp/omni_val/orf-backfill-format-matrix/in.md --target-format json -o /tmp/omni_val/orf-backfill-format-matrix/out.json
+    timeout_seconds: 120
+    expect:
+      exit_code: 0
+      stdout_has: ["Created /tmp/omni_val/orf-backfill-format-matrix/out.json"]
+    standard: STANDARDS.md#exit-codes
+    collect_artifacts:
+      - path: /tmp/omni_val/orf-backfill-format-matrix/out.json
+    instructions: |-
+      Run the REAL orf CLI backfill to JSON: `orf apply-md ... --target-format json -o .../out.json`. Engine: json stdlib (combined mode — the ```json fenced block in the fixture is the base structure, CHANGELOG v0.4.7). Check: exit code 0 and stdout announces the created file.
+  - name: Backfill MD to CSV with orf apply-md
+    kind: cli
+    command: orf apply-md /tmp/omni_val/orf-backfill-format-matrix/in.md --target-format csv -o /tmp/omni_val/orf-backfill-format-matrix/out.csv
+    timeout_seconds: 120
+    expect:
+      exit_code: 0
+      stdout_has: ["Created /tmp/omni_val/orf-backfill-format-matrix/out.csv"]
+    standard: STANDARDS.md#exit-codes
+    collect_artifacts:
+      - path: /tmp/omni_val/orf-backfill-format-matrix/out.csv
+    instructions: |-
+      Run the REAL orf CLI backfill to CSV: `orf apply-md ... --target-format csv -o .../out.csv`. Engine: pandas (pure Python). Check: exit code 0 and stdout announces the created file.
+  - name: Backfill MD to XML with orf apply-md
+    kind: cli
+    command: orf apply-md /tmp/omni_val/orf-backfill-format-matrix/in.md --target-format xml -o /tmp/omni_val/orf-backfill-format-matrix/out.xml
+    timeout_seconds: 120
+    expect:
+      exit_code: 0
+      stdout_has: ["Created /tmp/omni_val/orf-backfill-format-matrix/out.xml"]
+    standard: STANDARDS.md#exit-codes
+    collect_artifacts:
+      - path: /tmp/omni_val/orf-backfill-format-matrix/out.xml
+    instructions: |-
+      Run the REAL orf CLI backfill to XML: `orf apply-md ... --target-format xml -o .../out.xml`. Engine: lxml. Check: exit code 0 and stdout announces the created file.
+  - name: Assert JSON, CSV, XML structural invariants
+    kind: python
+    command: |-
+      import sys, json, csv
+      import xml.etree.ElementTree as ET
+      base = "/tmp/omni_val/orf-backfill-format-matrix"
+      try:
+          data = json.loads(open(base + "/out.json", encoding="utf-8").read())
+          assert isinstance(data, (dict, list)), "json output is not a dict or list"
+          with open(base + "/out.csv", encoding="utf-8") as fh:
+              rows = list(csv.reader(fh))
+          assert len(rows) >= 1, "no csv rows parsed"
+          ET.parse(base + "/out.xml")
+          print("OK: json parses as %s, csv has %d rows, xml is well-formed" % (type(data).__name__, len(rows)))
+      except Exception as e:
+          print("ERROR: %s" % e)
+          sys.exit(1)
+    expect:
+      exit_code: 0
+      stdout_has: ["OK:"]
+    standard: STANDARDS.md#json-structure
+    collect_artifacts:
+      - path: /tmp/omni_val/orf-backfill-format-matrix/out.json
+    instructions: |-
+      Read the three outputs and verify the structural invariants: json.loads on out.json yields a dict or list (STANDARDS.md#json-structure), csv.reader on out.csv yields >= 1 row (STANDARDS.md#csv-structure), and ET.parse on out.xml succeeds / well-formed (STANDARDS.md#xml-structure). The snippet exits 0 with an OK: message when all three hold, or exits 1 naming the problem otherwise.

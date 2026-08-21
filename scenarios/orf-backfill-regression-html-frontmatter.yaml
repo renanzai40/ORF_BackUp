@@ -1,0 +1,82 @@
+name: orf-backfill-regression-html-frontmatter
+description: >-
+  Regression seed: ORF apply-md to HTML must strip the YAML frontmatter
+  instead of rendering it. Pinned to the ORF v0.4.16 fix
+  (src/orf/channels/md2html.py: convert() now strips YAML frontmatter via
+  orf.parsers.frontmatter.strip_frontmatter() before passing to
+  python-markdown; previously the '---' separator was interpreted as <hr>
+  and frontmatter fields rendered as visible <p>). If the fix is ever
+  regressed, this scenario turns RED.
+category: orf-backfill
+regression: true
+regression_issue: ORF-CHANGELOG-v0.4.16-md2html-frontmatter-strip
+tier: 1
+requires_env: [MCP_ALLOWED_DIRECTORIES]
+instructions: |-
+  Regression seed locking the ORF v0.4.16 md2html frontmatter-strip fix
+  (Omni_Re_Formatter/CHANGELOG.md line 19: 'md2html.py: convert() now strips
+  YAML frontmatter via orf.parsers.frontmatter.strip_frontmatter() before
+  passing to python-markdown. Previously the '---' separator was interpreted
+  as <hr> and frontmatter fields rendered as visible <p>'). 1) the provision
+  step copies the committed fixture
+  Omni_Re_Formatter/scenarios/_fixtures/translated_md.md (which carries a
+  6-key YAML frontmatter) into /tmp/omni_val/orf-backfill-regression-html-frontmatter/in.md;
+  2) the CLI step runs the real backfill to .../out.html; 3) the assert step
+  verifies the output is valid HTML (contains <html> and <body> — the
+  structure survived) and contains NO frontmatter leakage: the metadata keys
+  source_lang / translated_at / processor must not appear in the rendered
+  HTML. A regression renders them as <p> text and fails. Hermetic and
+  deterministic (tier 1): no LLM, no pandoc. Requires MCP_ALLOWED_DIRECTORIES
+  (ORF is fail-closed on the MCP allowlist, orf/mcp/config.py:179-186).
+steps:
+  - name: Provision fixture into the scenario dir
+    kind: python
+    command: |-
+      import pathlib, shutil
+      src = pathlib.Path("Omni_Re_Formatter/scenarios/_fixtures/translated_md.md")
+      d = pathlib.Path("/tmp/omni_val/orf-backfill-regression-html-frontmatter")
+      d.mkdir(parents=True, exist_ok=True)
+      shutil.copy(src, d / "in.md")
+      print("PROVISIONED /tmp/omni_val/orf-backfill-regression-html-frontmatter/in.md")
+    expect:
+      exit_code: 0
+      stdout_has: ["PROVISIONED /tmp/omni_val/orf-backfill-regression-html-frontmatter/in.md"]
+    standard: STANDARDS.md#exit-codes
+    instructions: |-
+      Copy the committed frontmatter-carrying fixture Omni_Re_Formatter/scenarios/_fixtures/translated_md.md to /tmp/omni_val/orf-backfill-regression-html-frontmatter/in.md, creating the output dir (ORF's channels do not create parent dirs). The snippet exits 0 and prints the PROVISIONED marker.
+  - name: Backfill MD to HTML with orf apply-md
+    kind: cli
+    command: orf apply-md /tmp/omni_val/orf-backfill-regression-html-frontmatter/in.md --target-format html -o /tmp/omni_val/orf-backfill-regression-html-frontmatter/out.html
+    timeout_seconds: 120
+    expect:
+      exit_code: 0
+      stdout_has: ["Created /tmp/omni_val/orf-backfill-regression-html-frontmatter/out.html"]
+    standard: STANDARDS.md#exit-codes
+    collect_artifacts:
+      - path: /tmp/omni_val/orf-backfill-regression-html-frontmatter/out.html
+    instructions: |-
+      Run the REAL orf CLI backfill to HTML on the frontmatter-carrying fixture: `orf apply-md /tmp/omni_val/orf-backfill-regression-html-frontmatter/in.md --target-format html -o .../out.html`. Check: exit code 0 and stdout announces the created file (STANDARDS.md#exit-codes).
+  - name: Assert no frontmatter leaks into the HTML body
+    kind: python
+    command: |-
+      import sys
+      p = "/tmp/omni_val/orf-backfill-regression-html-frontmatter/out.html"
+      try:
+          data = open(p, encoding="utf-8").read()
+          assert len(data.strip()) > 0, "html output is empty"
+          assert "<html" in data, "missing <html> element"
+          assert "<body" in data, "missing <body> element"
+          for key in ("source_lang", "translated_at", "processor"):
+              assert key not in data, "frontmatter key %r leaked into html output" % key
+          print("OK: html structure intact and no frontmatter keys leaked into the body")
+      except Exception as e:
+          print("ERROR: %s" % e)
+          sys.exit(1)
+    expect:
+      exit_code: 0
+      stdout_has: ["OK:"]
+    standard: STANDARDS.md#html-structure
+    collect_artifacts:
+      - path: /tmp/omni_val/orf-backfill-regression-html-frontmatter/out.html
+    instructions: |-
+      Read the output and verify the regression invariant: valid HTML structure (contains <html> and <body>, STANDARDS.md#html-structure) AND the YAML frontmatter keys source_lang / translated_at / processor do NOT appear in the rendered body (md2html strips frontmatter before python-markdown — CHANGELOG v0.4.16). A regression renders the '---' separator as <hr> and the keys as visible <p> text — either fails the step. The snippet exits 0 with an OK: message when the invariant holds, or exits 1 naming the problem otherwise.

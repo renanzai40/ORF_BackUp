@@ -1,0 +1,71 @@
+name: orf-backfill-srt
+description: >-
+  ORF apply-md backfill to SRT: run the real `orf apply-md` CLI on the
+  committed translated-MD fixture and verify the SRT structural signature —
+  a non-empty passthrough of the MD content (the input has no SRT timing
+  blocks) that preserves the translated heading.
+category: orf-backfill
+tier: 1
+requires_env: [MCP_ALLOWED_DIRECTORIES]
+instructions: |-
+  Prove ORF apply-md backfills a translated MD to SRT with the real surface
+  ('orf apply-md ... --target-format srt'). 1) the provision step copies the
+  committed fixture Omni_Re_Formatter/scenarios/_fixtures/translated_md.md
+  into /tmp/omni_val/orf-backfill-srt/in.md (ORF does not create output
+  parent dirs, so the dir is created up front); 2) the CLI step runs the real
+  backfill to /tmp/omni_val/orf-backfill-srt/out.srt and must exit 0
+  announcing the created file; 3) the assert step reads the output and checks
+  the SRT signature: non-empty passthrough of the MD content with the heading
+  'Synthetic Document' preserved (no SRT timing blocks in the input, so the
+  srt-lib channel passes the content through). Hermetic and deterministic
+  (tier 1): srt lib (pure Python), no LLM. Requires MCP_ALLOWED_DIRECTORIES
+  (ORF is fail-closed on the MCP allowlist, orf/mcp/config.py:179-186).
+steps:
+  - name: Provision fixture into the scenario dir
+    kind: python
+    command: |-
+      import pathlib, shutil
+      src = pathlib.Path("Omni_Re_Formatter/scenarios/_fixtures/translated_md.md")
+      d = pathlib.Path("/tmp/omni_val/orf-backfill-srt")
+      d.mkdir(parents=True, exist_ok=True)
+      shutil.copy(src, d / "in.md")
+      print("PROVISIONED /tmp/omni_val/orf-backfill-srt/in.md")
+    expect:
+      exit_code: 0
+      stdout_has: ["PROVISIONED /tmp/omni_val/orf-backfill-srt/in.md"]
+    standard: STANDARDS.md#exit-codes
+    instructions: |-
+      Copy the committed fixture Omni_Re_Formatter/scenarios/_fixtures/translated_md.md to /tmp/omni_val/orf-backfill-srt/in.md, creating the output dir (ORF's channels do not create parent dirs). The snippet exits 0 and prints the PROVISIONED marker.
+  - name: Backfill MD to SRT with orf apply-md
+    kind: cli
+    command: orf apply-md /tmp/omni_val/orf-backfill-srt/in.md --target-format srt -o /tmp/omni_val/orf-backfill-srt/out.srt
+    timeout_seconds: 120
+    expect:
+      exit_code: 0
+      stdout_has: ["Created /tmp/omni_val/orf-backfill-srt/out.srt"]
+    standard: STANDARDS.md#exit-codes
+    collect_artifacts:
+      - path: /tmp/omni_val/orf-backfill-srt/out.srt
+    instructions: |-
+      Run the REAL orf CLI backfill to SRT: `orf apply-md ... --target-format srt -o .../out.srt`. Engine: srt lib — the input has no SRT timing blocks, so the channel passes the content through. Check: exit code 0 and stdout announces the created file.
+  - name: Assert SRT structural invariant
+    kind: python
+    command: |-
+      import sys
+      p = "/tmp/omni_val/orf-backfill-srt/out.srt"
+      try:
+          data = open(p, encoding="utf-8").read()
+          assert len(data.strip()) > 0, "srt output is empty"
+          assert "Synthetic Document" in data, "passthrough content missing from srt output"
+          print("OK: srt output is a non-empty passthrough of the MD content")
+      except Exception as e:
+          print("ERROR: %s" % e)
+          sys.exit(1)
+    expect:
+      exit_code: 0
+      stdout_has: ["OK:"]
+    standard: STANDARDS.md#srt-structure
+    collect_artifacts:
+      - path: /tmp/omni_val/orf-backfill-srt/out.srt
+    instructions: |-
+      Read /tmp/omni_val/orf-backfill-srt/out.srt and verify the SRT structural invariant: non-empty passthrough of the MD content with the heading 'Synthetic Document' preserved (STANDARDS.md#srt-structure). The snippet exits 0 with an OK: message when the invariant holds, or exits 1 naming the problem otherwise.

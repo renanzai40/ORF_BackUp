@@ -1,0 +1,99 @@
+name: orf-backfill-mcp-apply_md
+description: >-
+  ORF apply_md MCP surface conformance: call the real `orf.mcp.tools.apply_md`
+  tool function in-process with the committed fixture, expect a structured
+  success result (success true, output_path present) and a produced HTML file;
+  then verify the error path (no input at all) fails with the MISSING_INPUT
+  error code and a clear message (STANDARDS.md#error-clarity), never a crash.
+category: orf-backfill
+tier: 1
+requires_env: [MCP_ALLOWED_DIRECTORIES]
+instructions: |-
+  Prove the ORF apply_md MCP tool works as an agent-user would use it
+  (STANDARDS.md#tool-contract). 1) Provision step writes the fixture to the
+  scenario dir. 2) Path-based step: call orf.mcp.tools.apply_md with
+  input_md=<fixture>, target_format=html, output_path=.../mcp.html; expect
+  success true with output_path in the JSON payload. 3) Error-clarity step:
+  call apply_md with NO input_md and NO content; expect success false with the
+  MISSING_INPUT error code and the "Either input_md (path) or content (inline
+  markdown) is required." message. 4) Assert step reads the produced HTML file
+  and checks the <html>/<body> signature. Hermetic and deterministic
+  (tier 1): markdown lib, no LLM, no pandoc. Requires MCP_ALLOWED_DIRECTORIES
+  (ORF is fail-closed on the MCP allowlist, orf/mcp/config.py:179-186). Note:
+  the inline `content` flow is intentionally NOT exercised here — ORF writes
+  the inline temp file to Path.cwd() (orf/mcp/tools/apply_md.py:103-108), so
+  it only succeeds when the run cwd is inside the allowlist, which the
+  standard /tmp allowlist convention cannot guarantee.
+steps:
+  - name: Provision the fixture into the scenario dir
+    kind: python
+    command: |-
+      import pathlib, shutil
+      src = pathlib.Path("Omni_Re_Formatter/scenarios/_fixtures/translated_md.md")
+      d = pathlib.Path("/tmp/omni_val/orf-backfill-mcp-apply_md")
+      d.mkdir(parents=True, exist_ok=True)
+      shutil.copy(src, d / "in.md")
+      print("PROVISIONED /tmp/omni_val/orf-backfill-mcp-apply_md/in.md")
+    expect:
+      exit_code: 0
+      stdout_has: ["PROVISIONED /tmp/omni_val/orf-backfill-mcp-apply_md/in.md"]
+    standard: STANDARDS.md#exit-codes
+    instructions: |-
+      Copy the committed fixture Omni_Re_Formatter/scenarios/_fixtures/translated_md.md to /tmp/omni_val/orf-backfill-mcp-apply_md/in.md so the MCP tool has a real file inside the allowlist. The snippet exits 0 and prints the PROVISIONED marker.
+  - name: apply_md converts the fixture to HTML (path-based)
+    kind: mcp
+    tool: orf.mcp.tools.apply_md
+    arguments:
+      input_md: /tmp/omni_val/orf-backfill-mcp-apply_md/in.md
+      target_format: html
+      output_path: /tmp/omni_val/orf-backfill-mcp-apply_md/mcp.html
+    timeout_seconds: 120
+    expect:
+      success: true
+      data_has: ['"success": true', "output_path"]
+    standard: STANDARDS.md#tool-contract
+    collect_artifacts:
+      - path: /tmp/omni_val/orf-backfill-mcp-apply_md/mcp.html
+    instructions: |-
+      Call the REAL apply_md tool function with input_md, target_format=html and an output path inside the allowlist. Check: success true with output_path present in the JSON payload (STANDARDS.md#tool-contract). The produced file is asserted in the final step.
+  - name: apply_md fails cleanly when no input is supplied
+    kind: mcp
+    tool: orf.mcp.tools.apply_md
+    arguments:
+      target_format: html
+    timeout_seconds: 120
+    expect:
+      success: false
+      data_has: ['MISSING_INPUT', "Either input_md (path) or content (inline markdown) is required."]
+    standard: STANDARDS.md#error-clarity
+    instructions: |-
+      Call the REAL apply_md tool function with no input_md and no content.
+      The tool must NOT crash — it returns a structured failure with the
+      MISSING_INPUT error code and a clear message naming what is required
+      (STANDARDS.md#error-clarity). Check: success false, data contains
+      MISSING_INPUT and the message text.
+  - name: Assert the produced HTML file carries the signature
+    kind: python
+    command: |-
+      import sys
+      base = "/tmp/omni_val/orf-backfill-mcp-apply_md"
+      try:
+          data = open(base + "/mcp.html", encoding="utf-8").read()
+          assert len(data.strip()) > 0, "mcp.html is empty"
+          assert "<html" in data, "mcp.html missing <html>"
+          assert "<body" in data, "mcp.html missing <body>"
+          print("OK: mcp.html carries the HTML signature")
+      except Exception as e:
+          print("ERROR: %s" % e)
+          sys.exit(1)
+    expect:
+      exit_code: 0
+      stdout_has: ["OK:"]
+    standard: STANDARDS.md#html-structure
+    collect_artifacts:
+      - path: /tmp/omni_val/orf-backfill-mcp-apply_md/mcp.html
+    instructions: |-
+      Read the produced HTML file and verify it carries the HTML structural
+      invariant (STANDARDS.md#html-structure): non-empty, contains <html> and
+      <body>. The snippet exits 0 with an OK: message when it holds, or exits
+      1 naming the problem otherwise.
