@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### ✨ 新增 / Added
+
+- **ORF#58 — ships its own validation scenario library in `scenarios/`** (6 tier-1 `orf-backfill`/`orf-md`/`orf-xliff` scenarios + `STANDARDS.md` + `_fixtures/`; `requires_env: [MCP_ALLOWED_DIRECTORIES]` — ORF is fail-closed on the MCP allowlist), runnable from the Omni Suite root via `MCP_ALLOWED_DIRECTORIES=/tmp python scripts/validation/run_validation.py --repo orf --tier 1`.
+
 ## v0.4.17 (2026-07-22)
 
 ### ✨ 新增 / Added

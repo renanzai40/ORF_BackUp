@@ -288,21 +288,31 @@ for the complete decision tree and format support matrix.
 
 ## How to validate this module
 
-ORF ships its own validation scenarios in the Omni Suite validation
-framework (`scenarios/orf-md/` = 16 output formats + `scenarios/orf-xliff/`
-= 7 XLIFF backfill formats + cross-format `--force` + `tool-orf-*` = 7 MCP
-tools). Any agent or the human director can validate ORF in isolation with
-the suite's per-module filter:
+ORF ships its own validation scenario library **in this repo** at
+`scenarios/` — 6 tier-1 `orf-backfill`/`orf-md`/`orf-xliff` scenarios
+(apply-md format matrix, HTML backfill, MCP apply_md, missing-input
+error, HTML frontmatter regression, SRT backfill) with their own
+`scenarios/STANDARDS.md` + `scenarios/_fixtures/`. They declare
+`requires_env: [MCP_ALLOWED_DIRECTORIES]` — ORF is fail-closed on the MCP
+allowlist, so export `MCP_ALLOWED_DIRECTORIES=/tmp` when running. The
+suite validation engine runs them via `--repo orf`. The suite's own
+`tool-orf-*` agent-surface scenarios still live in the suite repo,
+covered by the suite-level `--module` filter. Any agent or the human
+director can validate ORF in isolation:
 
 ```bash
 # From the Omni Suite root (clone: https://github.com/1StepMore/e2e-test-suite)
 source .venv_ol/bin/activate
 
-# List ORF's scenarios
-python scripts/validation/run_validation.py --list --module orf
+# List ORF's in-repo scenarios
+python scripts/validation/run_validation.py --repo orf --list
 
-# Run ORF's hermetic scenarios (tier 1 = no LLM keys needed)
-python scripts/validation/run_validation.py --module orf --tier 1
+# Run ORF's in-repo hermetic scenarios (tier 1 = no LLM keys needed;
+# MCP allowlist is fail-closed, so set it)
+MCP_ALLOWED_DIRECTORIES=/tmp python scripts/validation/run_validation.py --repo orf --tier 1
+
+# Or use the suite-level module filter (adds tool-orf-* agent-surface scenarios)
+MCP_ALLOWED_DIRECTORIES=/tmp python scripts/validation/run_validation.py --module orf --tier 1
 
 # Coverage: every ORF MCP tool must be scenario-exercised
 python scripts/validation/coverage_audit.py   # orf row must show 7/7, 0 missing
@@ -312,5 +322,7 @@ The standards bar is `scenarios/STANDARDS.md` (AGENT-SURFACE family:
 tool-contract, json-parseable, error-clarity, path-security, exit-codes;
 plus the format-structure anchors the orf-md/orf-xliff scenarios assert).
 Director loop + 10-minute checklist: `docs/dev/validation-director-loop.md`
-in the suite repo. Scenario fixes live in the suite repo, NOT here —
-ORF product-code fixes go through the normal fix cycle in this repo.
+in the suite repo. Per-repo validation delivery (run_meta, report card,
+delivery package): `docs/dev/per-repo-validation-delivery.md`. ORF
+scenario fixes now live HERE (in `scenarios/`); ORF product-code fixes
+go through the normal fix cycle in this repo.
