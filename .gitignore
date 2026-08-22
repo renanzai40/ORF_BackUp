@@ -44,3 +44,8 @@ htmlcov/
 .opencode/
 .omo/
 .sisyphus/
+
+
+# secrets-guard
+gitleaks-report.json
+*.gitleaks-report*.txt
