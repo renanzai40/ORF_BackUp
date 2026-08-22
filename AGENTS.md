@@ -45,7 +45,7 @@ src/orf/
 ├── cloud/              # S3 + Azure Blob clients
 ├── ai/                 # AI layout overflow detection
 ├── mcp/                # MCP server (the Agent-facing surface)
-│   ├── server.py       # Standard mcp library, 6 tools
+│   ├── server.py       # Standard mcp library, 7 tools
 │   ├── security.py     # PathValidator (allowlist + extension whitelist)
 │   ├── auth.py         # MCP_SHARED_SECRET shared-secret auth
 │   ├── rate_limiter.py  # Per-MCP-tool token bucket
@@ -82,7 +82,7 @@ src/orf/
 - `--max-file-size-mb <N>` — reject inputs larger than N MB
 - `--json` (CLI only) — emit JSON instead of pretty-printed text
 
-## MCP tools (6 total)
+## MCP tools (7 total)
 
 | Tool | Purpose |
 |------|---------|
