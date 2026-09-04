@@ -2,6 +2,8 @@
 
 ORF is the final step in the Omni document localization ecosystem, responsible for converting standardized intermediate representations back into complex target formats.
 
+[![Test status](https://img.shields.io/badge/Test%20status-local%20(see%20below)-lightgrey.svg)](#test-status)
+
 ## Core Features
 
 - Reads OL-translated MD/XLIFF, manifest.json, and skeleton.zip
@@ -9,6 +11,26 @@ ORF is the final step in the Omni document localization ecosystem, responsible f
 - Combines with custom glue code (manifest parsing, skeleton backfill, resource path resolution)
 - Reassembles and generates localized complex-format documents
 - **Native AI Agent integration**: exposed as AI Agent Tools via MCP Server, supporting Foreman/Specialist intelligent orchestration
+
+### Test status
+
+[![Test status](https://img.shields.io/badge/Test%20status-local%20(see%20below)-lightgrey.svg)](#test-status)
+
+Test status is **local-only** — CI is suspended while the upstream
+[1StepMore](https://github.com/1StepMore) origin account is restricted, and the
+`renanzai40` backup mirrors do not run GitHub Actions. The workflows that exist
+in this repo (`.github/workflows/test.yml`, `.github/workflows/release.yml`)
+are not triggered during the suspension.
+
+Run the tests locally (from this repo):
+
+```bash
+pytest tests/ -q          # full in-repo suite
+```
+
+For the suite-level validation entry point (per-repo tier-1 scenario library)
+and full per-repo verification guidance, see `AGENTS.md` → "How to validate
+this module".
 
 ## Supported Formats
 
