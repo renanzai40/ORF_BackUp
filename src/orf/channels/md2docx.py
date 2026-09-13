@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import json
 import os
 import re
@@ -16,6 +17,7 @@ from typing import Any, Optional
 
 from orf.converters.base import BaseConverter, ConversionResult
 from orf.converters.chunked_md_converter import ChunkedMDConverter
+from orf.converters.atomic import atomic_write_bytes, atomic_write_text
 from orf.parsers.manifest import Manifest
 from orf.parsers.frontmatter import FrontmatterMetadata
 from orf.logging import get_logger
@@ -24,6 +26,28 @@ from orf.converters.options import ConverterOptions
 logger = get_logger("channel.md2docx")
 
 _CONVERSION_TIMEOUT = int(os.environ.get("ORF_CONVERSION_TIMEOUT", "300"))
+
+# Fixed ZIP member timestamp for reproducible sidecar archives: identical
+# bytes must pack to identical archives regardless of on-disk mtimes.
+_ZIP_DATE_TIME = (1980, 1, 1, 0, 0, 0)
+_OLIMG_GLOB = "OLIMG_*"
+
+
+def _deterministic_pandoc_env(source_path: Path) -> dict[str, str]:
+    """Env for pandoc with SOURCE_DATE_EPOCH pinned to the source mtime.
+
+    Pandoc stamps ``docProps/core.xml`` (and its archive entries) with the
+    wall clock, so two runs of the same conversion produced different DOCX
+    bytes. Pinning SOURCE_DATE_EPOCH to a value derived from the source file
+    makes the output reproducible for the same input.
+    """
+    env = dict(os.environ)
+    try:
+        env["SOURCE_DATE_EPOCH"] = str(int(source_path.stat().st_mtime))
+    except OSError:
+        pass
+    return env
+
 
 IMAGE_PATTERN = re.compile(r'!\[([^\]]*)\]\((data:image/([^;]+);base64,([^)]+))\)')
 IMAGE_REF_PATTERN = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
@@ -106,7 +130,7 @@ class MD2DOCXConverter(BaseConverter):
             stripped = IMAGE_REF_PATTERN.sub("", stripped)
             if stripped != raw:
                 text_only_path = md_path.parent / f"{md_path.stem}_textonly{md_path.suffix}"
-                text_only_path.write_text(stripped.strip(), encoding="utf-8")
+                atomic_write_text(text_only_path, stripped.strip())
                 md_path = text_only_path
                 logger.info(
                     "Text-only mode: stripped %d chars of image references",
@@ -119,7 +143,7 @@ class MD2DOCXConverter(BaseConverter):
                 "File size %d bytes exceeds chunk threshold %d, using chunked conversion",
                 md_path.stat().st_size, self.chunk_size,
             )
-            return self._convert_chunked(md_path, output_path, opts)
+            return self._convert_chunked(md_path, output_path, opts, source_path=input_path)
 
         cmd = [
             "pandoc",
@@ -145,6 +169,7 @@ class MD2DOCXConverter(BaseConverter):
                 check=True,
                 cwd=str(md_path.parent),
                 timeout=_CONVERSION_TIMEOUT,
+                env=_deterministic_pandoc_env(input_path),
             )
 
             logger.debug(f"Pandoc output: {result.stdout}")
@@ -190,6 +215,7 @@ class MD2DOCXConverter(BaseConverter):
         md_path: Path,
         output_path: Path,
         opts: ConverterOptions,
+        source_path: Path | None = None,
     ) -> ConversionResult:
         """Convert a large MD file by splitting into chunks and processing each via pandoc.
 
@@ -212,6 +238,7 @@ class MD2DOCXConverter(BaseConverter):
             )
 
         chunk_temp_dir = Path(tempfile.mkdtemp(prefix="orf_md_chunks_"))
+        pandoc_env = _deterministic_pandoc_env(source_path or md_path)
         try:
             docx_chunks: list[Path] = []
             for chunk in chunks:
@@ -231,7 +258,7 @@ class MD2DOCXConverter(BaseConverter):
                     cmd.extend(["--reference-doc", str(template)])
 
                 logger.info("Running chunk %d: %s", chunk.index, " ".join(cmd))
-                subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=_CONVERSION_TIMEOUT)
+                subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=_CONVERSION_TIMEOUT, env=pandoc_env)
                 docx_chunks.append(chunk_docx)
 
             merge_cmd = ["pandoc"] + [str(p) for p in docx_chunks] + [
@@ -241,7 +268,7 @@ class MD2DOCXConverter(BaseConverter):
                 "Merging %d DOCX chunks: %s",
                 len(docx_chunks), " ".join(merge_cmd),
             )
-            subprocess.run(merge_cmd, capture_output=True, text=True, check=True, timeout=_CONVERSION_TIMEOUT)
+            subprocess.run(merge_cmd, capture_output=True, text=True, check=True, timeout=_CONVERSION_TIMEOUT, env=pandoc_env)
 
             return ConversionResult(
                 output_path=output_path,
@@ -364,7 +391,7 @@ class MD2DOCXConverter(BaseConverter):
                     img_hash = hashlib.md5(img_bytes).hexdigest()[:12]
                     filename = f"OLIMG_{decoded_count:04d}_{img_hash}.{ext}"
                     filepath = images_dir / filename
-                    filepath.write_bytes(img_bytes)
+                    atomic_write_bytes(filepath, img_bytes)
                     img_entries.append({
                         "filename": filename,
                         "mime_type": mime,
@@ -396,7 +423,7 @@ class MD2DOCXConverter(BaseConverter):
                     if not any(e["md5_hash"] == img_hash for e in img_entries):
                         filename = f"OLIMG_{decoded_count:04d}_{img_hash}.{ext}"
                         filepath = images_dir / filename
-                        filepath.write_bytes(data)
+                        atomic_write_bytes(filepath, data)
                         img_entries.append({
                             "filename": filename,
                             "mime_type": f"image/{ext}",
@@ -408,6 +435,11 @@ class MD2DOCXConverter(BaseConverter):
             except Exception as e:
                 logger.warning("Failed to resolve image ref %s: %s", ref, e)
 
+        keep = {e["filename"] for e in img_entries}
+        for stale in images_dir.glob(_OLIMG_GLOB):
+            if stale.name not in keep:
+                stale.unlink(missing_ok=True)
+
         # Write manifest images.json alongside output.
         manifest_path = output_dir / "images.json"
         manifest_payload = {
@@ -415,19 +447,25 @@ class MD2DOCXConverter(BaseConverter):
             "total": len(img_entries),
             "source": "OPP extracted via md2docx separation",
         }
-        manifest_path.write_text(
-            json.dumps(manifest_payload, indent=2),
-            encoding="utf-8",
+        atomic_write_bytes(
+            manifest_path,
+            json.dumps(manifest_payload, indent=2).encode("utf-8"),
         )
         logger.info("Wrote image manifest to %s (%d images)", manifest_path, len(img_entries))
 
         # Pack images into images.zip.
         zip_path = output_dir / "images.zip"
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            for entry in img_entries:
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            for entry in sorted(img_entries, key=lambda e: e["filename"]):
                 filepath = images_dir / entry["filename"]
-                if filepath.exists():
-                    zf.write(filepath, entry["filename"])
+                if not filepath.exists():
+                    continue
+                info = zipfile.ZipInfo(entry["filename"], date_time=_ZIP_DATE_TIME)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o644 << 16
+                zf.writestr(info, filepath.read_bytes())
+        atomic_write_bytes(zip_path, buffer.getvalue())
         logger.info("Packed %d images into %s", len(img_entries), zip_path)
 
         # Strip ALL image references from MD.
@@ -437,7 +475,7 @@ class MD2DOCXConverter(BaseConverter):
         stripped_content = stripped_content.strip()
 
         stripped_path = output_dir / f"{input_path.stem}.stripped.md"
-        stripped_path.write_text(stripped_content, encoding="utf-8")
+        atomic_write_bytes(stripped_path, stripped_content.encode("utf-8"))
 
         return stripped_path, None
 
