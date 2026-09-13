@@ -379,7 +379,7 @@ A comprehensive validation master plan for ORF is available in the Omni Suite do
 |------|-------|-----------|
 | 1 | Core Backfill Pipeline (MD path, 16 formats) | Q1-ORF — Q5-ORF |
 | 2 | XLIFF Backfill | Q6-ORF — Q7-ORF |
-| 3 | MCP Surface Mastery (6 MCP tools) | Q8-ORF |
+| 3 | MCP Surface Mastery (7 MCP tools) | Q8-ORF |
 | 4 | Agent-as-User Workflows | Q9-ORF |
 | 5 | CLI Surface Mastery | Q10-ORF |
 | 6 | Error & Boundary Matrix | Q11-ORF — Q12-ORF |
