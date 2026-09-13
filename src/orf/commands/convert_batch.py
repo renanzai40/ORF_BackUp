@@ -1,8 +1,28 @@
-"""convert-batch command: Batch convert MD files in a directory."""
+"""convert-batch command: Batch convert MD files in a directory.
+
+Explicit partial-success contract (plan R-04): the ``--json`` summary
+always carries an overall ``status`` so an agent never has to re-derive
+success from counts:
+
+* ``empty``    — no files matched the pattern (exit 0)
+* ``complete`` — every file converted (exit 0)
+* ``partial``  — some files succeeded, some failed (exit non-zero unless
+  ``--allow-partial``)
+* ``failed``   — every file failed (exit ALWAYS non-zero; ``--allow-partial``
+  only downgrades *partial*, never masks a total failure)
+
+Counts: ``succeeded`` / ``failed`` / ``retryable`` / ``total``.
+``retryable`` is the number of failed items a retry could plausibly clear;
+every batch failure is an operational conversion failure (no permanent
+classifier exists), so today ``retryable == failed``. ``success_count`` /
+``fail_count`` are kept as backward-compatible aliases of ``succeeded`` /
+``failed`` (T-03 schema).
+"""
 
 from __future__ import annotations
 
 import json
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -71,6 +91,12 @@ def _convert_single(
 @click.option("--pattern", "-p", default="*.md", help="文件匹配模式")
 @click.option("--json", "output_json", is_flag=True, help="JSON 格式输出")
 @click.option(
+    "--allow-partial",
+    is_flag=True,
+    help="Exit 0 on partial success (some files failed but at least one succeeded). "
+    "A fully-failed batch still exits non-zero.",
+)
+@click.option(
     "--max-file-size-mb",
     type=float,
     default=None,
@@ -90,6 +116,7 @@ def convert_batch(
     output_json: bool,
     max_file_size_mb: float | None = None,
     max_workers: int = 4,
+    allow_partial: bool = False,
 ) -> None:
     """批量转换 MD 文件"""
     input_path = Path(input_dir)
@@ -107,7 +134,24 @@ def convert_batch(
     logger.info(f"Found {len(md_files)} MD files to convert")
 
     if not md_files:
-        click.echo("No files found to convert")
+        if output_json:
+            click.echo("No files found to convert", err=True)
+            click.echo(
+                json.dumps(
+                    {
+                        "status": "empty",
+                        "succeeded": 0,
+                        "failed": 0,
+                        "retryable": 0,
+                        "total": 0,
+                        "success_count": 0,
+                        "fail_count": 0,
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            click.echo("No files found to convert")
         return
 
     if max_file_size_mb is not None:
@@ -204,6 +248,7 @@ def convert_batch(
             label=f"Converting to {target_format}",
             show_pos=True,
             show_percent=True,
+            file=sys.stderr if output_json else None,
         ) as bar:
             for md_file in bar:
                 success, error = _convert_single(
@@ -239,16 +284,39 @@ def convert_batch(
                     fail_count += 1
                     logger.error(f"Error processing {md_file}: {e}")
 
-    click.echo(f"\nCompleted: {success_count} succeeded, {fail_count} failed")
+    total = len(md_files)
+    if fail_count == 0:
+        status = "complete"
+    elif success_count > 0:
+        status = "partial"
+    else:
+        status = "failed"
+
+    retryable = fail_count
+
+    # T-03: human summary -> stderr under --json (stdout = one JSON object).
+    click.echo(
+        f"\nCompleted: {success_count} succeeded, {fail_count} failed",
+        err=output_json,
+    )
 
     if output_json:
         click.echo(
             json.dumps(
                 {
+                    "status": status,
+                    "succeeded": success_count,
+                    "failed": fail_count,
+                    "retryable": retryable,
+                    "total": total,
                     "success_count": success_count,
                     "fail_count": fail_count,
-                    "total": len(md_files),
                 },
                 indent=2,
             )
         )
+
+    # R-04 exit rule: partial exits non-zero unless --allow-partial; failed
+    # always exits non-zero (the flag must not mask a total failure).
+    if fail_count > 0 and not (allow_partial and status == "partial"):
+        raise SystemExit(1)

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any, Optional
 
 import click
 
+from orf.converters.atomic import discard, publish, temp_sibling_path
 from orf.converters.options import ConverterOptions
 from orf.parsers.manifest import parse_manifest, find_manifest, ManifestParseError
 from orf.parsers.frontmatter import (
@@ -415,6 +417,10 @@ def apply_md(
     if images_raw_data:
         no_cache = True
 
+    # Stage the converter's write to a hidden temp sibling, then atomically
+    # rename onto the final path only after a successful conversion. A failed
+    # or interrupted run therefore never truncates a previously-good output.
+    staged_output = temp_sibling_path(output_path)
     with click.progressbar(  # type: ignore[var-annotated]
         length=1,
         label=f"Converting to {target_format}",
@@ -422,28 +428,41 @@ def apply_md(
         show_percent=True,
         file=sys.stderr if output_json else None,
     ):
-        result = converter.convert(input_path, output_path, ConverterOptions(**options))
+        result = converter.convert(input_path, staged_output, ConverterOptions(**options))
 
-    # Post-conversion image injection (XLIFF path only — MD2DOCX.inject_images is a no-op)
-    if result.success and images_raw_data and target_format == "docx":
+    result.output_path = output_path
+
+    if not result.success:
+        discard(staged_output)
+    elif staged_output.exists():
         try:
-            from orf.mcp.schemas import ImagePlacement
+            publish(staged_output, output_path)
+        except OSError as e:
+            discard(staged_output)
+            raise click.ClickException(f"Failed to finalize output {output_path}: {e}")
 
-            placements = [
-                ImagePlacement(**img)
-                for img in images_raw_data
-                if "paragraph_index" in img
-            ]
-            if placements:
-                injected, orphaned = converter.inject_images(
-                    result.output_path, placements, result.output_path
-                )
-                logger.info(
-                    f"Post-conversion: injected {len(injected)} images, "
-                    f"{len(orphaned)} orphaned"
-                )
-        except Exception as e:
-            logger.debug(f"Post-conversion image injection skipped or failed: {e}")
+        # Post-conversion image injection (XLIFF path only — MD2DOCX.inject_images is a no-op)
+        if images_raw_data and target_format == "docx":
+            try:
+                from orf.mcp.schemas import ImagePlacement
+
+                placements = [
+                    ImagePlacement(**img)
+                    for img in images_raw_data
+                    if "paragraph_index" in img
+                ]
+                if placements:
+                    injected, orphaned = converter.inject_images(
+                        result.output_path, placements, result.output_path
+                    )
+                    logger.info(
+                        f"Post-conversion: injected {len(injected)} images, "
+                        f"{len(orphaned)} orphaned"
+                    )
+            except Exception as e:
+                logger.debug(f"Post-conversion image injection skipped or failed: {e}")
+    else:
+        logger.debug("Converter reported success without writing %s", staged_output)
 
     if result.success:
         _write_cache(cache_key, output_path, f".{target_format}", no_cache=no_cache)
@@ -487,6 +506,7 @@ def apply_md(
                     }
                 )
             )
+            raise SystemExit(1)
         else:
             raise click.ClickException(
                 f"Conversion failed: {errors_str}\n"

@@ -319,6 +319,7 @@ def apply_xliff(
                     "warnings": [],
                     "metadata": {},
                 }))
+                raise SystemExit(1)
             else:
                 raise click.ClickException(f"JSON XLIFF backfill failed: {err_msg}")
         return
@@ -407,6 +408,7 @@ def apply_xliff(
                     }
                 )
             )
+            raise SystemExit(1)
         else:
             raise click.ClickException(
                 f"Conversion failed: {errors_str}\n"
