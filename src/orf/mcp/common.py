@@ -17,7 +17,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 from orf.logging import get_logger
-from orf.mcp._errors import CLI_ERROR, EMPTY_OUTPUT, JSON_PARSE_ERROR, ORF_ERROR
+from orf.mcp._errors import (
+    CLI_ERROR,
+    CLI_TIMEOUT,
+    EMPTY_OUTPUT,
+    JSON_PARSE_ERROR,
+    ORF_ERROR,
+    recovery_for,
+)
 from orf.mcp.config import MCPConfig, load_config
 from orf.mcp.security import PathValidator
 
@@ -62,8 +69,14 @@ def get_path_validator() -> PathValidator:
     global _path_validator
     if _path_validator is None:
         cfg = get_config()
+        if not cfg.allowed_directories:
+            raise ValueError(
+                "MCP_ALLOWED_DIRECTORIES (or ORF_MCP_ALLOWED_DIRS) must be set "
+                "(fail-CLOSED security policy). "
+                "Export it as a colon-separated list of allowed directories."
+            )
         _path_validator = PathValidator(
-            allowed_directories=cfg.allowed_directories or [Path.cwd()],
+            allowed_directories=cfg.allowed_directories,
             max_file_size_bytes=cfg.max_file_size_mb * 1024 * 1024,
         )
     return _path_validator
@@ -89,25 +102,33 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def error_response(code: str, message: str, **extra: Any) -> dict:
+def error_response(code: str, message: str, **extra: Any) -> dict[str, Any]:
     """Standardized error response with backward-compat fields."""
+    recovery = recovery_for(code)
     resp: dict[str, Any] = {
         "success": False,
         "error": {"code": code, "message": message},
         "error_code": code,
         "message": message,
-        "errors": [{"code": code, "message": message, "recovery_strategy": None}],
+        "recovery": recovery,
+        "errors": [
+            {
+                "code": code,
+                "message": message,
+                "recovery_strategy": recovery["strategy"],
+            }
+        ],
     }
     resp.update(extra)
     return resp
 
 
-def success_response(content: dict) -> dict:
+def success_response(content: dict[str, Any]) -> dict[str, Any]:
     """Standardized success response wrapping payload under ``content``."""
     return {"success": True, "content": content}
 
 
-def augment_error(resp: dict) -> dict:
+def augment_error(resp: dict[str, Any]) -> dict[str, Any]:
     """Add top-level ``error: {code, message}`` to an existing error dict.
 
     Extracts code/message from ``errors[0]`` if present, preserving all
@@ -129,13 +150,15 @@ def augment_error(resp: dict) -> dict:
         resp["error_code"] = resp["error"].get("code", ORF_ERROR)
     if "message" not in resp:
         resp["message"] = resp["error"].get("message", "Unknown error")
+    if "recovery" not in resp:
+        resp["recovery"] = recovery_for(resp["error"].get("code", ORF_ERROR))
     return resp
 
 
 # ─── CLI subprocess helper ─────────────────────────────────────────────
 
 
-def run_cli_command(args: list[str]) -> dict:
+def run_cli_command(args: list[str]) -> dict[str, Any]:
     """Run ORF CLI command and return parsed JSON result."""
     # ULTRAREADY-VERIFY (2026-06-07): scrub test-only env vars before
     # invoking the CLI subprocess. Without this, a test harness that
@@ -147,12 +170,36 @@ def run_cli_command(args: list[str]) -> dict:
         k: v for k, v in os.environ.items()
         if k not in MCP_SCRUB_ENV_KEYS
     }
-    result = subprocess.run(
-        [sys.executable, "-m", "orf.cli"] + args + ["--json"],
-        capture_output=True,
-        text=True,
-        env=scrubbed_env,
-    )
+    # R-02: non-positive configured bound means "no timeout" (MCPConfig default: 120s).
+    timeout: int | None = get_config().timeout_seconds
+    if timeout is not None and timeout <= 0:
+        timeout = None
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "orf.cli"] + args + ["--json"],
+            capture_output=True,
+            text=True,
+            env=scrubbed_env,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        # subprocess.run kills the child before raising — no hung process is left.
+        logger.error(f"CLI timed out after {timeout}s. args={args}")
+        return {
+            "success": False,
+            "output_path": None,
+            "errors": [{
+                "code": CLI_TIMEOUT,
+                "message": (
+                    f"CLI timed out after {timeout}s. The conversion exceeded "
+                    f"the configured ORF_MCP_TIMEOUT bound; retry the request "
+                    f"or raise ORF_MCP_TIMEOUT for large documents."
+                ),
+                "recovery_strategy": "retry",
+            }],
+            "warnings": [],
+            "metadata": {}
+        }
 
     # Bug 4 Fix: Handle empty stdout
     if not result.stdout.strip():

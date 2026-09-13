@@ -12,6 +12,9 @@ related to error handling from a single module.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any
+
 # ─── Error code constants ────────────────────────────────────────────
 # These are the canonical error codes used across all ORF MCP tools.
 # Each value corresponds to a specific error condition.
@@ -39,6 +42,9 @@ JSON_PARSE_ERROR: str = "JSON_PARSE_ERROR"
 
 CLI_ERROR: str = "CLI_ERROR"
 """CLI subprocess exited with non-zero return code."""
+
+CLI_TIMEOUT: str = "CLI_TIMEOUT"
+"""CLI subprocess exceeded the configured ORF_MCP_TIMEOUT / MCP_TOOL_TIMEOUT bound."""
 
 MISSING_INPUT: str = "MISSING_INPUT"
 """Required input parameter was not provided."""
@@ -86,6 +92,10 @@ SAFE_USER_MESSAGES: dict[str, str] = {
     CLI_ERROR: (
         "The conversion command exited with an error. Check server logs."
     ),
+    CLI_TIMEOUT: (
+        "The conversion command exceeded the configured time limit. "
+        "Retry the request, or raise ORF_MCP_TIMEOUT for large documents."
+    ),
     MISSING_INPUT: (
         "Required input is missing. Provide either input_md (path) "
         "or content (inline markdown)."
@@ -124,12 +134,115 @@ def get_safe_message(code: str) -> str:
     )
 
 
+# ── R-09: recovery hints ─────────────────────────────────────────────
+# Hints are static constants: never interpolate the exception message or
+# caller-controlled data (prompt-injection safety). Contract-tested by
+# tests/contract/test_recovery_hints_contract.py.
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryHint:
+    """A recoverability hint attached to a stable error code."""
+
+    strategy: str
+    hint: str
+
+
+RECOVERY_HINTS: dict[str, RecoveryHint] = {
+    AUTH_FAILED: RecoveryHint(
+        "reissue_with_auth",
+        "Re-issue the call with the correct auth_token matching MCP_SHARED_SECRET.",
+    ),
+    RATE_LIMITED: RecoveryHint(
+        "retry",
+        "Wait for the rate-limit window to reset, then retry with lower concurrency.",
+    ),
+    ORF_ERROR: RecoveryHint(
+        "report_bug",
+        "Check server logs; the generic ORF error has no specific recovery. File a "
+        "bug if it persists.",
+    ),
+    ORF_UNKNOWN_TOOL: RecoveryHint(
+        "fix_input",
+        "Call one of the advertised ORF tools; check the tool name spelling.",
+    ),
+    ORF_INTERNAL_ERROR: RecoveryHint(
+        "report_bug",
+        "Do not retry blindly; check server logs for the traceback and file a bug report.",
+    ),
+    EMPTY_OUTPUT: RecoveryHint(
+        "report_bug",
+        "The CLI returned no output; check server logs and the CLI install, then "
+        "file a bug if it persists.",
+    ),
+    JSON_PARSE_ERROR: RecoveryHint(
+        "report_bug",
+        "The CLI emitted invalid JSON; check server logs and file a bug report.",
+    ),
+    CLI_ERROR: RecoveryHint(
+        "retry",
+        "Inspect the CLI stderr in the message; retry if transient (e.g. after "
+        "installing a missing dependency).",
+    ),
+    CLI_TIMEOUT: RecoveryHint(
+        "retry",
+        "Retry with a smaller document, or raise ORF_MCP_TIMEOUT.",
+    ),
+    MISSING_INPUT: RecoveryHint(
+        "fix_input",
+        "Provide either input_md (path) or content (inline markdown), then re-issue.",
+    ),
+    MUTUALLY_EXCLUSIVE: RecoveryHint(
+        "fix_input",
+        "Remove one of the mutually exclusive parameters, then re-issue.",
+    ),
+    INLINE_CONTENT_WRITE_FAILED: RecoveryHint(
+        "report_bug",
+        "Check disk space and write permissions for the temp directory, then file a "
+        "bug if it persists.",
+    ),
+    INLINE_REFERENCE_DOC_WRITE_FAILED: RecoveryHint(
+        "report_bug",
+        "Check disk space and write permissions for the temp directory, then file a "
+        "bug if it persists.",
+    ),
+    PATH_NOT_ALLOWED: RecoveryHint(
+        "use_allowed_path",
+        "Use a path inside ORF_MCP_ALLOWED_DIRS, then re-issue.",
+    ),
+    FILE_PATH_NOT_ALLOWED: RecoveryHint(
+        "fallback",
+        "Re-emit the XLIFF with image files under the same directory as the XLIFF, "
+        "or pass data_base64 instead of file_path.",
+    ),
+}
+
+#: Every error code this module declares. ORF emits codes at call sites
+#: (no ``_ERROR_CODE_MAP``); the safe-message catalog is the source of truth.
+DECLARED_ERROR_CODES: frozenset[str] = frozenset(SAFE_USER_MESSAGES)
+
+_FALLBACK_RECOVERY = RecoveryHint(
+    "report_bug",
+    "Unknown error code; inspect server logs for the traceback and file a bug report.",
+)
+
+
+def recovery_for(code: str) -> dict[str, str]:
+    """Return the ``{strategy, hint}`` recovery envelope for *code*.
+
+    Unknown codes receive a safe ``report_bug`` fallback, so every error
+    envelope always carries a recovery object.
+    """
+    rec = RECOVERY_HINTS.get(code, _FALLBACK_RECOVERY)
+    return {"strategy": rec.strategy, "hint": rec.hint}
+
+
 # ─── Re-exports from common.py ───────────────────────────────────────
 # These are imported lazily (at function-call time) to avoid circular
 # imports: ``common.py`` imports error constants from this module, so
 # ``_errors.py`` must not import from ``common.py`` at module level.
 
-def error_response(code: str, message: str, **extra: object) -> dict:
+def error_response(code: str, message: str, **extra: object) -> dict[str, Any]:
     """Build a standardized error response dict.
 
     See ``orf.mcp.common.error_response`` for full documentation.
@@ -139,7 +252,7 @@ def error_response(code: str, message: str, **extra: object) -> dict:
     return _fn(code, message, **extra)
 
 
-def augment_error(resp: dict) -> dict:
+def augment_error(resp: dict[str, Any]) -> dict[str, Any]:
     """Add top-level ``error: {code, message}`` to an existing error dict.
 
     See ``orf.mcp.common.augment_error`` for full documentation.
@@ -159,6 +272,7 @@ __all__ = [
     "EMPTY_OUTPUT",
     "JSON_PARSE_ERROR",
     "CLI_ERROR",
+    "CLI_TIMEOUT",
     "MISSING_INPUT",
     "MUTUALLY_EXCLUSIVE",
     "INLINE_CONTENT_WRITE_FAILED",
@@ -168,6 +282,11 @@ __all__ = [
     # Safe messages
     "SAFE_USER_MESSAGES",
     "get_safe_message",
+    # Recovery hints (R-09)
+    "RecoveryHint",
+    "RECOVERY_HINTS",
+    "DECLARED_ERROR_CODES",
+    "recovery_for",
     # Re-exported helpers
     "error_response",
     "augment_error",

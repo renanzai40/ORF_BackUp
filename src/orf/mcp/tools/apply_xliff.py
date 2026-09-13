@@ -18,6 +18,7 @@ from orf.mcp.common import (
     safe_unlink,
     success_response,
 )
+from orf.mcp.manifest import written_files
 from orf.mcp.rate_limiter import check_rate_limit, rate_limit_failure_response
 
 
@@ -179,5 +180,9 @@ def apply_xliff(
         safe_unlink(xliff_temp_path)
 
     if result.get("success"):
-        return json.dumps(success_response(result))
+        response = success_response(result)
+        response["outputs"], response["sidecars"] = written_files(
+            result.get("output_path")
+        )
+        return json.dumps(response)
     return json.dumps(augment_error(result))

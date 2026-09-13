@@ -24,6 +24,7 @@ from orf.mcp.common import (
     safe_unlink,
     success_response,
 )
+from orf.mcp.manifest import written_files
 from orf.mcp.rate_limiter import check_rate_limit, rate_limit_failure_response
 
 
@@ -249,7 +250,11 @@ def apply_md(
             from orf.mcp.server import _run_cli_command
             cli_result = _run_cli_command(args)
             if cli_result.get("success"):
-                return json.dumps(success_response(cli_result))
+                response = success_response(cli_result)
+                response["outputs"], response["sidecars"] = written_files(
+                    cli_result.get("output_path")
+                )
+                return json.dumps(response)
             return json.dumps(augment_error(cli_result))
         finally:
             if images_json_path:
